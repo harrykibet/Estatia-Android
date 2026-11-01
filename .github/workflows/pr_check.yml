@@ -48,7 +48,7 @@ jobs:
         run: ./gradlew lint -Dlint.update.baseline=true --no-configuration-cache
       
       - name: Commit Baseline Updates
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore: auto-update lint baselines (ratchet)"
           file_pattern: "**/lint-baseline.xml"
