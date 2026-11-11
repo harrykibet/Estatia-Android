@@ -91,6 +91,7 @@ class Law018_ViewModelSsotProcessor(
         val declaredHere = owner.declarations
             .filterIsInstance<KSPropertyDeclaration>()
             .filter { it.simpleName.asString() == simpleName.asString() }
+            .toList()
 
         // A declaration on the immediate owner takes precedence over inherited
         // declarations, including an explicit unannotated override.
@@ -109,6 +110,7 @@ class Law018_ViewModelSsotProcessor(
             val inheritedDeclaration = current.declarations
                 .filterIsInstance<KSPropertyDeclaration>()
                 .filter { it.simpleName.asString() == simpleName.asString() }
+                .toList()
 
             if (inheritedDeclaration.isNotEmpty()) {
                 return inheritedDeclaration.all(::hasAllowedAnnotation)
