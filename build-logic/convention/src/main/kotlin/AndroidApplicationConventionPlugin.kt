@@ -52,7 +52,13 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         pluginManager.apply("com.android.application")
         pluginManager.apply("androidx.baselineprofile")
-        pluginManager.apply("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+        // The Maps Secrets plugin reads local.properties during project configuration.
+        // Skip it for metadata-only Gradle invocations (for example GitHub dependency
+        // submission), where developer-local properties are intentionally unavailable.
+        // Build/test workflows create local.properties before configuring the app.
+        if (rootProject.file("local.properties").isFile) {
+            pluginManager.apply("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
+        }
         pluginManager.apply("com.estatia.realestate.apps.android.hilt")
         pluginManager.apply("com.estatia.realestate.apps.android.config")
         pluginManager.apply("com.estatia.realestate.apps.android.protolite")
@@ -169,7 +175,8 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         }
 
         dependencies {
-            "implementation"(project(":core:architecture"))
+            // Architectural annotations are compile-time metadata, not a runtime module dependency.
+            "compileOnly"(project(":core:architecture"))
         }
     }
 }
