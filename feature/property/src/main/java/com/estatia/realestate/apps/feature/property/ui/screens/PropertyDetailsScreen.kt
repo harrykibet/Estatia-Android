@@ -43,19 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.estatia.realestate.apps.core.designsystem.component.DynamicAsyncImage
-import com.estatia.realestate.apps.core.designsystem.component.EstatiaBackground
 import com.estatia.realestate.apps.core.designsystem.component.EstatiaButton
 import com.estatia.realestate.apps.core.designsystem.component.EstatiaText
-import com.estatia.realestate.apps.core.designsystem.theme.EstatiaTheme
 import com.estatia.realestate.apps.core.model.property.PropertyDomainModel
-import com.estatia.realestate.apps.core.testing.fixtures.PropertyFixtures
-import com.estatia.realestate.apps.core.ui.DevicePreviews
 import com.estatia.realestate.apps.core.localization.api.LocalCurrencyFormatter
 import com.estatia.realestate.apps.core.localization.api.LocalMeasurementFormatter
 import com.estatia.realestate.apps.core.localization.R as LocalizationR
@@ -369,88 +364,5 @@ private fun StatItem(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         EstatiaText(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         EstatiaText(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Preview(name = "Property Details - Success", showBackground = true)
-@DevicePreviews
-@Composable
-fun PropertyDetailsScreenSuccessPreview() {
-    EstatiaTheme {
-        EstatiaBackground {
-            PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Success(PropertyFixtures.single()),
-                onBackClick = {},
-                playbackUiState = PlayerUiState.Idle,
-                isMuted = false,
-                onMuteToggle = {},
-                onPlaybackRetry = {},
-                getPlayer = { _, _, _, _ -> throw Exception("Not implemented") },
-                onPausePlayback = {},
-                isMediaActive = { false }
-            )
-        }
-    }
-}
-
-@Preview(name = "Property Details - Success (Swahili)", showBackground = true, locale = "sw")
-@Composable
-fun PropertyDetailsScreenSwahiliPreview() {
-    EstatiaTheme {
-        EstatiaBackground {
-            PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Success(PropertyFixtures.single()),
-                onBackClick = {},
-                playbackUiState = PlayerUiState.Idle,
-                isMuted = false,
-                onMuteToggle = {},
-                onPlaybackRetry = {},
-                getPlayer = { _, _, _, _ -> throw Exception("Not implemented") },
-                onPausePlayback = {},
-                isMediaActive = { false }
-            )
-        }
-    }
-}
-
-@Preview(name = "Property Details - Loading", showBackground = true)
-@DevicePreviews
-@Composable
-fun PropertyDetailsScreenLoadingPreview() {
-    EstatiaTheme {
-        EstatiaBackground {
-            PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Loading,
-                onBackClick = {},
-                playbackUiState = PlayerUiState.Idle,
-                isMuted = false,
-                onMuteToggle = {},
-                onPlaybackRetry = {},
-                getPlayer = { _, _, _, _ -> throw Exception("Not implemented") },
-                onPausePlayback = {},
-                isMediaActive = { false }
-            )
-        }
-    }
-}
-
-@Preview(name = "Property Details - Error", showBackground = true)
-@DevicePreviews
-@Composable
-fun PropertyDetailsScreenErrorPreview() {
-    EstatiaTheme {
-        EstatiaBackground {
-            PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Error("Failed to load property details. Please try again."),
-                onBackClick = {},
-                playbackUiState = PlayerUiState.Idle,
-                isMuted = false,
-                onMuteToggle = {},
-                onPlaybackRetry = {},
-                getPlayer = { _, _, _, _ -> throw Exception("Not implemented") },
-                onPausePlayback = {},
-                isMediaActive = { false }
-            )
-        }
     }
 }
