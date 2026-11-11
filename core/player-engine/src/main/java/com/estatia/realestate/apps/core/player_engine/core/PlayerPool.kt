@@ -403,6 +403,8 @@ class PlayerPool @Inject constructor(
         toRemove.forEach { mediaId ->
             players.remove(mediaId)?.let { managed ->
                 metricsTracker.incrementCounter("player.pool.evict")
+                // Preserve the last known position before this LRU transport is released.
+                playbackPositions[mediaId] = managed.player.currentPosition
                 managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
                 managed.player.removeAnalyticsListener(managed.analyticsListener)
                 managed.analyticsListener.release()

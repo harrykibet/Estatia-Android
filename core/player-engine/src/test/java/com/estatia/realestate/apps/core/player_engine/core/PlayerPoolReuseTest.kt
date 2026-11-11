@@ -168,5 +168,48 @@ class PlayerPoolReuseTest {
         // This ensures the reused player is correctly re-bound to the new URI.
         verify { player.setMediaItem(mockMediaItem2) }
     }
+    
+    @Test
+    fun `LRU eviction preserves playback position for later reacquisition`() = runTest {
+        val mediaId = "media-one"
+        val otherMediaId = "media-two"
+        val uri = MediaReference("http://test.com/one")
+        val otherUri = MediaReference("http://test.com/two")
+
+        val firstConfiguration = mockk<PlayerConfiguration>(relaxed = true)
+        val otherConfiguration = mockk<PlayerConfiguration>(relaxed = true)
+        coEvery {
+            configurationFactory.create(mediaId, uri, any(), any(), any(), any(), any())
+        } returns firstConfiguration
+        coEvery {
+            configurationFactory.create(otherMediaId, otherUri, any(), any(), any(), any(), any())
+        } returns otherConfiguration
+
+        val originalPlayer = mockk<ExoPlayer>(relaxed = true)
+        val otherPlayer = mockk<ExoPlayer>(relaxed = true)
+        val reacquiredPlayer = mockk<ExoPlayer>(relaxed = true)
+        every { originalPlayer.currentPosition } returns 42_500L
+
+        every { playerFactory.create(firstConfiguration) } returnsMany listOf(
+            PlayerFactory.CreatedPlayer(originalPlayer, mockk(relaxed = true)),
+            PlayerFactory.CreatedPlayer(reacquiredPlayer, mockk(relaxed = true))
+        )
+        every { playerFactory.create(otherConfiguration) } returns
+            PlayerFactory.CreatedPlayer(otherPlayer, mockk(relaxed = true))
+
+        // A one-player pool forces each new urgent acquisition through the LRU trim path.
+        pool.updateMaxPoolSize(1, emptySet())
+        pool.getOrCreate(mediaId, uri, MediaType.VOD)
+        pool.getOrCreate(otherMediaId, otherUri, MediaType.VOD)
+
+        verify { originalPlayer.release() }
+
+        // Reacquiring the evicted media must restore the snapshot on its new transport.
+        val restored = pool.getOrCreate(mediaId, uri, MediaType.VOD)
+
+        assertSame(reacquiredPlayer, restored.player)
+        verify { reacquiredPlayer.seekTo(42_500L) }
+    }
+
 }
 
