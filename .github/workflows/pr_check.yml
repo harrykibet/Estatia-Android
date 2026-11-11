@@ -20,6 +20,12 @@ jobs:
         with:
           fetch-depth: 0 # Required for git diff origin/main
 
+      - name: Prepare Android CI configuration
+        uses: ./.github/actions/setup-android-ci-config
+        with:
+          google-services-json-base64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
+
       - name: Set Up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -62,6 +68,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Prepare Android CI configuration
+        uses: ./.github/actions/setup-android-ci-config
+        with:
+          google-services-json-base64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
+
       - name: Set Up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -83,6 +95,12 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Prepare Android CI configuration
+        uses: ./.github/actions/setup-android-ci-config
+        with:
+          google-services-json-base64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
 
       - name: Set Up JDK 17
         uses: actions/setup-java@v4
