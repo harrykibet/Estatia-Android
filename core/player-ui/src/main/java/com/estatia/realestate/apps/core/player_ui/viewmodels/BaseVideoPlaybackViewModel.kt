@@ -2,6 +2,7 @@ package com.estatia.realestate.apps.core.player_ui.viewmodels
 
 import androidx.core.net.toUri
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.ViewModelMarker
+import com.estatia.realestate.apps.core.architecture.annotations.Safety.AllowedArchitectureDependency
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
@@ -57,6 +58,9 @@ abstract class BaseVideoPlaybackViewModel(
     private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Idle)
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    @AllowedArchitectureDependency(
+        reason = "This flow projects a persisted user preference from IUserRepository; it is not a second ViewModel-owned playback UI-state authority."
+    )
     val isMuted = userRepository.userData.map { it.isMuted }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 

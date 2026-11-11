@@ -8,6 +8,8 @@ data class AddPropertyUiState(
 
     val propertyTypes: List<String> = emptyList(),
 
+    val draft: AddPropertyDraft = AddPropertyDraft(),
+
     val isUploading: Boolean = false,
 
     val uploadError: String? = null
