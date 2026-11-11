@@ -56,6 +56,8 @@ object KspTestUtils {
         }
         
         object Safety {
+            @Target(AnnotationTarget.CLASS, AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.PROPERTY, AnnotationTarget.FIELD)
+            @Retention(AnnotationRetention.BINARY)
             annotation class AllowedArchitectureDependency(val reason: String)
         }
         """.trimIndent()
