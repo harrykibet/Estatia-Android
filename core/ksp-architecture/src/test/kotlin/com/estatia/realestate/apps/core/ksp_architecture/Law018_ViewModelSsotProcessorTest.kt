@@ -182,4 +182,44 @@ class Law018_ViewModelSsotProcessorTest {
         )
         assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode)
     }
+
+    @Test
+    fun `LAW-018 inherited StateFlow with explicitly allowed base property passes`() {
+        val baseSource = SourceFile.kotlin(
+            "BaseViewModel.kt",
+            """
+            package com.estatia.realestate.apps.feature.test
+            import androidx.lifecycle.ViewModel
+            import kotlinx.coroutines.flow.StateFlow
+            import com.estatia.realestate.apps.core.architecture.annotations.Safety.AllowedArchitectureDependency
+
+            abstract class BaseViewModel : ViewModel() {
+                val uiState: StateFlow<Int> = TODO()
+
+                @AllowedArchitectureDependency("Persisted user preference projection")
+                val isMuted: StateFlow<Boolean> = TODO()
+            }
+            """.trimIndent()
+        )
+
+        val childSource = SourceFile.kotlin(
+            "ChildViewModel.kt",
+            """
+            package com.estatia.realestate.apps.feature.test
+
+            class ChildViewModel : BaseViewModel()
+            """.trimIndent()
+        )
+
+        val result = KspTestUtils.compile(
+            KspTestUtils.annotationsSource,
+            KspTestUtils.coroutineStubs,
+            KspTestUtils.lifecycleStubs,
+            baseSource,
+            childSource,
+            providers = listOf(Law018_ViewModelSsotProcessorProvider())
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode)
+    }
+
 }

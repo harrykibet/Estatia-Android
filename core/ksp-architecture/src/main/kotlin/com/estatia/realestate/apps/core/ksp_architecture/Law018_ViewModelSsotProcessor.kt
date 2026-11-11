@@ -45,7 +45,7 @@ class Law018_ViewModelSsotProcessor(
             val stateFlows = publicProperties.filter { prop ->
                 val type = prop.type.resolve()
                 val isStateFlow = stateFlowType?.isAssignableFrom(type) == true
-                val isAuthorized = prop.annotations.any { it.annotationType.resolve().declaration.qualifiedName?.asString() == allowedAnnotation }
+                val isAuthorized = prop.isAllowedArchitectureDependency()
                 
                 isStateFlow && !isAuthorized
             }.toList()
@@ -71,6 +71,56 @@ class Law018_ViewModelSsotProcessor(
             }
         }
         return emptyList()
+    }
+
+
+    /**
+     * Resolve the opt-out against the property's declaring class as well as the
+     * inherited KSP property symbol. KSP may expose an inherited property from
+     * getAllProperties() without carrying its source declaration annotations.
+     */
+    private fun KSPropertyDeclaration.isAllowedArchitectureDependency(): Boolean {
+        fun hasAllowedAnnotation(property: KSPropertyDeclaration): Boolean =
+            property.annotations.any {
+                it.annotationType.resolve().declaration.qualifiedName?.asString() == allowedAnnotation
+            }
+
+        if (hasAllowedAnnotation(this)) return true
+
+        val owner = parentDeclaration as? KSClassDeclaration ?: return false
+        val declaredHere = owner.declarations
+            .filterIsInstance<KSPropertyDeclaration>()
+            .filter { it.simpleName.asString() == simpleName.asString() }
+
+        // A declaration on the immediate owner takes precedence over inherited
+        // declarations, including an explicit unannotated override.
+        if (declaredHere.isNotEmpty()) return declaredHere.all(::hasAllowedAnnotation)
+
+        val pending = owner.superTypes.mapNotNull {
+            it.resolve().declaration as? KSClassDeclaration
+        }.toMutableList()
+        val visited = mutableSetOf<String>()
+
+        while (pending.isNotEmpty()) {
+            val current = pending.removeAt(0)
+            val name = current.qualifiedName?.asString() ?: current.simpleName.asString()
+            if (!visited.add(name)) continue
+
+            val inheritedDeclaration = current.declarations
+                .filterIsInstance<KSPropertyDeclaration>()
+                .filter { it.simpleName.asString() == simpleName.asString() }
+
+            if (inheritedDeclaration.isNotEmpty()) {
+                return inheritedDeclaration.all(::hasAllowedAnnotation)
+            }
+
+            current.superTypes.forEach { superType ->
+                val superClass = superType.resolve().declaration as? KSClassDeclaration
+                if (superClass != null) pending.add(superClass)
+            }
+        }
+
+        return false
     }
 
     private fun KSPropertyDeclaration.isPublic(): Boolean {
