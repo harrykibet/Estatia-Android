@@ -92,6 +92,34 @@ class MainActivityViewModelTest {
     }
 
     @Test
+    fun `PiP mode is included in the canonical UI state`() = runTest {
+        val viewModel = MainActivityViewModel(userRepository, authRepository, configProvider)
+
+        viewModel.uiState.test {
+            assertEquals(MainActivityViewModel.MainActivityUiState.Loading(), awaitItem())
+            assertEquals(
+                MainActivityViewModel.MainActivityUiState.Success(
+                    userData = defaultUserData,
+                    isAuthenticated = true,
+                    isInPiPMode = false,
+                ),
+                awaitItem(),
+            )
+
+            viewModel.updatePiPMode(true)
+
+            assertEquals(
+                MainActivityViewModel.MainActivityUiState.Success(
+                    userData = defaultUserData,
+                    isAuthenticated = true,
+                    isInPiPMode = true,
+                ),
+                awaitItem(),
+            )
+        }
+    }
+
+    @Test
     fun `viewModel handles rapid destruction safely`() = runTest {
         launchAndDestroy {
             MainActivityViewModel(userRepository, authRepository, configProvider)
