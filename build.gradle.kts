@@ -47,6 +47,33 @@ extensions.configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckE
     outputDirectory = layout.buildDirectory.dir("reports/dependency-check").get().asFile
     skipTestGroups = true
     failOnError = true
+    // Resolve only published application/library compile and runtime classpaths.
+    // AGP 9's private KSP/lint model configurations must not be force-resolved
+    // by an external analysis task (Gradle rejects that outside their exclusive lock).
+    scanConfigurations = listOf(
+        "compileClasspath",
+        "runtimeClasspath",
+        "demoDebugCompileClasspath",
+        "demoDebugRuntimeClasspath",
+        "demoReleaseCompileClasspath",
+        "demoReleaseRuntimeClasspath",
+        "demoNonMinifiedReleaseCompileClasspath",
+        "demoNonMinifiedReleaseRuntimeClasspath",
+        "demoBenchmarkCompileClasspath",
+        "demoBenchmarkRuntimeClasspath",
+        "demoBenchmarkReleaseCompileClasspath",
+        "demoBenchmarkReleaseRuntimeClasspath",
+        "prodDebugCompileClasspath",
+        "prodDebugRuntimeClasspath",
+        "prodReleaseCompileClasspath",
+        "prodReleaseRuntimeClasspath",
+        "prodNonMinifiedReleaseCompileClasspath",
+        "prodNonMinifiedReleaseRuntimeClasspath",
+        "prodBenchmarkCompileClasspath",
+        "prodBenchmarkRuntimeClasspath",
+        "prodBenchmarkReleaseCompileClasspath",
+        "prodBenchmarkReleaseRuntimeClasspath"
+    )
     analyzers.centralEnabled = false
     nvd.validForHours = 24
     System.getenv("NVD_API_KEY")?.takeIf { it.isNotBlank() }?.let { nvd.apiKey = it }
