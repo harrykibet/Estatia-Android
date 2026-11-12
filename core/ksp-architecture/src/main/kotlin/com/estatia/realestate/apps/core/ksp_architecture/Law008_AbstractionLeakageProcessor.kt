@@ -39,7 +39,9 @@ class Law008_AbstractionLeakageProcessor(
                 val receiverDeclaration = receiverType?.declaration
                 if (receiverDeclaration is KSClassDeclaration) {
                     val annotations = receiverDeclaration.annotations.mapNotNull { it.annotationType.resolve().declaration.qualifiedName?.asString() }
-                    if (annotations.any { pureArchitecturalAnnotations.contains(it) }) {
+                    if (isPublic(receiverDeclaration) &&
+                        annotations.any { pureArchitecturalAnnotations.contains(it) }
+                    ) {
                         auditFunction(func, receiverDeclaration.simpleName.asString())
                     }
                 }
@@ -49,6 +51,11 @@ class Law008_AbstractionLeakageProcessor(
     }
 
     private fun auditDeclaration(clazz: KSClassDeclaration) {
+        // A public member of an internal/private service is not part of an externally
+        // visible API. Auditing it here creates false positives for implementation
+        // classes that intentionally implement a module-local data-source contract.
+        if (!isPublic(clazz)) return
+
         clazz.getDeclaredProperties().forEach { prop ->
             if (isPublic(prop)) {
                 checkForbiddenType(prop.type.resolve(), prop, "property", clazz.simpleName.asString())
