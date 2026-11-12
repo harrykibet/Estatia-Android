@@ -67,7 +67,7 @@ class MainActivityViewModelTest {
         val viewModel = MainActivityViewModel(userRepository, authRepository, configProvider)
         
         viewModel.uiState.test {
-            assertEquals(MainActivityViewModel.MainActivityUiState.Loading, awaitItem())
+            assertEquals(MainActivityViewModel.MainActivityUiState.Loading(), awaitItem())
 
             val initialState = awaitItem()
             assertEquals(
