@@ -29,12 +29,27 @@ plugins {
     alias(libs.plugins.org.jetbrains.dokka) apply false
     alias(libs.plugins.com.google.android.libraries.mapsplatform.secrets.gradle.plugin) apply false
     alias(libs.plugins.org.sonarqube) apply false
+    alias(libs.plugins.org.owasp.dependencycheck)
     alias(libs.plugins.android.test) apply false
     alias(libs.plugins.androidx.baselineprofile) apply false
     alias(libs.plugins.android.dynamic.feature) apply false
     alias(libs.plugins.module.graph)
     alias(libs.plugins.kotlin.serialization)  apply false
     id("com.estatia.realestate.apps.architecture")
+}
+
+// Scan resolved Gradle configurations across the complete multi-project build.
+// Central Analyzer is redundant for Gradle-resolved artifacts and can introduce
+// flaky Maven Central lookups; NVD/KEV analysis remains enabled.
+extensions.configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension>("dependencyCheck") {
+    failBuildOnCVSS = 7.0f
+    formats = listOf("HTML", "JSON")
+    outputDirectory = layout.buildDirectory.dir("reports/dependency-check").get().asFile
+    skipTestGroups = true
+    failOnError = true
+    analyzers.centralEnabled = false
+    nvd.validForHours = 24
+    System.getenv("NVD_API_KEY")?.takeIf { it.isNotBlank() }?.let { nvd.apiKey = it }
 }
 
 extensions.configure<GraphRulesExtension>("moduleGraphAssert") {
