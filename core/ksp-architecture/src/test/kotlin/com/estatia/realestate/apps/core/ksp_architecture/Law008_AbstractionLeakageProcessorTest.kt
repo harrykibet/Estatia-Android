@@ -39,4 +39,33 @@ class Law008_AbstractionLeakageProcessorTest {
         assertEquals(KotlinCompilation.ExitCode.COMPILATION_ERROR, result.exitCode)
         assertTrue(result.messages.contains("LAW-008"))
     }
+
+    @Test
+    fun `LAW-008 ignores infrastructure types exposed only by internal services`() {
+        val source = SourceFile.kotlin(
+            "InternalAuthService.kt",
+            """
+            package com.estatia.realestate.apps.core.network.sources
+            import com.estatia.realestate.apps.core.architecture.annotations.Identity.Service
+            import com.estatia.realestate.apps.core.common.exceptions.AppResult
+            import com.google.firebase.auth.FirebaseUser
+
+            @Service
+            internal class InternalAuthService {
+                fun currentUser(): AppResult<FirebaseUser> = TODO()
+            }
+            """.trimIndent()
+        )
+
+        val result = KspTestUtils.compile(
+            KspTestUtils.annotationsSource,
+            KspTestUtils.resultSource,
+            KspTestUtils.firebaseStub,
+            source,
+            providers = listOf(Law008_AbstractionLeakageProcessorProvider())
+        )
+
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode)
+        assertTrue(!result.messages.contains("LAW-008"))
+    }
 }
