@@ -8,20 +8,33 @@ on:
 jobs:
   dependency-check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
 
       - uses: actions/checkout@v7
 
+      # The wrapper is excluded from SCA below because its integrity is checked here.
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
       - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c
         with:
           project: Estatia
           path: "."
           format: "HTML"
+          out: "reports"
+          args: >-
+            --exclude gradle/wrapper/gradle-wrapper.jar
+            --failOnCVSS 7
 
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: dependency-report
-          path: reports
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 14
