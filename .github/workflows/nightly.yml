@@ -180,6 +180,16 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
+      - name: Require NVD API key
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
+            echo "::error::The repository Actions secret NVD_API_KEY is required. The previous anonymous request was rate-limited by NVD (HTTP 429), which caused Dependency-Check 12.2.2 to leave its H2 update workers in an unsafe shutdown state."
+            echo "::error::Create an NVD API key at https://nvd.nist.gov/developers/request-an-api-key and add it under Settings > Secrets and variables > Actions as NVD_API_KEY."
+            exit 1
+          fi
+
       - name: Cache OWASP Dependency-Check database
         uses: actions/cache@v6
         with:
