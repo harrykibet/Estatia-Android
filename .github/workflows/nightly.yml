@@ -22,6 +22,8 @@ jobs:
           java-version: 17
           distribution: 'temurin'
           cache: gradle
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -43,6 +45,8 @@ jobs:
           java-version: 17
           distribution: 'temurin'
           cache: gradle
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -77,6 +81,8 @@ jobs:
           java-version: 17
           distribution: 'temurin'
           cache: gradle
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -109,6 +115,8 @@ jobs:
           java-version: 17
           distribution: 'temurin'
           cache: gradle
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
