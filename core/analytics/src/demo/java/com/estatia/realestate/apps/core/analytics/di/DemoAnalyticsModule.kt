@@ -1,7 +1,7 @@
 package com.estatia.realestate.apps.core.analytics.di
 
-import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
-import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.analytics.AnalyticsHelper
+import com.estatia.realestate.apps.core.analytics.IAnalyticsHelper
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
