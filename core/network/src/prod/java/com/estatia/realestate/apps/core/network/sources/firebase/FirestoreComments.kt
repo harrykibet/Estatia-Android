@@ -1,5 +1,7 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
+import com.estatia.realestate.apps.core.network.db_entities.CommentEntityModel
+
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.COMMENTS_COUNT
