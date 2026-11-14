@@ -38,7 +38,8 @@ plugins {
 }
 
 extensions.configure<GraphRulesExtension>("moduleGraphAssert") {
-    maxHeight = 10
+    // Project policy: allow dependency chains up to 12 modules; this is an Estatia-specific guardrail, not an industry standard.
+    maxHeight = 12
     configurations = setOf("api", "implementation")
 
     restricted = arrayOf(

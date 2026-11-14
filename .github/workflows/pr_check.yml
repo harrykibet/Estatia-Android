@@ -79,6 +79,38 @@ jobs:
       - name: Verify Coverage Ratchet
         run: ./gradlew jacocoProdDebugVerification --no-configuration-cache --info
 
+  release-r8-validation:
+    name: Level 3 - Minified Release (R8 / Protobuf)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Prepare Android SDK properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+
+      - name: Set Executable Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      # Release signing is intentionally omitted here: this validates the actual
+      # minified production variant and R8 without requiring signing secrets.
+      - name: Assemble Minified Production Release
+        run: ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --info
+
+      - name: Verify R8 Outputs
+        shell: bash
+        run: |
+          test -s app/build/outputs/mapping/prodRelease/mapping.txt
+          test -s app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk || test -s app/build/outputs/apk/prod/release/app-prod-release.apk
+
   smoke-test:
     name: Level 2 - Smoke UI (Pixel 2)
     runs-on: ubuntu-latest
