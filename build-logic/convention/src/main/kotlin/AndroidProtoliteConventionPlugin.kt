@@ -4,24 +4,24 @@ import org.gradle.api.Project
 import org.gradle.kotlin.dsl.exclude
 
 /**
- * Firebase/protolite compatibility policy.
+ * Protobuf runtime compatibility policy for the Android application.
  *
- * Applied only to modules whose dependency graph contains the
- * Firebase libraries requiring protobuf-javalite.
- *
- * Do not apply to modules using libraries requiring full
- * protobuf-java APIs (e.g. OTLP exporters).
+ * Firebase's generated lite messages can run against the full protobuf-java
+ * runtime, which is also required by OpenTelemetry's generated OTLP messages.
+ * Keep one protobuf runtime on the Android runtime classpath to avoid duplicate
+ * com.google.protobuf classes.
  */
 class AndroidProtoliteConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
         with(target) {
             configurations.all {
-                // Resolve Protobuf duplicate class conflict
+                // Remove legacy/alternate runtimes so Firebase and OTLP resolve
+                // against one compatible protobuf implementation.
                 exclude(group = "com.google.protobuf", module = "protobuf-lite")
-                exclude(group = "com.google.protobuf", module = "protobuf-java")
+                exclude(group = "com.google.protobuf", module = "protobuf-javalite")
                 exclude(group = "com.google.firebase", module = "protolite-well-known-types")
                 resolutionStrategy {
-                    force(libs.findLibrary("protobuf.javalite").get())
+                    force(libs.findLibrary("protobufJava").get())
                 }
             }
         }
