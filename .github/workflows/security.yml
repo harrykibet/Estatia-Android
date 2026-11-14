@@ -44,20 +44,20 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
-            echo "::error::The repository Actions secret NVD_API_KEY is required for authenticated NVD vulnerability updates."
-            echo "::error::Create an NVD API key at https://nvd.nist.gov/developers/request-an-api-key and add it under Settings > Secrets and variables > Actions as NVD_API_KEY."
+            echo "::error::The repository Actions secret NVD_API_KEY is required."
             exit 1
           fi
 
+      # v13.1 deliberately starts a clean cache namespace. The v13.0 cache
+      # created by a refresh that ended with NVD HTTP 522 is never restored.
       - name: Restore OWASP Dependency-Check database
         id: dependency-check-cache
         uses: actions/cache/restore@v6
         with:
           path: ~/.gradle/dependency-check-data/11.0
-          key: dependency-check-${{ runner.os }}-v13.0-${{ github.run_id }}
+          key: dependency-check-${{ runner.os }}-v13.1-${{ github.run_id }}
           restore-keys: |
-            dependency-check-${{ runner.os }}-v13.0-
-            dependency-check-${{ runner.os }}-v12.2-
+            dependency-check-${{ runner.os }}-v13.1-
 
       - name: Analyze Resolved Gradle Dependencies
         id: dependency-check
@@ -67,26 +67,27 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-
-          # Run Dependency-Check exactly once. HTTP 503 responses that the
-          # scanner successfully retries internally must not cause us to erase
-          # a complete database and restart the full NVD download.
           log_file="${RUNNER_TEMP}/dependency-check.log"
           set +e
           ./gradlew dependencyCheckAggregate --no-configuration-cache --no-parallel --info 2>&1 | tee "$log_file"
           scan_status=${PIPESTATUS[0]}
           set -e
 
-          # CVSS-threshold failures happen after the database update and report
-          # generation. Preserve that completed database even though the
-          # security gate will fail below. Do not cache an interrupted refresh.
+          mkdir -p build/reports/dependency-check
+          cp "$log_file" build/reports/dependency-check/scan.log
+
+          # "Check for updates complete" is not proof of a successful NVD
+          # refresh: Dependency-Check emits it even after a Cached Web
+          # DataSource fails. Require the completion marker AND no terminal
+          # NVD/source failure before allowing this database into the cache.
           if grep -Fq "Check for updates complete" "$log_file" &&
+             ! grep -Eiq "Unable to update [0-9]+ or more Cached Web DataSource|NvdApiException|NVD Returned Status Code|Failed to update.*NVD|Unable to download.*NVD" "$log_file" &&
              [[ -d "$HOME/.gradle/dependency-check-data/11.0" ]]; then
             echo "database-ready=true" >> "$GITHUB_OUTPUT"
-            echo "Dependency-Check database refresh completed; eligible for cache save."
+            echo "NVD refresh passed the source-integrity checks; database is eligible for cache save."
           else
             echo "database-ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Dependency-Check did not confirm a completed database refresh; the database will not be cached."
+            echo "::warning::NVD refresh was incomplete or uncertain; refusing to cache this database."
           fi
 
           exit "$scan_status"
@@ -94,6 +95,7 @@ jobs:
       - name: Verify Dependency-Check Reports and Inventory
         id: verify-dependency-report
         if: always()
+        shell: bash
         run: |
           python3 - <<'PY'
           import json
@@ -103,7 +105,6 @@ jobs:
           report_dir = pathlib.Path("build/reports/dependency-check")
           json_report = report_dir / "dependency-check-report.json"
           html_report = report_dir / "dependency-check-report.html"
-
           missing = [str(path) for path in (json_report, html_report) if not path.is_file()]
           if missing:
               sys.exit("Missing Dependency-Check report(s): " + ", ".join(missing))
@@ -115,33 +116,31 @@ jobs:
 
           dependencies = payload.get("dependencies")
           if not isinstance(dependencies, list) or not dependencies:
-              sys.exit("Dependency-Check analyzed zero dependencies; refusing a false-green security result.")
+              sys.exit("Dependency-Check analyzed zero dependencies; refusing a false-green result.")
 
           print(f"Dependency-Check reported {len(dependencies)} dependency entries.")
           print(f"HTML report: {html_report.stat().st_size} bytes")
           print(f"JSON report: {json_report.stat().st_size} bytes")
           PY
 
-      - name: Save completed OWASP Dependency-Check database
+      - name: Save verified OWASP Dependency-Check database
         if: always() && !cancelled() && steps.dependency-check.outputs.database-ready == 'true' && steps.dependency-check-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.gradle/dependency-check-data/11.0
-          key: dependency-check-${{ runner.os }}-v13.0-${{ github.run_id }}
+          key: dependency-check-${{ runner.os }}-v13.1-${{ github.run_id }}
 
-      - name: Upload Dependency Security Reports
+      - name: Upload Dependency Security Diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: dependency-report
-          path: |
-            build/reports/dependency-check/dependency-check-report.html
-            build/reports/dependency-check/dependency-check-report.json
-          if-no-files-found: error
+          name: dependency-security-diagnostics
+          path: build/reports/dependency-check/
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Enforce Dependency Security Result
         if: always() && (steps.dependency-check.outcome != 'success' || steps.verify-dependency-report.outcome != 'success')
         run: |
-          echo "::error::Dependency security validation failed. Review the uploaded Dependency-Check reports and scan log."
+          echo "::error::Dependency security validation failed. Review the uploaded scan log and reports."
           exit 1
