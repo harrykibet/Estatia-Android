@@ -49,7 +49,7 @@ jobs:
       - name: Analyze Resolved Gradle Dependencies
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./gradlew dependencyCheckAggregate --no-configuration-cache --info
+        run: ./gradlew dependencyCheckAggregate --no-configuration-cache --no-parallel --info
 
       - name: Verify Non-Empty Dependency Inventory
         if: success()
