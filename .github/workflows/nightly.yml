@@ -184,9 +184,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.gradle/dependency-check-data/11.0
-          key: dependency-check-${{ runner.os }}-v13-${{ github.run_id }}
+          key: dependency-check-${{ runner.os }}-v12.2-${{ github.run_id }}
           restore-keys: |
-            dependency-check-${{ runner.os }}-v13-
+            dependency-check-${{ runner.os }}-v12.2-
 
       - name: Analyze Resolved Gradle Dependencies
         env:
