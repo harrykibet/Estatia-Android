@@ -75,6 +75,9 @@ extensions.configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckE
         "prodBenchmarkReleaseRuntimeClasspath"
     )
     analyzers.centralEnabled = false
+    // Back off between NVD API requests to reduce 429/503 responses during full refreshes.
+    nvd.delay = 6000
+    nvd.maxRetryCount = 20
     nvd.validForHours = 24
     System.getenv("NVD_API_KEY")?.takeIf { it.isNotBlank() }?.let { nvd.apiKey = it }
 }

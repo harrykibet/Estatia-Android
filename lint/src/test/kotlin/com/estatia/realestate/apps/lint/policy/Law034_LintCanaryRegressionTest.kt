@@ -20,7 +20,17 @@ import javax.xml.parsers.DocumentBuilderFactory
 class Law034_LintCanaryRegressionTest {
 
     private val canaryModulePath = "core/canary-violations"
-    private val projectRoot = "C:/Users/Administrator/StudioProjects/RealEstateApp-Android"
+    private val projectRoot: File
+        get() {
+            val configuredRoot = System.getProperty("PROJECT_ROOT")
+            if (!configuredRoot.isNullOrBlank()) return File(configuredRoot).canonicalFile
+
+            return generateSequence(File(System.getProperty("user.dir")).canonicalFile) { it.parentFile }
+                .firstOrNull {
+                    File(it, "settings.gradle.kts").isFile || File(it, "settings.gradle").isFile
+                }
+                ?: error("Unable to locate the Gradle project root for LAW-034.")
+        }
     
     data class CanaryExpectation(
         val issueId: String,
@@ -34,11 +44,12 @@ class Law034_LintCanaryRegressionTest {
 
     @Test
     fun `canary module must satisfy the High-Fidelity Enforcement Oracle`() {
-        val reportPath = System.getProperty("CANARY_LINT_XML_REPORT") ?: 
-            "$projectRoot/core/canary-violations/build/reports/lint-results.xml"
-        
-        val reportFile = File(reportPath)
-        assertTrue("Canary lint report not found at $reportPath", reportFile.exists())
+        val reportFile = System.getProperty("CANARY_LINT_XML_REPORT")
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.absoluteFile
+            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results.xml")
+        assertTrue("Canary lint report not found at ${reportFile.absolutePath}", reportFile.isFile)
 
         // 🛡️ REFINEMENT: Use high-fidelity enforcer mapping derived from Unified Registry
         val expectations = collectExpectations().filter { exp -> 
@@ -140,13 +151,15 @@ class Law034_LintCanaryRegressionTest {
     }
     
     private fun toRelative(file: File): String {
-        val path = file.absolutePath.replace("\\", "/")
-        val root = projectRoot.replace("\\", "/")
-        return if (path.startsWith(root, ignoreCase = true)) {
-            path.substring(root.length).trimStart('/')
+        val candidate = if (file.isAbsolute) file else File(projectRoot, file.path)
+        val rootPath = projectRoot.toPath().toAbsolutePath().normalize()
+        val filePath = candidate.toPath().toAbsolutePath().normalize()
+        val relativePath = if (filePath.startsWith(rootPath)) {
+            rootPath.relativize(filePath).toString()
         } else {
-            path
+            filePath.toString()
         }
+        return relativePath.replace(File.separatorChar, '/')
     }
 
     private fun isLineMatch(actualLine: Int, expectedLine: Int): Boolean {
@@ -177,8 +190,8 @@ class Law034_LintCanaryRegressionTest {
         val fixtures = Law.entries.flatMap { it.fixtures }.toSet()
         val results = mutableListOf<CanaryExpectation>()
         
-        val srcMain = File("$projectRoot/$canaryModulePath/src/main/kotlin")
-        val srcTest = File("$projectRoot/$canaryModulePath/src/test/kotlin")
+        val srcMain = File(projectRoot, "$canaryModulePath/src/main/kotlin")
+        val srcTest = File(projectRoot, "$canaryModulePath/src/test/kotlin")
         
         listOf(srcMain, srcTest).filter { it.exists() }.forEach { root ->
             root.walkTopDown().filter { it.extension == "kt" }.forEach { file ->

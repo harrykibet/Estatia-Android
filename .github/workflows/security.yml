@@ -13,6 +13,7 @@ jobs:
   dependency-check:
     name: Scan Resolved Gradle Dependencies
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -43,7 +44,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
-            echo "::error::The repository Actions secret NVD_API_KEY is required. The previous anonymous request was rate-limited by NVD (HTTP 429), which caused Dependency-Check 12.2.2 to leave its H2 update workers in an unsafe shutdown state."
+            echo "::error::The repository Actions secret NVD_API_KEY is required for authenticated NVD vulnerability updates."
             echo "::error::Create an NVD API key at https://nvd.nist.gov/developers/request-an-api-key and add it under Settings > Secrets and variables > Actions as NVD_API_KEY."
             exit 1
           fi
@@ -52,14 +53,48 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.gradle/dependency-check-data/11.0
-          key: dependency-check-${{ runner.os }}-v12.2-${{ github.run_id }}
+          key: dependency-check-${{ runner.os }}-v13.0-${{ github.run_id }}
           restore-keys: |
-            dependency-check-${{ runner.os }}-v12.2-
+            dependency-check-${{ runner.os }}-v13.0-
 
       - name: Analyze Resolved Gradle Dependencies
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./gradlew dependencyCheckAggregate --no-configuration-cache --no-parallel --info
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Retry only transient NVD availability/rate-limit failures and the
+          # known H2 shutdown symptoms they can trigger in Dependency-Check.
+          # Each retry starts with a clean NVD database; failOnError remains true.
+          for attempt in 1 2 3; do
+            log_file="${RUNNER_TEMP}/dependency-check-attempt-${attempt}.log"
+            rm -f "$log_file"
+
+            set +e
+            ./gradlew dependencyCheckAggregate --no-configuration-cache --no-parallel --info 2>&1 | tee "$log_file"
+            scan_status=${PIPESTATUS[0]}
+            set -e
+
+            if [[ "$scan_status" -eq 0 ]]; then
+              exit 0
+            fi
+
+            if ! grep -Eiq 'responded with status (429|500|502|503|504)|MVStoreException|connectionPool is null' "$log_file"; then
+              echo "::error::Dependency-Check failed for a non-transient reason; refusing to retry or downgrade the security gate."
+              exit "$scan_status"
+            fi
+
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "::error::Dependency-Check still failed after three attempts."
+              exit "$scan_status"
+            fi
+
+            echo "::warning::NVD returned a transient error (attempt $attempt/3). Clearing the partial H2 database and retrying after backoff."
+            rm -rf "$HOME/.gradle/dependency-check-data/11.0"
+            rm -rf build/reports/dependency-check
+            sleep $((attempt * 45))
+          done
 
       - name: Verify Non-Empty Dependency Inventory
         if: success()
