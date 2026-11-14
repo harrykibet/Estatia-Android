@@ -11,6 +11,11 @@
 -dontwarn io.micrometer.context.ThreadLocalAccessor
 -dontwarn org.LatencyUtils.**
 
+# Micrometer's Prometheus registry supplies its own SpanContext implementation and
+# deliberately excludes prometheus-metrics-tracer-initializer. Prometheus core keeps
+# a fallback reference to this optional initializer for non-Micrometer consumers.
+-dontwarn io.prometheus.metrics.tracer.initializer.SpanContextSupplier
+
 # OpenTelemetry optional auto-configuration SPI
 -dontwarn io.opentelemetry.sdk.autoconfigure.spi.**
 
