@@ -12,7 +12,9 @@ object Safety {
      * Use this to document and authorize unavoidable infrastructure dependencies.
      */
     @Target(AnnotationTarget.CLASS, AnnotationTarget.VALUE_PARAMETER, AnnotationTarget.PROPERTY, AnnotationTarget.FIELD)
-    @Retention(AnnotationRetention.SOURCE)
+    // KSP consumers in downstream modules must be able to inspect this opt-out on
+    // inherited declarations from compiled dependencies.
+    @Retention(AnnotationRetention.BINARY)
     annotation class AllowedArchitectureDependency(
         val reason: String
     )

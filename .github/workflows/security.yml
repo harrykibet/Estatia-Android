@@ -4,24 +4,143 @@ on:
   pull_request:
   schedule:
     - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   dependency-check:
+    name: Scan Resolved Gradle Dependencies
     runs-on: ubuntu-latest
-
+    timeout-minutes: 90
+    permissions:
+      contents: read
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
 
-      - uses: actions/checkout@v7
-
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+      - name: Prepare Android CI configuration
+        uses: ./.github/actions/setup-android-ci-config
         with:
-          project: Estatia
-          path: "."
-          format: "HTML"
+          google-services-json-base64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          maps-api-key: ${{ secrets.MAPS_API_KEY }}
 
-      - name: Upload report
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: gradle
+
+      - name: Set Executable Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      - name: Require NVD API key
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          if [[ -z "${NVD_API_KEY//[[:space:]]/}" ]]; then
+            echo "::error::The repository Actions secret NVD_API_KEY is required."
+            exit 1
+          fi
+
+      # v13.1 deliberately starts a clean cache namespace. The v13.0 cache
+      # created by a refresh that ended with NVD HTTP 522 is never restored.
+      - name: Restore OWASP Dependency-Check database
+        id: dependency-check-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.gradle/dependency-check-data/11.0
+          key: dependency-check-${{ runner.os }}-v13.1-${{ github.run_id }}
+          restore-keys: |
+            dependency-check-${{ runner.os }}-v13.1-
+
+      - name: Analyze Resolved Gradle Dependencies
+        id: dependency-check
+        continue-on-error: true
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          log_file="${RUNNER_TEMP}/dependency-check.log"
+          set +e
+          ./gradlew dependencyCheckAggregate --no-configuration-cache --no-parallel --info 2>&1 | tee "$log_file"
+          scan_status=${PIPESTATUS[0]}
+          set -e
+
+          mkdir -p build/reports/dependency-check
+          cp "$log_file" build/reports/dependency-check/scan.log
+
+          # "Check for updates complete" is not proof of a successful NVD
+          # refresh: Dependency-Check emits it even after a Cached Web
+          # DataSource fails. Require the completion marker AND no terminal
+          # NVD/source failure before allowing this database into the cache.
+          if grep -Fq "Check for updates complete" "$log_file" &&
+             ! grep -Eiq "Unable to update [0-9]+ or more Cached Web DataSource|NvdApiException|NVD Returned Status Code|Failed to update.*NVD|Unable to download.*NVD" "$log_file" &&
+             [[ -d "$HOME/.gradle/dependency-check-data/11.0" ]]; then
+            echo "database-ready=true" >> "$GITHUB_OUTPUT"
+            echo "NVD refresh passed the source-integrity checks; database is eligible for cache save."
+          else
+            echo "database-ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NVD refresh was incomplete or uncertain; refusing to cache this database."
+          fi
+
+          exit "$scan_status"
+
+      - name: Verify Dependency-Check Reports and Inventory
+        id: verify-dependency-report
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_dir = pathlib.Path("build/reports/dependency-check")
+          json_report = report_dir / "dependency-check-report.json"
+          html_report = report_dir / "dependency-check-report.html"
+          missing = [str(path) for path in (json_report, html_report) if not path.is_file()]
+          if missing:
+              sys.exit("Missing Dependency-Check report(s): " + ", ".join(missing))
+
+          try:
+              payload = json.loads(json_report.read_text(encoding="utf-8"))
+          except (OSError, json.JSONDecodeError) as error:
+              sys.exit(f"Dependency-Check JSON report is unreadable: {error}")
+
+          dependencies = payload.get("dependencies")
+          if not isinstance(dependencies, list) or not dependencies:
+              sys.exit("Dependency-Check analyzed zero dependencies; refusing a false-green result.")
+
+          print(f"Dependency-Check reported {len(dependencies)} dependency entries.")
+          print(f"HTML report: {html_report.stat().st_size} bytes")
+          print(f"JSON report: {json_report.stat().st_size} bytes")
+          PY
+
+      - name: Save verified OWASP Dependency-Check database
+        if: always() && !cancelled() && steps.dependency-check.outputs.database-ready == 'true' && steps.dependency-check-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.gradle/dependency-check-data/11.0
+          key: dependency-check-${{ runner.os }}-v13.1-${{ github.run_id }}
+
+      - name: Upload Dependency Security Diagnostics
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: dependency-report
-          path: reports
+          name: dependency-security-diagnostics
+          path: build/reports/dependency-check/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Enforce Dependency Security Result
+        if: always() && (steps.dependency-check.outcome != 'success' || steps.verify-dependency-report.outcome != 'success')
+        run: |
+          echo "::error::Dependency security validation failed. Review the uploaded scan log and reports."
+          exit 1

@@ -67,7 +67,7 @@ class MainActivityViewModelTest {
         val viewModel = MainActivityViewModel(userRepository, authRepository, configProvider)
         
         viewModel.uiState.test {
-            assertEquals(MainActivityViewModel.MainActivityUiState.Loading, awaitItem())
+            assertEquals(MainActivityViewModel.MainActivityUiState.Loading(), awaitItem())
 
             val initialState = awaitItem()
             assertEquals(
@@ -87,6 +87,34 @@ class MainActivityViewModelTest {
                     isAuthenticated = true,
                 ),
                 updatedState,
+            )
+        }
+    }
+
+    @Test
+    fun `PiP mode is included in the canonical UI state`() = runTest {
+        val viewModel = MainActivityViewModel(userRepository, authRepository, configProvider)
+
+        viewModel.uiState.test {
+            assertEquals(MainActivityViewModel.MainActivityUiState.Loading(), awaitItem())
+            assertEquals(
+                MainActivityViewModel.MainActivityUiState.Success(
+                    userData = defaultUserData,
+                    isAuthenticated = true,
+                    isInPiPMode = false,
+                ),
+                awaitItem(),
+            )
+
+            viewModel.updatePiPMode(true)
+
+            assertEquals(
+                MainActivityViewModel.MainActivityUiState.Success(
+                    userData = defaultUserData,
+                    isAuthenticated = true,
+                    isInPiPMode = true,
+                ),
+                awaitItem(),
             )
         }
     }

@@ -1,5 +1,7 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
+import com.estatia.realestate.apps.core.network.db_entities.UserEntityModel
+
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility

@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.core.net.toUri
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -46,7 +47,9 @@ fun MediaUploadsForm(
             }, null
     )
 ) {
-    val mediaUris by viewModel.allMedia.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val mediaUris = (uiState.draft.images + uiState.draft.videos)
+        .map { it.value.toUri() }
 
     Column(
         modifier = Modifier.fillMaxWidth(),

@@ -16,7 +16,7 @@ fun configureFlavors(
         FlavorDimension.entries.forEach { flavorDimensions += it.name }
         productFlavors {
             EstatiaFlavor.entries.forEach { flavor ->
-                register(flavor.name) {
+                register(flavor.name.lowercase()) {
                     dimension = flavor.dimension.name
                     flavorConfigurationBlock(this, flavor)
                     (this).let {
@@ -37,7 +37,7 @@ fun configureFlavors(
         FlavorDimension.entries.forEach { flavorDimensions += it.name }
         productFlavors {
             EstatiaFlavor.entries.forEach { flavor ->
-                register(flavor.name) {
+                register(flavor.name.lowercase()) {
                     dimension = flavor.dimension.name
                     flavorConfigurationBlock(this, flavor)
                 }
@@ -54,7 +54,7 @@ fun configureFlavors(
         FlavorDimension.entries.forEach { flavorDimensions += it.name }
         productFlavors {
             EstatiaFlavor.entries.forEach { flavor ->
-                register(flavor.name) {
+                register(flavor.name.lowercase()) {
                     dimension = flavor.dimension.name
                     flavorConfigurationBlock(this, flavor)
                 }

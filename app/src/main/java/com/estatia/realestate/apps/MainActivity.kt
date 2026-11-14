@@ -126,7 +126,8 @@ class MainActivity : ComponentActivity() {
 
             val currentTimeZone by appState.currentTimeZone.collectAsStateWithLifecycle()
             val isSystemDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-            val isInPiPMode by viewModel.isInPiPMode.collectAsStateWithLifecycle()
+            val mainActivityUiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val isInPiPMode = mainActivityUiState.isInPiPMode
             val environmentState by playerManager.environment.collectAsStateWithLifecycle()
 
             CompositionLocalProvider(

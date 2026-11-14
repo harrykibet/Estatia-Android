@@ -12,7 +12,8 @@ class AndroidCoreConventionPlugin : Plugin<Project> {
         pluginManager.apply("com.estatia.realestate.apps.android.jacoco")
 
         dependencies {
-            "implementation"(project(":core:architecture"))
+            // Architectural annotations are compile-time metadata, not a runtime module dependency.
+            "compileOnly"(project(":core:architecture"))
         }
     }
 }

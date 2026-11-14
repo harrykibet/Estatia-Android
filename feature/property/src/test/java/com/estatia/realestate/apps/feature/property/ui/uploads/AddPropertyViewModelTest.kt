@@ -8,7 +8,6 @@ import com.estatia.realestate.apps.core.common.exceptions.PropertyException
 import com.estatia.realestate.apps.core.domain.repository.IPropertyRepository
 import com.estatia.realestate.apps.core.domain.security.IAuthRepository
 import com.estatia.realestate.apps.core.intelligence.IMediaIntelligenceService
-import com.estatia.realestate.apps.core.testing.assertions.assertCurrentProperty
 import com.estatia.realestate.apps.feature.property.ui.uploads.viewModels.AddPropertyViewModel
 import com.estatia.realestate.apps.feature.property.utils.AddPropertyDraft
 import com.estatia.realestate.apps.feature.property.utils.PropertyData
@@ -82,12 +81,12 @@ class AddPropertyViewModelTest {
         viewModel.updateTitle("Villa")
         advanceUntilIdle()
         
-        viewModel.draft.assertCurrentProperty("Villa") { title }
+        assertEquals("Villa", viewModel.uiState.value.draft.title)
         
         advanceTimeBy(11.seconds)
         runCurrent()
         
-        assertTrue("Amenities should be empty", viewModel.draft.value.amenities.isEmpty())
+        assertTrue("Amenities should be empty", viewModel.uiState.value.draft.amenities.isEmpty())
     }
 
     @Test
@@ -110,16 +109,21 @@ class AddPropertyViewModelTest {
         val imageUri = mockk<Uri>(relaxed = true)
         val videoUri = mockk<Uri>(relaxed = true)
         
-        viewModel.allMedia.test {
-            // Drop initial empty list
-            assertEquals(emptyList<Uri>(), awaitItem())
-            
+        viewModel.uiState.test {
+            assertTrue(awaitItem().draft.images.isEmpty())
+
             viewModel.addImage(imageUri)
+            val withImage = awaitItem()
+            assertEquals(1, withImage.draft.images.size)
+
             viewModel.addVideo(videoUri)
-            advanceUntilIdle()
-            
-            val current = awaitItem()
-            assertEquals("Expected 2 media items", 2, current.size)
+            val withVideo = awaitItem()
+            assertEquals(1, withVideo.draft.videos.size)
+            assertEquals(
+                "Expected 2 media items",
+                2,
+                withVideo.draft.images.size + withVideo.draft.videos.size
+            )
         }
     }
 }

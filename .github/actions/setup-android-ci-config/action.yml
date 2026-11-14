@@ -1,0 +1,55 @@
+name: Prepare Android CI configuration
+description: Creates runner-local Android configuration and restores the Firebase app configuration from GitHub Actions secrets.
+
+inputs:
+  google-services-json-base64:
+    description: Base64-encoded contents of the production app/google-services.json file.
+    required: false
+  maps-api-key:
+    description: Optional Google Maps API key written to local.properties as MAPS_API_KEY.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Create local.properties and restore Firebase configuration
+      shell: bash
+      env:
+        ANDROID_GOOGLE_SERVICES_JSON_BASE64: ${{ inputs.google-services-json-base64 }}
+        ANDROID_MAPS_API_KEY: ${{ inputs.maps-api-key }}
+      run: |
+        set -euo pipefail
+
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        if [[ -z "$sdk_dir" ]]; then
+          echo "::error::Neither ANDROID_HOME nor ANDROID_SDK_ROOT is set on the runner."
+          exit 1
+        fi
+
+        {
+          printf 'sdk.dir=%s\n' "$sdk_dir"
+          if [[ -n "$ANDROID_MAPS_API_KEY" ]]; then
+            printf 'MAPS_API_KEY=%s\n' "$ANDROID_MAPS_API_KEY"
+          fi
+        } > "$GITHUB_WORKSPACE/local.properties"
+
+        if [[ -z "$ANDROID_GOOGLE_SERVICES_JSON_BASE64" ]]; then
+          echo "::error::Missing repository Actions secret GOOGLE_SERVICES_JSON_BASE64."
+          echo "::error::Set it to the base64-encoded production app/google-services.json contents."
+          exit 1
+        fi
+
+        mkdir -p "$GITHUB_WORKSPACE/app"
+        printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON_BASE64" \
+          | tr -d '[:space:]' \
+          | base64 --decode > "$GITHUB_WORKSPACE/app/google-services.json"
+
+        if ! jq -e --arg package_name "com.estatia.realestate.apps" '
+          (.project_info.project_id | type == "string" and length > 0)
+          and any(.client[]?; .client_info.android_client_info.package_name == $package_name)
+        ' "$GITHUB_WORKSPACE/app/google-services.json" > /dev/null; then
+          rm -f "$GITHUB_WORKSPACE/app/google-services.json"
+          echo "::error::GOOGLE_SERVICES_JSON_BASE64 is not valid Firebase configuration for com.estatia.realestate.apps."
+          exit 1
+        fi

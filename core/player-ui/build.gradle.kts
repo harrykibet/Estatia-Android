@@ -9,7 +9,6 @@ android {
 
 dependencies {
     implementation(libs.bundles.media3)
-    implementation(libs.google.accompanist)
 
     implementation(projects.core.playerEngine)
     implementation(projects.core.domain)
