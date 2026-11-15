@@ -57,6 +57,7 @@ import com.estatia.realestate.apps.core.model.property.MediaType
 import com.estatia.realestate.apps.core.model.property.ListingUiModel
 import com.estatia.realestate.apps.core.model.property.toListingUiModel
 import com.estatia.realestate.apps.core.player_ui.screens.EngineVideoPlayer
+import com.estatia.realestate.apps.core.player_ui.state.PlayerUiState
 import com.estatia.realestate.apps.core.ui.DevicePreviews
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedItem
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedScreen
