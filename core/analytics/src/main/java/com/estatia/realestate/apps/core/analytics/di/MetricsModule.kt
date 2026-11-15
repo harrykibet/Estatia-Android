@@ -45,7 +45,7 @@ internal fun createAndroidPrometheusConfig(): PrometheusConfig =
 
         override fun prometheusProperties(): Properties =
             Properties().apply {
-                putAll(super<PrometheusConfig>.prometheusProperties())
+                super<PrometheusConfig>.prometheusProperties()?.let { putAll(it) }
                 setProperty("io.prometheus.metrics.exemplars_enabled", "false")
             }
     }
