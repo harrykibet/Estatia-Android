@@ -2,7 +2,6 @@ package com.estatia.realestate.apps.core.player_ui.viewmodels
 
 import androidx.core.net.toUri
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.ViewModelMarker
-import com.estatia.realestate.apps.core.architecture.annotations.Safety.AllowedArchitectureDependency
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
@@ -29,8 +28,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -55,14 +53,8 @@ abstract class BaseVideoPlaybackViewModel(
     private val decoderFailures = mutableSetOf<String>()
     private val isScreenVisible = MutableStateFlow(true)
 
-    private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Idle)
-    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-
-    @AllowedArchitectureDependency(
-        reason = "The mute preference is owned and persisted by IUserRepository; this StateFlow is a read-only projection, not a second ViewModel-owned UI state authority."
-    )
-    val isMuted = userRepository.userData.map { it.isMuted }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    private val _uiState = MutableStateFlow(VideoPlaybackUiState())
+    val uiState: StateFlow<VideoPlaybackUiState> = _uiState.asStateFlow()
 
     private val _autoAdvanceEvent = MutableSharedFlow<Unit>(replay = 0)
     val autoAdvanceEvent = _autoAdvanceEvent.asSharedFlow()
@@ -131,9 +123,16 @@ abstract class BaseVideoPlaybackViewModel(
                     return@onEach
                 }
             }
-            _uiState.value = uiState
+            _uiState.update { current -> current.copy(playback = uiState) }
         }
         .launchIn(viewModelScope)
+
+        // The repository remains the source of truth for the persisted mute preference.
+        // Project it into the same public UI-state authority as playback status.
+        userRepository.userData
+            .map { it.isMuted }
+            .onEach { muted -> _uiState.update { current -> current.copy(isMuted = muted) } }
+            .launchIn(viewModelScope)
 
         environmentCoordinator.meteredConnectionDetected
             .onEach { _meteredConnectionEvent.emit(Unit) }
@@ -231,7 +230,7 @@ abstract class BaseVideoPlaybackViewModel(
 
     fun toggleMute() {
         viewModelScope.launch {
-            userRepository.setIsMuted(!isMuted.value)
+            userRepository.setIsMuted(!uiState.value.isMuted)
         }
     }
 
