@@ -157,6 +157,46 @@ class Law018_ViewModelSsotProcessorTest {
     }
 
     @Test
+    fun `LAW-018 permits an explicitly documented repository-owned inherited StateFlow`() {
+        val baseSource = SourceFile.kotlin(
+            "PlaybackBaseViewModel.kt",
+            """
+            package com.estatia.realestate.apps.feature.test
+            import androidx.lifecycle.ViewModel
+            import kotlinx.coroutines.flow.StateFlow
+            import com.estatia.realestate.apps.core.architecture.annotations.Safety.AllowedArchitectureDependency
+
+            abstract class PlaybackBaseViewModel : ViewModel() {
+                val uiState: StateFlow<Int> = TODO()
+
+                @AllowedArchitectureDependency(
+                    reason = "This preference is owned by the user repository, not by the ViewModel."
+                )
+                val isMuted: StateFlow<Boolean> = TODO()
+            }
+            """.trimIndent()
+        )
+        val childSource = SourceFile.kotlin(
+            "PlaybackViewModel.kt",
+            """
+            package com.estatia.realestate.apps.feature.test
+
+            class PlaybackViewModel : PlaybackBaseViewModel()
+            """.trimIndent()
+        )
+
+        val result = KspTestUtils.compile(
+            KspTestUtils.annotationsSource,
+            KspTestUtils.coroutineStubs,
+            KspTestUtils.lifecycleStubs,
+            baseSource,
+            childSource,
+            providers = listOf(Law018_ViewModelSsotProcessorProvider())
+        )
+        assertEquals(KotlinCompilation.ExitCode.OK, result.exitCode)
+    }
+
+    @Test
     fun `LAW-018 ViewModel with custom StateFlow subtype passes`() {
         val source = SourceFile.kotlin(
             "TestViewModel.kt",
