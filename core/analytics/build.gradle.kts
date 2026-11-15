@@ -14,6 +14,8 @@ dependencies {
 
     implementation(libs.work.runtime.ktx)
     implementation(libs.bundles.analytics)
+    // Prometheus core's StableApi marker is published in a separate annotations artifact.
+    implementation(libs.prometheus.metrics.annotations)
     implementation(libs.bundles.firebase)
     implementation(projects.core.common)
     api(libs.protobufJava)
