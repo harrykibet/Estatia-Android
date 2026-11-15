@@ -27,8 +27,8 @@ tasks.withType<Test>().configureEach {
     // Pass the path to README.md for DocParityTest
     systemProperty("LINT_README_PATH", "${project.projectDir}/README.md")
     
-    // Pass the path to the canary report for Law034
-    systemProperty("CANARY_LINT_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.txt")
+    // Pass the structured XML report consumed by Law034's regression oracle.
+    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.xml")
     
     // Pass module paths for MetaArchitectureSyncTest
     systemProperty("KSP_SERVICES_PATH", "${project.rootDir}/core/ksp-architecture/src/main/resources/META-INF/services/com.google.devtools.ksp.processing.SymbolProcessorProvider")

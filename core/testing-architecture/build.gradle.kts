@@ -13,6 +13,7 @@ tasks.withType<Test>().configureEach {
     // Declare explicit dependency to ensure it runs before this module's tests.
     dependsOn(":core:canary-violations:lintDemoDebug")
 
-    // Pass the absolute path to the report to avoid brittle relative path traversal in tests.
-    systemProperty("CANARY_LINT_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.txt")
+    // Pass the absolute checkout root and structured canary XML report to policy tests.
+    systemProperty("PROJECT_ROOT", project.rootDir.absolutePath)
+    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.xml")
 }

@@ -20,7 +20,9 @@ import javax.xml.parsers.DocumentBuilderFactory
 class Law034_LintCanaryRegressionTest {
 
     private val canaryModulePath = "core/canary-violations"
-    private val projectRoot = "C:/Users/Administrator/StudioProjects/RealEstateApp-Android"
+    private val projectRoot: File by lazy {
+        File(System.getProperty("PROJECT_ROOT") ?: System.getProperty("user.dir")).canonicalFile
+    }
     
     data class CanaryExpectation(
         val issueId: String,
@@ -34,8 +36,8 @@ class Law034_LintCanaryRegressionTest {
 
     @Test
     fun `canary module must satisfy the High-Fidelity Enforcement Oracle`() {
-        val reportPath = System.getProperty("CANARY_LINT_XML_REPORT") ?: 
-            "$projectRoot/core/canary-violations/build/reports/lint-results.xml"
+        val reportPath = System.getProperty("CANARY_LINT_XML_REPORT")
+            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results.xml").absolutePath
         
         val reportFile = File(reportPath)
         assertTrue("Canary lint report not found at $reportPath", reportFile.exists())
@@ -140,10 +142,10 @@ class Law034_LintCanaryRegressionTest {
     }
     
     private fun toRelative(file: File): String {
-        val path = file.absolutePath.replace("\\", "/")
-        val root = projectRoot.replace("\\", "/")
-        return if (path.startsWith(root, ignoreCase = true)) {
-            path.substring(root.length).trimStart('/')
+        val path = file.canonicalPath.replace("\\", "/")
+        val root = projectRoot.canonicalPath.replace("\\", "/")
+        return if (path.startsWith("$root/", ignoreCase = true)) {
+            path.substring(root.length + 1)
         } else {
             path
         }
@@ -177,8 +179,8 @@ class Law034_LintCanaryRegressionTest {
         val fixtures = Law.entries.flatMap { it.fixtures }.toSet()
         val results = mutableListOf<CanaryExpectation>()
         
-        val srcMain = File("$projectRoot/$canaryModulePath/src/main/kotlin")
-        val srcTest = File("$projectRoot/$canaryModulePath/src/test/kotlin")
+        val srcMain = File(projectRoot, "$canaryModulePath/src/main/kotlin")
+        val srcTest = File(projectRoot, "$canaryModulePath/src/test/kotlin")
         
         listOf(srcMain, srcTest).filter { it.exists() }.forEach { root ->
             root.walkTopDown().filter { it.extension == "kt" }.forEach { file ->
