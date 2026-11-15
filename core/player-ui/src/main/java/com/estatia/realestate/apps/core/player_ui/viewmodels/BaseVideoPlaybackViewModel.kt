@@ -13,6 +13,7 @@ import com.estatia.realestate.apps.core.player_engine.state.PlaybackStateReducer
 import com.estatia.realestate.apps.core.player_ui.state.FeedMediaContext
 import com.estatia.realestate.apps.core.player_ui.state.PlayerErrorType
 import com.estatia.realestate.apps.core.player_ui.state.PlayerUiState
+import com.estatia.realestate.apps.core.player_ui.state.VideoPlaybackUiState
 import com.estatia.realestate.apps.core.player_engine.utils.EnvironmentCoordinator
 import com.estatia.realestate.apps.core.domain.repository.IUserRepository
 import androidx.media3.common.PlaybackException
