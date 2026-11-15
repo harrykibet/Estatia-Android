@@ -33,11 +33,11 @@ class Law008_AbstractionLeakageProcessor(
         // 🛡️ REFINEMENT: Audit public extension functions targeting architectural roles
         resolver.getAllFiles().flatMap { it.declarations }
             .filterIsInstance<KSFunctionDeclaration>()
-            .filter { it.extensionReceiver != null && isPublic(it) }
+            .filter { it.extensionReceiver != null && isEffectivelyPublic(it) }
             .forEach { func ->
                 val receiverType = func.extensionReceiver?.resolve()
                 val receiverDeclaration = receiverType?.declaration
-                if (receiverDeclaration is KSClassDeclaration) {
+                if (receiverDeclaration is KSClassDeclaration && isEffectivelyPublic(receiverDeclaration)) {
                     val annotations = receiverDeclaration.annotations.mapNotNull { it.annotationType.resolve().declaration.qualifiedName?.asString() }
                     if (annotations.any { pureArchitecturalAnnotations.contains(it) }) {
                         auditFunction(func, receiverDeclaration.simpleName.asString())
@@ -49,13 +49,18 @@ class Law008_AbstractionLeakageProcessor(
     }
 
     private fun auditDeclaration(clazz: KSClassDeclaration) {
+        // A public member cannot expose an API more visible than its enclosing
+        // declaration. Internal/private architectural implementations are not
+        // public API surfaces and must not be audited as such.
+        if (!isEffectivelyPublic(clazz)) return
+
         clazz.getDeclaredProperties().forEach { prop ->
-            if (isPublic(prop)) {
+            if (isEffectivelyPublic(prop)) {
                 checkForbiddenType(prop.type.resolve(), prop, "property", clazz.simpleName.asString())
             }
         }
         clazz.getDeclaredFunctions().forEach { func ->
-            if (isPublic(func) && func.simpleName.asString() != "<init>") {
+            if (isEffectivelyPublic(func) && func.simpleName.asString() != "<init>") {
                 auditFunction(func, clazz.simpleName.asString())
             }
         }
@@ -88,10 +93,24 @@ class Law008_AbstractionLeakageProcessor(
         }
     }
 
-    private fun isPublic(node: KSModifierListOwner): Boolean {
-        return !node.modifiers.contains(Modifier.PRIVATE) &&
-               !node.modifiers.contains(Modifier.INTERNAL) &&
-               !node.modifiers.contains(Modifier.PROTECTED)
+    /**
+     * Returns whether a declaration is externally visible after accounting for
+     * every enclosing declaration. A public member of an internal/private class
+     * is still part of an implementation detail, not a public API.
+     */
+    private fun isEffectivelyPublic(node: KSDeclaration): Boolean {
+        var declaration: KSDeclaration? = node
+        while (declaration != null) {
+            if (
+                declaration.modifiers.contains(Modifier.PRIVATE) ||
+                declaration.modifiers.contains(Modifier.INTERNAL) ||
+                declaration.modifiers.contains(Modifier.PROTECTED)
+            ) {
+                return false
+            }
+            declaration = declaration.parentDeclaration
+        }
+        return true
     }
 }
 

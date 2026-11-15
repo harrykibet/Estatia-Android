@@ -39,12 +39,7 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Compile Demo and Prod Test Fixtures
-        run: |
-          ./gradlew \\
-            :core:testing:compileDemoDebugTestFixturesKotlin \\
-            :core:testing:compileProdDebugTestFixturesKotlin \\
-            --no-configuration-cache --info
-
+        run: ./gradlew :core:testing:compileDemoDebugTestFixturesKotlin :core:testing:compileProdDebugTestFixturesKotlin --no-configuration-cache --info
       - name: Verify Architecture Contract
         # 🏗️ AUTHORITATIVE GATE: Runs Lint, KSP, Konsist, Canary, and Drift checks.
         run: ./gradlew verifyArchitecture --no-configuration-cache --info
