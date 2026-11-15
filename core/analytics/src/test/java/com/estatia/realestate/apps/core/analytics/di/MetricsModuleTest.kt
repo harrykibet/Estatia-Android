@@ -7,7 +7,11 @@ class MetricsModuleTest {
 
     @Test
     fun `prometheus exemplar sampling is disabled without a span context provider`() {
-        val properties = createAndroidPrometheusConfig().prometheusProperties()
+        val properties = requireNotNull(
+            createAndroidPrometheusConfig().prometheusProperties()
+        ) {
+            "Android Prometheus configuration must provide properties"
+        }
 
         assertEquals(
             "false",
