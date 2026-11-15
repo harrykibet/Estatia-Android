@@ -17,13 +17,13 @@ prepare_flavor() {
     demo)
       secret_name="GOOGLE_SERVICES_JSON_DEMO_BASE64"
       encoded="${GOOGLE_SERVICES_JSON_DEMO_BASE64:-}"
-      destination="app/src/Demo/google-services.json"
+      destination="app/src/demo/google-services.json"
       expected_package="com.estatia.realestate.apps.demo"
       ;;
     prod)
       secret_name="GOOGLE_SERVICES_JSON_PROD_BASE64"
       encoded="${GOOGLE_SERVICES_JSON_PROD_BASE64:-}"
-      destination="app/src/Prod/google-services.json"
+      destination="app/src/prod/google-services.json"
       expected_package="com.estatia.realestate.apps"
       ;;
     *)
@@ -91,7 +91,13 @@ PY
   mkdir -p "$(dirname "$destination")"
   install -m 600 "$temp_file" "$destination"
   rm -f "$temp_file"
-  echo "Prepared and validated Firebase configuration for the $flavor flavor."
+
+  if [[ ! -s "$destination" ]]; then
+    echo "::error::Firebase configuration was not created at $destination."
+    exit 1
+  fi
+
+  echo "Prepared and validated Firebase configuration for the $flavor flavor at $destination."
 }
 
 for flavor in "$@"; do
