@@ -9,6 +9,11 @@
 
 # Micrometer optional integrations
 -dontwarn io.micrometer.context.ThreadLocalAccessor
+
+# The Prometheus client deliberately treats its tracing initializer as optional.
+# ExemplarSampler catches NoClassDefFoundError when this initializer is absent.
+# Keep the suppression limited to that one optional linkage; do not hide other Prometheus misses.
+-dontwarn io.prometheus.metrics.tracer.initializer.SpanContextSupplier
 -dontwarn org.LatencyUtils.**
 
 # OpenTelemetry optional auto-configuration SPI
