@@ -70,7 +70,7 @@ class FavoritesVideoPlaybackViewModelTest {
 
     @Test
     fun `uiState initially Idle`() = runTest {
-        viewModel.uiState.assertCurrentState { this == PlayerUiState.Idle }
+        viewModel.uiState.assertCurrentState { playback == PlayerUiState.Idle }
     }
 
     @Test
@@ -93,7 +93,7 @@ class FavoritesVideoPlaybackViewModelTest {
             awaitItem()
             
             // UI state should NOT show error because it's suppressed by auto-advance
-            viewModel.uiState.assertCurrentState { this !is PlayerUiState.Error }
+            viewModel.uiState.assertCurrentState { playback !is PlayerUiState.Error }
         }
     }
 
