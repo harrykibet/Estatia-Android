@@ -77,7 +77,8 @@ fun SearchRoute(
     playbackViewModel: SearchVideoPlaybackViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val isMuted by playbackViewModel.isMuted.collectAsStateWithLifecycle()
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val isMuted = playbackState.isMuted
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(playbackViewModel.autoAdvanceEvent) {
@@ -112,6 +113,7 @@ fun SearchRoute(
         onClearHistory = viewModel::clearSearchHistory,
         onLikeClick = { listing -> viewModel.toggleLike(listing.id, false) /* Fix: handle actual state */ },
         isMuted = isMuted,
+        playbackUiState = playbackState.playback,
         onMuteToggle = playbackViewModel::toggleMute,
         onNavigateToPropertyDetail = onNavigateToPropertyDetail,
         commentsContent = commentsContent,
@@ -136,6 +138,7 @@ fun SearchScreen(
     onNavigateToPropertyDetail: (String) -> Unit,
     commentsContent: @Composable (propertyId: String, onDismiss: () -> Unit) -> Unit,
     playbackViewModel: SearchVideoPlaybackViewModel,
+    playbackUiState: PlayerUiState = PlayerUiState.Idle,
     onPageChanged: (Int) -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -222,11 +225,7 @@ fun SearchScreen(
                                 )
                             },
                             itemContent = { listing, isActive, onCommentClick ->
-                                val playerUiState by if (isActive) {
-                                    playbackViewModel.uiState.collectAsStateWithLifecycle()
-                                } else {
-                                    remember { mutableStateOf(null) }
-                                }
+                                val playerUiState = if (isActive) playbackUiState else null
 
                                 PropertyFeedItem(
                                     listing = listing,
