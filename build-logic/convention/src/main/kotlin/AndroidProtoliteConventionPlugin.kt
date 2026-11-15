@@ -18,7 +18,6 @@ class AndroidProtoliteConventionPlugin : Plugin<Project> {
                 // Remove legacy/alternate runtimes so Firebase and OTLP resolve
                 // against one compatible protobuf implementation.
                 exclude(group = "com.google.protobuf", module = "protobuf-lite")
-                exclude(group = "com.google.protobuf", module = "protobuf-javalite")
                 exclude(group = "com.google.firebase", module = "protolite-well-known-types")
                 resolutionStrategy {
                     force(libs.findLibrary("protobufJava").get())
