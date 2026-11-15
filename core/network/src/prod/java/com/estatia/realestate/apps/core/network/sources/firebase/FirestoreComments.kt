@@ -1,30 +1,30 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
+import com.estatia.realestate.apps.core.network.core.RetryConfigs
+import com.estatia.realestate.apps.core.network.db_entities.CommentEntityModel
+import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.COMMENTS_COUNT
-import com.estatia.realestate.apps.core.common.exceptions.AppResult
-import com.estatia.realestate.apps.core.network.core.RetryConfigs
-import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
-import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
+import com.estatia.realestate.apps.core.network.di.FirebaseMapper
 import com.estatia.realestate.apps.core.network.interfaces.ICommentsRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.IDatabaseErrorMapper
-import com.estatia.realestate.apps.core.network.di.FirebaseMapper
-import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
+import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
-import com.estatia.realestate.apps.core.architecture.annotations.Data.EntityModel
 
 /**
  * Firebase implementation of [ICommentsRemoteDataSource].
- * 
+ *
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Manage comment streams and submissions.
  * - Concurrency: Thread-safe reactive observation via [callbackFlow].
