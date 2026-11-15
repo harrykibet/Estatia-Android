@@ -80,13 +80,13 @@ class HomeVideoPlaybackResilienceTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         // Then: Initial state is Buffering
-        viewModel.uiState.assertCurrentState { this == PlayerUiState.Buffering }
+        viewModel.uiState.assertCurrentState { playback == PlayerUiState.Buffering }
 
         // When: Chaos Injection - Sustained Low Bandwidth
         envFlow.value = envFlow.value.copy(isSustainedLowBandwidth = true)
         testDispatcher.scheduler.advanceUntilIdle()
 
         // Then: UI surfaces informative LowBandwidth state
-        viewModel.uiState.assertCurrentState { this == PlayerUiState.LowBandwidth }
+        viewModel.uiState.assertCurrentState { playback == PlayerUiState.LowBandwidth }
     }
 }
