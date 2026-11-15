@@ -1,22 +1,21 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
+import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
-import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
+import com.estatia.realestate.apps.core.network.db_entities.UserEntityModel
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.estatia.realestate.apps.core.network.interfaces.IUserRemoteDataSource
-import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import com.google.firebase.firestore.FirebaseFirestore
+import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.tasks.await
-import javax.inject.Inject
-import com.estatia.realestate.apps.core.architecture.annotations.Data.EntityModel
-
 
 /**
  * Firebase implementation of [IUserRemoteDataSource].
- * 
+ *
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Manage user profile persistence in Firestore.
  * - Concurrency: Thread-safe; delegates context to [networkClient].
@@ -32,7 +31,7 @@ internal class FirestoreUsers @Inject constructor(
 
 
     override suspend fun getUserById(
-        userId:String
+        userId: String
     ): AppResult<UserEntityModel> {
 
 
