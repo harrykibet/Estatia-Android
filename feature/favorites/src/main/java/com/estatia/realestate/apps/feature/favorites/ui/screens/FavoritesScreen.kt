@@ -10,7 +10,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
@@ -19,6 +18,7 @@ import com.estatia.realestate.apps.core.model.property.MediaType
 import com.estatia.realestate.apps.core.model.property.PropertyDomainModel
 import com.estatia.realestate.apps.core.model.property.toListingUiModel
 import com.estatia.realestate.apps.core.player_ui.screens.EngineVideoPlayer
+import com.estatia.realestate.apps.core.player_ui.state.PlayerUiState
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedItem
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedScreen
 import com.estatia.realestate.apps.feature.shared_ui.RememberFeedPlaybackCoordinator
