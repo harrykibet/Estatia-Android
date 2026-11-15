@@ -28,6 +28,11 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
+      - name: Prepare Firebase configuration (Prod)
+        env:
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh prod
+
       - name: Run Feed Chaos Tests
         # Chaos tests are expensive, running them in Nightly
         run: ./gradlew :app:pixel6Api31ProdDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.chaos.FeedGestureChaosTest
@@ -50,6 +55,12 @@ jobs:
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Generate Baseline Profile
         run: ./gradlew :app:generateBaselineProfile --no-configuration-cache
@@ -87,6 +98,11 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
+      - name: Prepare Firebase configuration (Prod)
+        env:
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh prod
+
       - name: Assemble Release for Audit
         run: ./gradlew :app:assembleProdRelease --no-configuration-cache
 
@@ -120,6 +136,12 @@ jobs:
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Full Variant Architecture Audit
         # 🏗️ EXHAUSTIVE AUDIT: Run architecture verification on ALL variants nightly.

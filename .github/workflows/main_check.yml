@@ -27,6 +27,12 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
       - name: Run Lint
         run: ./gradlew lint --no-configuration-cache --info
 
@@ -49,6 +55,12 @@ jobs:
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Run All Unit Tests
         run: ./gradlew test --no-configuration-cache --info
@@ -81,6 +93,11 @@ jobs:
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Prod)
+        env:
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh prod
 
       - name: Decode and Store Keystore
         run: |

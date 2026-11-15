@@ -32,6 +32,12 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
       - name: Verify Architecture Contract
         # 🏗️ AUTHORITATIVE GATE: Runs Lint, KSP, Konsist, Canary, and Drift checks.
         run: ./gradlew verifyArchitecture --no-configuration-cache --info
@@ -73,6 +79,12 @@ jobs:
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
       - name: Run Impacted Tasks
         run: ./gradlew ${{ needs.architecture-gate.outputs.impact_tasks }} --no-configuration-cache --info
 
@@ -102,6 +114,11 @@ jobs:
 
       # Release signing is intentionally omitted here: this validates the actual
       # minified production variant and R8 without requiring signing secrets.
+      - name: Prepare Firebase configuration (Prod)
+        env:
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh prod
+
       - name: Assemble Minified Production Release
         run: ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --info
 
@@ -128,6 +145,11 @@ jobs:
           cache: gradle
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Prepare Firebase configuration (Prod)
+        env:
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh prod
 
       - name: Run Smoke UI Tests
         run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --info
