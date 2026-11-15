@@ -46,7 +46,8 @@ extensions.configure<GraphRulesExtension>("moduleGraphAssert") {
         ":core:(?!canary-violations).* -X> :feature.*",
         ":feature.* -X> :feature:(?!shared-ui).*",
         ":core:domain -X> :core:(network|database|datastore|intelligence|notifications|security)",
-        ":core:model -X> :core:(?!common).*"
+        // Model is a leaf module: it may use identity annotations, but not common (which depends on model) or other core modules.
+        ":core:model -X> :core:(?!architecture-annotations(?:$|:)).*"
     )
 }
 

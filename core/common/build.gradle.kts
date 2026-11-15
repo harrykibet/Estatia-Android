@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.media3.effect)
     implementation(libs.media3.common)
 
-    implementation(projects.core.model)
+    // DeviceInfo and UserLocation are exposed by public interface signatures.
+    api(projects.core.model)
 
 }

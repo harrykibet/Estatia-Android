@@ -167,7 +167,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         }
 
         dependencies {
-            "implementation"(project(":core:architecture"))
+            "implementation"(project(":core:architecture-annotations"))
         }
     }
 }

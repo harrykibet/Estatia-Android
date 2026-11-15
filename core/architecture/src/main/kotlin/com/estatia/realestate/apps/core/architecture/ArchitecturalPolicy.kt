@@ -53,7 +53,7 @@ object ArchitecturalPolicy {
         val Model = Layer("model", "..core.model..", allowed = setOf(
             "kotlin.", "kotlinx.coroutines.", "javax.inject.", 
             "com.estatia.realestate.apps.core.model.",
-            "com.estatia.realestate.apps.core.common.",
+            "com.estatia.realestate.apps.core.architecture.annotations.",
             "androidx.annotation.",
             "kotlinx.parcelize.",
             "android.os.Parcelable"
@@ -99,6 +99,7 @@ object ArchitecturalPolicy {
 
         val FoundationModules = setOf(
             "core/architecture",
+            "core/architecture-annotations",
             "core/ksp-architecture",
             "core/testing-architecture",
             "core/canary-violations",
