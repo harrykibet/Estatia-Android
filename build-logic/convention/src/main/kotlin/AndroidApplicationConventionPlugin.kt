@@ -154,8 +154,18 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     group = "verification"
                     description = "Audits release symbols for variant ${variant.name} (LAW-038)."
                     this.mappingFile.set(mappingFile)
-                    this.forbiddenPatterns.set(listOf("""\bSecret\w*""", """\bInternalImpl\w*""", """\bSecretStore\w*""", """\bDebugConfig\w*"""))
-                    this.allowlist.set(listOf("ApiKeyValidator", "IApiKeyValidator", "ApiKeyValidatorModule"))
+                    this.applicationPackage.set("com.estatia.realestate.apps")
+                    this.forbiddenPatterns.set(
+                        listOf(
+                            """\bSecret\w*""",
+                            """\bInternalImpl\w*""",
+                            """\bSecretStore\w*""",
+                            """\bDebugConfig\w*"""
+                        )
+                    )
+                    this.allowlist.set(
+                        listOf("ApiKeyValidator", "IApiKeyValidator", "ApiKeyValidatorModule")
+                    )
                     this.reportFile.set(layout.buildDirectory.file("reports/architecture/obfuscation/${variant.name}.txt"))
                 }
                 

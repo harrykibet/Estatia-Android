@@ -47,6 +47,9 @@ jobs:
       - name: Run Analytics Unit Tests (Demo + Prod)
         run: ./gradlew :core:analytics:testDemoDebugUnitTest :core:analytics:testProdDebugUnitTest --no-configuration-cache --info
 
+      - name: Test Build Logic Convention Plugins
+        run: ./gradlew -p build-logic :convention:test --no-configuration-cache --info
+
       - name: Verify Architecture Contract
         # 🏗️ AUTHORITATIVE GATE: Runs Lint, KSP, Konsist, Canary, and Drift checks.
         run: ./gradlew verifyArchitecture --no-configuration-cache --info
