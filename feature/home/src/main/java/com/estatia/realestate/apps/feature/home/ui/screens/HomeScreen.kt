@@ -69,8 +69,9 @@ internal fun HomeRoute(
     playbackViewModel: HomeVideoPlaybackViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val playbackUiState by playbackViewModel.uiState.collectAsStateWithLifecycle()
-    val isMuted by playbackViewModel.isMuted.collectAsStateWithLifecycle()
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val playbackUiState = playbackState.playback
+    val isMuted = playbackState.isMuted
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(playbackViewModel.autoAdvanceEvent) {
