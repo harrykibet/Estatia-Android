@@ -79,8 +79,9 @@ fun PropertyDetailsRoute(
     playbackViewModel: PropertyDetailsVideoPlaybackViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val playbackUiState by playbackViewModel.uiState.collectAsStateWithLifecycle()
-    val isMuted by playbackViewModel.isMuted.collectAsStateWithLifecycle()
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val playbackUiState = playbackState.playback
+    val isMuted = playbackState.isMuted
 
     LaunchedEffect(propertyId) {
         viewModel.loadProperty(propertyId)
