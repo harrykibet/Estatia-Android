@@ -20,13 +20,11 @@ import com.estatia.realestate.apps.feature.property.utils.PropertyData
 import com.estatia.realestate.apps.feature.property.utils.toDomain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -49,7 +47,8 @@ class AddPropertyViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(
         AddPropertyUiState(
             countyNames = propertyData.counties,
-            propertyTypes = propertyData.propertyTypes
+            propertyTypes = propertyData.propertyTypes,
+            draft = savedStateHandle.get<AddPropertyDraft>(STATE_DRAFT) ?: AddPropertyDraft()
         )
     )
 
@@ -58,23 +57,12 @@ class AddPropertyViewModel @Inject constructor(
 
 
 
-    private val _draft = MutableStateFlow(
-        savedStateHandle.get<AddPropertyDraft>(STATE_DRAFT) ?: AddPropertyDraft()
-    )
-
-    val draft: StateFlow<AddPropertyDraft> =
-        _draft.asStateFlow()
-
     init {
-        // 🛡️ State Restoration: Persist draft changes
-        _draft.onEach { draft ->
-            savedStateHandle[STATE_DRAFT] = draft
-        }.launchIn(viewModelScope)
+        // Persist the draft from the canonical UI-state snapshot for process restoration.
+        _uiState.map { it.draft }
+            .onEach { draft -> savedStateHandle[STATE_DRAFT] = draft }
+            .launchIn(viewModelScope)
     }
-
-    val allMedia: StateFlow<List<Uri>> = _draft.map {
-        (it.images + it.videos).map { ref -> ref.value.toUri() }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
 
     /**
@@ -83,8 +71,8 @@ class AddPropertyViewModel @Inject constructor(
     private fun updateDraft(
         update: AddPropertyDraft.() -> AddPropertyDraft
     ) {
-        _draft.update {
-            it.update()
+        _uiState.update { state ->
+            state.copy(draft = state.draft.update())
         }
     }
 
@@ -365,7 +353,7 @@ class AddPropertyViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val property = _draft.value.toDomain(userId = userId)
+                val property = _uiState.value.draft.toDomain(userId = userId)
 
                 when (val result = repository.uploadProperty(
                     property = property,
