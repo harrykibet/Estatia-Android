@@ -82,12 +82,12 @@ class AddPropertyViewModelTest {
         viewModel.updateTitle("Villa")
         advanceUntilIdle()
         
-        viewModel.draft.assertCurrentProperty("Villa") { title }
+        viewModel.uiState.assertCurrentProperty("Villa") { draft.title }
         
         advanceTimeBy(11.seconds)
         runCurrent()
         
-        assertTrue("Amenities should be empty", viewModel.draft.value.amenities.isEmpty())
+        assertTrue("Amenities should be empty", viewModel.uiState.value.draft.amenities.isEmpty())
     }
 
     @Test
@@ -110,15 +110,15 @@ class AddPropertyViewModelTest {
         val imageUri = mockk<Uri>(relaxed = true)
         val videoUri = mockk<Uri>(relaxed = true)
         
-        viewModel.allMedia.test {
+        viewModel.uiState.test {
             // Drop initial empty list
-            assertEquals(emptyList<Uri>(), awaitItem())
+            assertEquals(emptyList<Uri>(), awaitItem().allMedia)
             
             viewModel.addImage(imageUri)
             viewModel.addVideo(videoUri)
             advanceUntilIdle()
             
-            val current = awaitItem()
+            val current = awaitItem().allMedia
             assertEquals("Expected 2 media items", 2, current.size)
         }
     }
