@@ -10,9 +10,9 @@
 # Micrometer optional integrations
 -dontwarn io.micrometer.context.ThreadLocalAccessor
 
-# The Prometheus client deliberately treats its tracing initializer as optional.
-# ExemplarSampler catches NoClassDefFoundError when this initializer is absent.
-# Keep the suppression limited to that one optional linkage; do not hide other Prometheus misses.
+# R8 still sees Prometheus' optional tracer linkage in client bytecode.
+# MetricsModule explicitly disables exemplars until a Prometheus SpanContext provider is installed.
+# Keep this narrowly scoped; never suppress other io.prometheus missing classes.
 -dontwarn io.prometheus.metrics.tracer.initializer.SpanContextSupplier
 -dontwarn org.LatencyUtils.**
 
