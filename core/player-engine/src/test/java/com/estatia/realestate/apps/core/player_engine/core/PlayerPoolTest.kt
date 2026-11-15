@@ -11,12 +11,19 @@ import com.estatia.realestate.apps.core.player_engine.utils.IPlayerPoolSizingPol
 import com.estatia.realestate.apps.core.domain.config.IPlayerTuningConfig
 import com.estatia.realestate.apps.core.model.config.PlayerTuningConfig
 import com.estatia.realestate.apps.core.model.player.EnvironmentState
+import androidx.media3.exoplayer.ExoPlayer
+import com.estatia.realestate.apps.core.player_engine.configuration.PlayerConfiguration
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
+import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
@@ -24,6 +31,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import javax.inject.Provider
@@ -135,5 +144,99 @@ class PlayerPoolTest {
         
         assertEquals(3, pool.debugPlayerCount)
         assertEquals(null, pool.get("id1"))
+    }
+
+    @Test
+    fun `release during in-flight creation discards the player instead of registering it`() = runTest {
+        val uri = MediaReference("http://test.com")
+        val gate = CompletableDeferred<Unit>()
+        val configuration = mockk<PlayerConfiguration>(relaxed = true)
+        // Hold creation open at its first real suspension point.
+        coEvery {
+            configurationFactory.create(any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            gate.await()
+            configuration
+        }
+
+        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+            pool.prewarm("id1", uri, MediaType.VOD)
+        }
+
+        // The creation is registered but has nothing in `players` to release yet.
+        pool.release("id1")
+        gate.complete(Unit)
+
+        val result = pending.await()
+
+        assertTrue(result is PrewarmResult.Failure)
+        assertTrue((result as PrewarmResult.Failure).throwable is PlayerReleasedDuringCreationException)
+        assertEquals(0, pool.debugPlayerCount)
+        assertFalse(pool.debugIsIdActive("id1"))
+    }
+
+    @Test
+    fun `release mark does not leak into a later creation of the same media`() = runTest {
+        val uri = MediaReference("http://test.com")
+        val gate = CompletableDeferred<Unit>()
+        val configuration = mockk<PlayerConfiguration>(relaxed = true)
+        coEvery {
+            configurationFactory.create(any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            gate.await()
+            configuration
+        }
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { pool.prewarm("id1", uri, MediaType.VOD) }
+        pool.release("id1")
+        gate.complete(Unit)
+        first.await()
+
+        // A fresh request for the same media after the release must succeed.
+        val second = pool.prewarm("id1", uri, MediaType.VOD)
+
+        assertTrue(second is PrewarmResult.Success)
+        assertTrue(pool.debugIsIdActive("id1"))
+    }
+
+    @Test
+    fun `rejected non-urgent prewarm releases the analytics listener of the discarded player`() = runTest {
+        val uri = MediaReference("http://test.com")
+        pool.updateMaxPoolSize(1, emptySet())
+
+        val keptPlayer = mockk<ExoPlayer>(relaxed = true)
+        val keptListener = mockk<PlaybackAnalyticsListener>(relaxed = true)
+        val discardedPlayer = mockk<ExoPlayer>(relaxed = true)
+        val discardedListener = mockk<PlaybackAnalyticsListener>(relaxed = true)
+        every { playerFactory.create(any()) } returnsMany listOf(
+            PlayerFactory.CreatedPlayer(keptPlayer, keptListener),
+            PlayerFactory.CreatedPlayer(discardedPlayer, discardedListener)
+        )
+
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+        val result = pool.prewarm("id2", uri, MediaType.VOD, urgent = false)
+
+        assertEquals(PrewarmResult.Rejected, result)
+        verify(exactly = 1) { discardedListener.release() }
+        verify(exactly = 1) { discardedPlayer.release() }
+        // The player that was admitted is untouched.
+        verify(exactly = 0) { keptListener.release() }
+        verify(exactly = 0) { keptPlayer.release() }
+    }
+
+    @Test
+    fun `urgent request survives its own trim when every other player is pinned`() = runTest {
+        val uri = MediaReference("http://test.com")
+        pool.updateMaxPoolSize(1, emptySet())
+        pool.updatePinnedIds(setOf("id1"))
+
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+        val urgent = pool.getOrCreate("id2", uri, MediaType.VOD)
+
+        // The urgent player must not have been evicted (released) before the caller got it.
+        assertTrue(pool.debugIsIdActive("id2"))
+        assertTrue(pool.debugIsIdActive("id1"))
+        assertEquals(2, pool.debugPlayerCount)
+        verify(exactly = 0) { urgent.player.release() }
     }
 }

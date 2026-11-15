@@ -24,13 +24,20 @@ class CdnPolicy @Inject constructor(
         val env = environmentCoordinator.environment.value
         val now = clock()
 
+        // An endpoint whose circuit is open is excluded from EVERY strategy below, including
+        // the random fallback used on metered/throttled connections. Only when all circuits are
+        // open do we fall back to the full list, so a selection is always possible.
+        val candidates = endpoints
+            .filterNot { healthSnapshot[it.baseUrl]?.isCircuitOpen(now) == true }
+            .ifEmpty { endpoints }
+
         if (shouldUseRandomFallback(env)) {
-            return endpoints.random(random)
+            return candidates.random(random)
         }
 
-        val scored = endpoints.mapNotNull { endpoint ->
+        val scored = candidates.mapNotNull { endpoint ->
             val health = healthSnapshot[endpoint.baseUrl]
-            if (health == null || health.isCircuitOpen(now) || health.latencyMs == null) {
+            if (health == null || health.latencyMs == null) {
                 null
             } else {
                 val latencyPenalty = health.latencyMs + (health.failureCount * 250L)
@@ -38,7 +45,7 @@ class CdnPolicy @Inject constructor(
             }
         }
 
-        return scored.minByOrNull { it.second }?.first ?: endpoints.random(random)
+        return scored.minByOrNull { it.second }?.first ?: candidates.random(random)
     }
 
     private fun shouldUseRandomFallback(env: EnvironmentState): Boolean {

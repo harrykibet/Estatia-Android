@@ -68,51 +68,82 @@ class PlaybackStateReducer(
     fun dispatch(event: Event) {
         scope.launch(Dispatchers.Main.immediate) {
             Confinement.checkMainThread()
-            _state.value = reduce(event)
+            // An event that is not valid for the current state is dropped entirely:
+            // it neither changes the state nor touches the watchdog.
+            val next = reduce(_state.value, event) ?: return@launch
+            _state.value = next
             handleWatchdog(event)
         }
     }
 
-    private fun reduce(event: Event): State {
+    /**
+     * Computes the next state, or `null` when [event] is not applicable to [current].
+     *
+     * - [Event.Pause] only applies while [State.Playing]. ExoPlayer also reports
+     *   `isPlaying = false` when it starts rebuffering or reaches the end of the media,
+     *   in the same callback as the playback-state change; treating that as a user pause
+     *   would overwrite [State.Buffering] / [State.Ended] with [State.Paused].
+     * - [Event.NetworkRestored] only applies while [State.Reconnecting]; a connectivity
+     *   callback in any other state must not force the player back into buffering.
+     */
+    private fun reduce(current: State, event: Event): State? {
         return when (event) {
             Event.Reset -> State.Idle
             Event.BufferingStarted -> State.Buffering
             Event.BufferingCompleted -> State.Ready
             Event.Play -> State.Playing
-            Event.Pause -> State.Paused
+            Event.Pause -> if (current == State.Playing) State.Paused else null
             Event.PlaybackEnded -> State.Ended
             Event.NetworkLost -> State.Reconnecting
-            Event.NetworkRestored -> State.Buffering
+            Event.NetworkRestored -> if (current == State.Reconnecting) State.Buffering else null
             is Event.PlaybackError -> State.Error(event.error)
         }
     }
 
+    /**
+     * The watchdog guards against hanging in [State.Buffering]. It runs only while buffering,
+     * so every event that leaves that state must stop it: in particular [Event.NetworkLost]
+     * (the UI is legitimately waiting for connectivity, not stuck) as well as [Event.Play]
+     * and [Event.Pause].
+     */
     private fun handleWatchdog(event: Event) {
         when (event) {
-            Event.BufferingStarted, Event.NetworkRestored -> {
-                startWatchdog()
-            }
-            Event.BufferingCompleted, is Event.PlaybackError, Event.Reset, Event.PlaybackEnded -> {
-                stopWatchdog()
-            }
-            else -> Unit
+            Event.BufferingStarted, Event.NetworkRestored -> startWatchdog()
+            Event.BufferingCompleted,
+            Event.Play,
+            Event.Pause,
+            Event.NetworkLost,
+            Event.PlaybackEnded,
+            Event.Reset,
+            is Event.PlaybackError -> stopWatchdog()
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun startWatchdog() {
         stopWatchdog()
         watchdogJob = scope.launch {
             delay(watchdogTimeoutMs.milliseconds)
             // If we reached here, it means we've been buffering for too long.
-            // Dispatch a synthetic error to unblock the UI.
-            dispatch(
-                Event.PlaybackError(
-                    PlaybackException(
-                        "Playback attempt timed out (Watchdog)",
-                        null,
-                        PlaybackException.ERROR_CODE_UNSPECIFIED
-                    )
+            expireWatchdog()
+        }
+    }
+
+    /**
+     * Raises the synthetic timeout error, but only if the player is still buffering at the
+     * moment this runs. The check happens on the main thread, so a state change that landed
+     * between the timer firing and this block executing cannot be overwritten by a stale error.
+     */
+    @OptIn(UnstableApi::class)
+    private fun expireWatchdog() {
+        scope.launch(Dispatchers.Main.immediate) {
+            Confinement.checkMainThread()
+            if (_state.value != State.Buffering) return@launch
+            watchdogJob = null
+            _state.value = State.Error(
+                PlaybackException(
+                    "Playback attempt timed out (Watchdog)",
+                    null,
+                    PlaybackException.ERROR_CODE_UNSPECIFIED
                 )
             )
         }
