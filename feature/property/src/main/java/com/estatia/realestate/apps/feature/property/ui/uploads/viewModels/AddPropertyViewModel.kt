@@ -1,7 +1,6 @@
 package com.estatia.realestate.apps.feature.property.ui.uploads.viewModels
 
 import android.net.Uri
-import androidx.core.net.toUri
 import androidx.lifecycle.SavedStateHandle
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.ViewModelMarker
 import androidx.lifecycle.ViewModel
@@ -357,8 +356,8 @@ class AddPropertyViewModel @Inject constructor(
 
                 when (val result = repository.uploadProperty(
                     property = property,
-                    imageUris = _draft.value.images,
-                    videoUris = _draft.value.videos
+                    imageUris = _uiState.value.draft.images,
+                    videoUris = _uiState.value.draft.videos
                 )) {
                     is AppResult.Success -> {
                         metricsTracker.incrementCounter("property.draft.completed")
@@ -385,8 +384,7 @@ class AddPropertyViewModel @Inject constructor(
 
     fun clearDraft() {
 
-        _draft.value =
-            AddPropertyDraft()
+        _uiState.update { it.copy(draft = AddPropertyDraft()) }
 
     }
 
