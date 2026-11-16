@@ -11,6 +11,7 @@ import com.estatia.realestate.apps.core.player_engine.streaming.IStreamingPipeli
 import com.estatia.realestate.apps.core.player_engine.streaming.WarmPriority
 import com.estatia.realestate.apps.core.common.system.PerformanceMonitor
 import com.estatia.realestate.apps.core.domain.config.IPlayerTuningConfig
+import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.scopes.ViewModelScoped
 import kotlinx.coroutines.CoroutineScope
