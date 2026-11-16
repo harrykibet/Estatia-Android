@@ -51,14 +51,14 @@ class ConfigRepositoryImplTest {
     }
 
     @Test
-    fun `initialize loads from assets and refreshes from remote successfully`() = runTest {
+    fun `initialize loads from assets and refreshes from remote successfully`() = runTest(testDispatcher) {
         val json = "{}"
         coEvery { assetSource.loadNetworkConfig() } returns json
         coEvery { assetSource.loadSecurityConfig() } returns json
         coEvery { assetSource.loadPlayerConfig() } returns json
-        
+
         coEvery { dataRepository.fetchRemoteConfig() } returns AppResult.Success(json)
-        
+
         every { parser.parseNetwork(any()) } returns mockk(relaxed = true)
         every { parser.parseSecurity(any()) } returns mockk(relaxed = true)
         every { parser.parsePlayer(any()) } returns mockk(relaxed = true)
@@ -73,7 +73,7 @@ class ConfigRepositoryImplTest {
     }
 
     @Test
-    fun `refresh handles transient network failures gracefully using platform models`() = runTest {
+    fun `refresh handles transient network failures gracefully using platform models`() = runTest(testDispatcher) {
         // 🧪 Chaos: Remote fetch fails
         coEvery { dataRepository.fetchRemoteConfig() } returns AppResult.Error(NetworkException.Timeout)
 
