@@ -61,12 +61,6 @@ jobs:
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
-      - name: Prepare Firebase configuration (Demo + Prod)
-        env:
-          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
-        run: bash ./.github/scripts/prepare-google-services.sh demo prod
-
       - name: Run Fast Architecture Regression Suite
         run: >-
           ./gradlew
@@ -147,6 +141,12 @@ jobs:
 
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
