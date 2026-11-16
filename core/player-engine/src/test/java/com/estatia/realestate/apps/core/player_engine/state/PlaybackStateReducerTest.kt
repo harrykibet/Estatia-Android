@@ -173,10 +173,48 @@ class PlaybackStateReducerTest {
         reducer.dispatch(PlaybackStateReducer.Event.NetworkLost)
         assertEquals(PlaybackStateReducer.State.Reconnecting, reducer.state.value)
 
-        // Well past the original timeout: still waiting for connectivity, not timed out.
-        advanceTimeBy(30_000.milliseconds)
+        // Well past the original buffering timeout: still waiting for connectivity,
+        // not timed out by the (cancelled) watchdog.
+        advanceTimeBy(29_000.milliseconds)
         runCurrent()
         assertEquals(PlaybackStateReducer.State.Reconnecting, reducer.state.value)
+    }
+
+    @Test
+    fun `Reconnecting gives up with a network error after the reconnect timeout`() = testScope.runTest {
+        reducer.dispatch(PlaybackStateReducer.Event.NetworkLost)
+
+        advanceTimeBy(30_001.milliseconds)
+        runCurrent()
+
+        val state = reducer.state.value
+        assertTrue(state is PlaybackStateReducer.State.Error)
+        assertEquals(
+            androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+            (state as PlaybackStateReducer.State.Error).error.errorCode
+        )
+    }
+
+    @Test
+    fun `NetworkRestored cancels the reconnect timer`() = testScope.runTest {
+        reducer.dispatch(PlaybackStateReducer.Event.NetworkLost)
+        advanceTimeBy(10_000.milliseconds)
+        reducer.dispatch(PlaybackStateReducer.Event.NetworkRestored)
+        reducer.dispatch(PlaybackStateReducer.Event.BufferingCompleted)
+
+        advanceTimeBy(60_000.milliseconds)
+        runCurrent()
+        assertEquals(PlaybackStateReducer.State.Ready, reducer.state.value)
+    }
+
+    @Test
+    fun `Reset leaves Reconnecting without a late timeout error`() = testScope.runTest {
+        reducer.dispatch(PlaybackStateReducer.Event.NetworkLost)
+        reducer.dispatch(PlaybackStateReducer.Event.Reset)
+
+        advanceTimeBy(60_000.milliseconds)
+        runCurrent()
+        assertEquals(PlaybackStateReducer.State.Idle, reducer.state.value)
     }
 
     @Test

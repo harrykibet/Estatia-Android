@@ -20,12 +20,15 @@ import kotlin.time.Duration.Companion.milliseconds
  * Maps low-level ExoPlayer events to consistent UI-ready states.
  *
  * Includes a watchdog mechanism to prevent hanging in the "Buffering" state
- * when encountering corrupt or zero-duration media.
+ * when encountering corrupt or zero-duration media, and a bounded reconnect timer so
+ * [State.Reconnecting] cannot wait forever for a connectivity change that never arrives
+ * (e.g. a network that stays "connected" but unusable).
  */
 @Utility
 class PlaybackStateReducer(
     private val scope: CoroutineScope,
     private val watchdogTimeoutMs: Long = 7_000L,
+    private val reconnectTimeoutMs: Long = 30_000L,
     private val clock: () -> Long = { System.currentTimeMillis() }
 ) {
 
@@ -104,15 +107,16 @@ class PlaybackStateReducer(
      * The watchdog guards against hanging in [State.Buffering]. It runs only while buffering,
      * so every event that leaves that state must stop it: in particular [Event.NetworkLost]
      * (the UI is legitimately waiting for connectivity, not stuck) as well as [Event.Play]
-     * and [Event.Pause].
+     * and [Event.Pause]. [Event.NetworkLost] instead starts the bounded reconnect timer.
+     * The two timers never overlap: they share [watchdogJob].
      */
     private fun handleWatchdog(event: Event) {
         when (event) {
             Event.BufferingStarted, Event.NetworkRestored -> startWatchdog()
+            Event.NetworkLost -> startReconnectTimer()
             Event.BufferingCompleted,
             Event.Play,
             Event.Pause,
-            Event.NetworkLost,
             Event.PlaybackEnded,
             Event.Reset,
             is Event.PlaybackError -> stopWatchdog()
@@ -125,6 +129,34 @@ class PlaybackStateReducer(
             delay(watchdogTimeoutMs.milliseconds)
             // If we reached here, it means we've been buffering for too long.
             expireWatchdog()
+        }
+    }
+
+    private fun startReconnectTimer() {
+        stopWatchdog()
+        watchdogJob = scope.launch {
+            delay(reconnectTimeoutMs.milliseconds)
+            expireReconnect()
+        }
+    }
+
+    /**
+     * Gives up waiting for connectivity: if still [State.Reconnecting] when the timer fires,
+     * surfaces a network error. Checked on the main thread like [expireWatchdog].
+     */
+    @OptIn(UnstableApi::class)
+    private fun expireReconnect() {
+        scope.launch(Dispatchers.Main.immediate) {
+            Confinement.checkMainThread()
+            if (_state.value != State.Reconnecting) return@launch
+            watchdogJob = null
+            _state.value = State.Error(
+                PlaybackException(
+                    "Reconnect timed out",
+                    null,
+                    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                )
+            )
         }
     }
 
