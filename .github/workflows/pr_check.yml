@@ -56,7 +56,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -145,7 +145,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
@@ -185,7 +185,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android SDK properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -227,7 +227,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Prepare Firebase configuration (Prod)
         env:
