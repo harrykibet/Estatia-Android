@@ -36,7 +36,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -80,7 +80,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -114,7 +114,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
@@ -127,11 +127,11 @@ jobs:
 
       - name: Run All Instrumented Tests
         run: |
-          ./gradlew \\
-            :app:pixel2Api34ProdDebugAndroidTest \\
-            :app:pixel6Api31ProdDebugAndroidTest \\
-            :app:mediumPhoneApi33ProdDebugAndroidTest \\
-            :app:pixelTabletApi34ProdDebugAndroidTest \\
+          ./gradlew \
+            :app:pixel2Api34ProdDebugAndroidTest \
+            :app:pixel6Api31ProdDebugAndroidTest \
+            :app:mediumPhoneApi33ProdDebugAndroidTest \
+            :app:pixelTabletApi34ProdDebugAndroidTest \
             --no-configuration-cache --stacktrace --console=plain
 
   build-release:
@@ -154,7 +154,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
