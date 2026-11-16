@@ -297,9 +297,7 @@ class PlayerPool @Inject constructor(
         val listener = analyticsListenerProvider.get()
         
         player.addAnalyticsListener(listener)
-        player.trackSelectionParameters = playerConfig.trackSelectionParameters
-        player.clearMediaItems()
-        player.setMediaItem(playerConfig.mediaItem)
+        playerFactory.bindMedia(player, playerConfig)
 
         // Restore saved position if it exists
         playbackPositions[mediaId]?.let { position ->
