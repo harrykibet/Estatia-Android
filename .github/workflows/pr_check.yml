@@ -63,15 +63,33 @@ jobs:
           echo "tasks=$TASKS" >> $GITHUB_OUTPUT
           echo "Identified Impacted Tasks: $TASKS"
 
-      - name: Self-Healing Ratchet (Update Lint Baselines)
-        # Automatically update baselines if violations decreased
-        run: ./gradlew lint -Dlint.update.baseline=true --no-configuration-cache
-      
-      - name: Commit Baseline Updates
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Prepare main-branch lint baseline reference
+        shell: bash
+        run: |
+          baseline_path="${RUNNER_TEMP}/main-lint-baseline.xml"
+          if git cat-file -e "origin/main:lint-baseline.xml" 2>/dev/null; then
+            git show "origin/main:lint-baseline.xml" > "$baseline_path"
+          else
+            rm -f "$baseline_path"
+            echo "No lint-baseline.xml exists on origin/main; LAW-040 reference count is zero."
+          fi
+          echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
+
+      - name: Run Full Lint Gate
+        # Lint must pass before downstream verification. Baseline updates are reviewed changes,
+        # never generated and committed automatically by a pull-request workflow.
+        run: ./gradlew lint --no-configuration-cache --info
+
+      - name: Upload Lint Diagnostic Reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          commit_message: "chore: auto-update lint baselines (ratchet)"
-          file_pattern: "**/lint-baseline.xml"
+          name: lint-diagnostics
+          path: |
+            **/build/reports/lint-results-*.html
+            **/build/reports/lint-results-*.sarif
+            **/build/intermediates/lint_intermediate_text_report/**/*.txt
+          if-no-files-found: warn
 
   selective-verification:
     name: Level 1 - Impacted Verification
