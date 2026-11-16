@@ -1,6 +1,16 @@
+import org.gradle.api.tasks.testing.AbstractTestTask
+
 plugins {
     alias(libs.plugins.estatia.android.core)
     alias(libs.plugins.estatia.android.compose)
+}
+
+// The test source set contains deliberate canary specimens for Android Lint,
+// not executable JUnit tests. Keep these files in src/test so checkTestSources
+// can inspect them, but do not fail this module's test task when it discovers
+// zero JUnit tests. Any real tests added here will still execute normally.
+tasks.withType<AbstractTestTask>().configureEach {
+    failOnNoDiscoveredTests.set(false)
 }
 
 // 🛡️ High-Fidelity Oracle: Disable KSP for the canary module 
