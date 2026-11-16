@@ -3,7 +3,18 @@ name: PR Check (High Maturity)
 on:
   pull_request:
     branches: [ "main" ]
-    types: [ opened, synchronize, reopened ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+  merge_group:
+    types: [ checks_requested ]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: pr-check-${{  github.event.pull_request.number || github.event.merge_group.head_sha || github.ref  }}
+  cancel-in-progress: ${{  github.event_name == 'pull_request'  }}
+
+permissions:
+  contents: read
 
 env:
   CI: true
@@ -12,13 +23,14 @@ jobs:
   architecture-gate:
     name: Level 0 - Architecture & Policy
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     outputs:
-      impact_tasks: ${{ steps.impact.outputs.tasks }}
+      impact_tasks: ${{  steps.impact.outputs.tasks  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for git diff origin/main
+          fetch-depth: 0
 
       - name: Prepare main-branch lint baseline reference
         shell: bash
@@ -36,52 +48,72 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
-          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
-      - name: Test KSP Architecture Processors
-        run: ./gradlew :core:ksp-architecture:test --no-configuration-cache --info
+      - name: Run Fast Architecture Regression Suite
+        run: >-
+          ./gradlew
+          :core:ksp-architecture:test
+          :core:testing-architecture:test
+          :lint:test
+          --stacktrace
+          --console=plain
 
-      - name: Compile Demo and Prod Test Fixtures
-        run: ./gradlew :core:testing:compileDemoDebugTestFixturesKotlin :core:testing:compileProdDebugTestFixturesKotlin --no-configuration-cache --info
-
-      - name: Run Analytics Unit Tests (Demo + Prod)
-        run: ./gradlew :core:analytics:testDemoDebugUnitTest :core:analytics:testProdDebugUnitTest --no-configuration-cache --info
+      - name: Run Full Architecture and Lint Gates
+        if: ${{  github.event_name != 'pull_request'  }}
+        run: ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
 
       - name: Test Build Logic Convention Plugins
-        run: ./gradlew -p build-logic :convention:test --no-configuration-cache --info
+        if: ${{  github.event_name != 'pull_request'  }}
+        run: ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
 
-      - name: Verify Architecture Contract
-        # 🏗️ AUTHORITATIVE GATE: Runs Lint, KSP, Konsist, Canary, and Drift checks.
-        run: ./gradlew verifyArchitecture --no-configuration-cache --info
-
-      - name: Calculate Impact (Selective Testing)
+      - name: Calculate Impacted Verification Tasks
         id: impact
+        shell: bash
         run: |
-          ./gradlew calculateImpact --no-configuration-cache > impact_output.txt
-          TASKS=$(grep "IMPACT_TASKS=" impact_output.txt | cut -d'=' -f2)
-          if [ -z "$TASKS" ]; then TASKS="test lint"; fi
-          echo "tasks=$TASKS" >> $GITHUB_OUTPUT
-          echo "Identified Impacted Tasks: $TASKS"
+          changed_files="$(git diff --name-only origin/main...HEAD)"
+          if [[ -z "$changed_files" ]]; then
+            echo "tasks=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: Run Full Lint Gate
-        # Lint must pass before downstream verification. Baseline updates are reviewed changes,
-        # never generated and committed automatically by a pull-request workflow.
-        run: ./gradlew lint --no-configuration-cache --info
+          if ! grep -Eq '^(app/|core/|feature/|lint/|benchmark/|build-logic/|buildSrc/|build.gradle.kts$|settings.gradle.kts$|gradle/|gradle.properties$)' <<< "$changed_files"; then
+            echo "No source or build-logic files changed; skipping impacted Gradle tasks."
+            echo "tasks=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
+          TASKS="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
+
+          # A root build/dependency change can map to the selector's broad fallback.
+          # Keep PR feedback bounded; the merge-group run performs the exhaustive checks.
+          if [[ "$TASKS" == "test lint" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            TASKS=":app:compileDemoDebugKotlin"
+          fi
+
+          echo "tasks=$TASKS" >> "$GITHUB_OUTPUT"
+          echo "Selected impacted tasks: ${TASKS:-none}"
 
       - name: Upload Lint Diagnostic Reports
-        if: always()
+        if: ${{  always() && github.event_name != 'pull_request'  }}
         uses: actions/upload-artifact@v4
         with:
           name: lint-diagnostics
@@ -94,8 +126,9 @@ jobs:
   selective-verification:
     name: Level 1 - Impacted Verification
     runs-on: ubuntu-latest
-    needs: [architecture-gate]
-    if: needs.architecture-gate.outputs.impact_tasks != ''
+    timeout-minutes: 45
+    needs: [ architecture-gate ]
+    if: ${{  needs.architecture-gate.outputs.impact_tasks != ''  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -104,27 +137,38 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
 
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
-          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
-      - name: Run Impacted Tasks
-        run: ./gradlew ${{ needs.architecture-gate.outputs.impact_tasks }} --no-configuration-cache --info
-
-      - name: Verify Coverage Ratchet
-        run: ./gradlew jacocoProdDebugVerification --no-configuration-cache --info
+      - name: Run Impacted Tasks and Coverage Ratchet
+        env:
+          IMPACT_TASKS: ${{  needs.architecture-gate.outputs.impact_tasks  }}
+        shell: bash
+        run: |
+          read -r -a tasks <<< "$IMPACT_TASKS"
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            tasks+=(jacocoProdDebugVerification)
+          fi
+          ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
 
   release-r8-validation:
     name: Level 3 - Minified Release (R8 / Protobuf)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    if: ${{  github.event_name != 'pull_request'  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -133,24 +177,27 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Prepare Android SDK properties
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
-      # Release signing is intentionally omitted here: this validates the actual
-      # minified production variant and R8 without requiring signing secrets.
       - name: Prepare Firebase configuration (Prod)
         env:
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
 
+      # This validates the actual minified production variant without requiring signing secrets.
       - name: Assemble Minified Production Release
-        run: ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --info
+        run: ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
 
       - name: Verify R8 Outputs
         shell: bash
@@ -161,8 +208,9 @@ jobs:
   smoke-test:
     name: Level 2 - Smoke UI (Pixel 2)
     runs-on: ubuntu-latest
-    needs: [selective-verification]
+    needs: [ selective-verification ]
     timeout-minutes: 30
+    if: ${{  github.event_name != 'pull_request' && needs.selective-verification.result == 'success'  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -171,15 +219,20 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
 
       - name: Prepare Firebase configuration (Prod)
         env:
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
 
       - name: Run Smoke UI Tests
-        run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --info
+        run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --stacktrace --console=plain
