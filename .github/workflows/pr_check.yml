@@ -62,6 +62,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run Fast Architecture Regression Suite
+        if: ${{  github.event_name == 'pull_request' && github.event.action != 'ready_for_review'  }}
         run: >-
           ./gradlew
           :core:ksp-architecture:test
@@ -71,11 +72,11 @@ jobs:
           --console=plain
 
       - name: Run Full Architecture and Lint Gates
-        if: ${{  github.event_name != 'pull_request'  }}
+        if: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
         run: ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
 
       - name: Test Build Logic Convention Plugins
-        if: ${{  github.event_name != 'pull_request'  }}
+        if: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
         run: ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
 
       - name: Calculate Impacted Verification Tasks
@@ -157,10 +158,11 @@ jobs:
       - name: Run Impacted Tasks and Coverage Ratchet
         env:
           IMPACT_TASKS: ${{  needs.architecture-gate.outputs.impact_tasks  }}
+          FULL_VALIDATION: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
         shell: bash
         run: |
           read -r -a tasks <<< "$IMPACT_TASKS"
-          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
             tasks+=(jacocoProdDebugVerification)
           fi
           ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
@@ -169,7 +171,7 @@ jobs:
     name: Level 3 - Minified Release (R8 / Protobuf)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: ${{  github.event_name != 'pull_request'  }}
+    if: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -211,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ selective-verification ]
     timeout-minutes: 30
-    if: ${{  github.event_name != 'pull_request' && needs.selective-verification.result == 'success'  }}
+    if: ${{  (github.event_name != 'pull_request' || github.event.action == 'ready_for_review') && needs.selective-verification.result == 'success'  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
