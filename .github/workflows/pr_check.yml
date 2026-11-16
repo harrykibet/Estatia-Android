@@ -20,6 +20,18 @@ jobs:
         with:
           fetch-depth: 0 # Required for git diff origin/main
 
+      - name: Prepare main-branch lint baseline reference
+        shell: bash
+        run: |
+          baseline_path="${RUNNER_TEMP}/main-lint-baseline.xml"
+          if git cat-file -e "origin/main:lint-baseline.xml" 2>/dev/null; then
+            git show "origin/main:lint-baseline.xml" > "$baseline_path"
+          else
+            rm -f "$baseline_path"
+            echo "No lint-baseline.xml exists on origin/main; LAW-040 reference count is zero."
+          fi
+          echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
+
       - name: Set Up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -62,18 +74,6 @@ jobs:
           if [ -z "$TASKS" ]; then TASKS="test lint"; fi
           echo "tasks=$TASKS" >> $GITHUB_OUTPUT
           echo "Identified Impacted Tasks: $TASKS"
-
-      - name: Prepare main-branch lint baseline reference
-        shell: bash
-        run: |
-          baseline_path="${RUNNER_TEMP}/main-lint-baseline.xml"
-          if git cat-file -e "origin/main:lint-baseline.xml" 2>/dev/null; then
-            git show "origin/main:lint-baseline.xml" > "$baseline_path"
-          else
-            rm -f "$baseline_path"
-            echo "No lint-baseline.xml exists on origin/main; LAW-040 reference count is zero."
-          fi
-          echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
 
       - name: Run Full Lint Gate
         # Lint must pass before downstream verification. Baseline updates are reviewed changes,
