@@ -15,6 +15,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -65,6 +66,7 @@ class ConfigRepositoryImplTest {
         every { parser.parse(any()) } returns mockConfig
 
         repository.initialize()
+        runCurrent() // Drain the asynchronously launched remote refresh before asserting its effects.
 
         assertTrue(repository.isInitialized)
         verify { assetSource.loadNetworkConfig() }
