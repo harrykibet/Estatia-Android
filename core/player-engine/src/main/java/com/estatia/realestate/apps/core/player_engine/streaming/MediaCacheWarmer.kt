@@ -10,6 +10,7 @@ import com.estatia.realestate.apps.core.common.events.EventTypes
 import com.estatia.realestate.apps.core.common.interfaces.IDeviceUtils
 import com.estatia.realestate.apps.core.common.interfaces.ILogger
 import com.estatia.realestate.apps.core.domain.analytics.IAnalyticsTracker
+import com.estatia.realestate.apps.core.network.interfaces.INetworkStateProvider
 import com.estatia.realestate.apps.core.player_engine.di.EngineScope
 import com.estatia.realestate.apps.core.player_engine.di.IODispatcher
 import com.estatia.realestate.apps.core.player_engine.di.PlaybackCache
@@ -43,7 +44,8 @@ class MediaCacheWarmer @Inject constructor(
     private val analyticsTracker: IAnalyticsTracker,
     @param:EngineScope private val scope: CoroutineScope,
     @param:IODispatcher private val ioDispatcher: CoroutineDispatcher,
-    private val logger: ILogger
+    private val logger: ILogger,
+    private val networkStateProvider: INetworkStateProvider
 ) : AutoCloseable {
 
     private val requests = MutableSharedFlow<WarmRequest>(
@@ -210,12 +212,18 @@ class MediaCacheWarmer @Inject constructor(
                     total += read
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // A superseded prefetch is routine (every swipe cancels one): not an error, and
+            // swallowing it would also hide the cancellation from the caller.
+            throw e
         } catch (e: Exception) {
             val message = when (e) {
                 is HttpDataSource.InvalidResponseCodeException -> {
-                    // Feed failure back to CDN health monitor
-                    val baseUrl = "${uri.scheme}://${uri.authority}"
-                    cdnHealthMonitor.reportExternalFailure(baseUrl)
+                    // Feed server-side failures back to the CDN health monitor
+                    if (CdnFailureAttribution.isCdnAtFault(e, networkStateProvider.current())) {
+                        val baseUrl = "${uri.scheme}://${uri.authority}"
+                        cdnHealthMonitor.reportExternalFailure(baseUrl)
+                    }
                     "Failed to prefetch uri: $uri. Max bytes: $maxBytes. Response code: ${e.responseCode}. Data: ${e.dataSpec}"
                 }
                 is java.io.IOException -> {
@@ -233,9 +241,12 @@ class MediaCacheWarmer @Inject constructor(
                         logger.w("MediaCacheWarmer", "Prefetch failed: Disk is full. uri: $uri")
                         "Failed to prefetch uri: $uri. Max bytes: $maxBytes (Disk Full)"
                     } else {
-                        // Feed network/timeout failure back to CDN health monitor
-                        val baseUrl = "${uri.scheme}://${uri.authority}"
-                        cdnHealthMonitor.reportExternalFailure(baseUrl)
+                        // Feed network/timeout failure back to CDN health monitor, unless the
+                        // device is simply offline, in which case the CDN is not at fault.
+                        if (CdnFailureAttribution.isCdnAtFault(e, networkStateProvider.current())) {
+                            val baseUrl = "${uri.scheme}://${uri.authority}"
+                            cdnHealthMonitor.reportExternalFailure(baseUrl)
+                        }
                         "Failed to prefetch uri: $uri. Max bytes: $maxBytes (IO Error)"
                     }
                 }

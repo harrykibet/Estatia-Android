@@ -164,9 +164,9 @@ class PlayerPoolReuseTest {
         // 6. Verify the player instance is the SAME as the one used for id1.
         assertSame("The player instance must be reused to minimize allocation overhead", managed1.player, managed2.player)
 
-        // 7. Verify setMediaItem is called for the new media.
-        // This ensures the reused player is correctly re-bound to the new URI.
-        verify { player.setMediaItem(mockMediaItem2) }
+        // 7. Verify the reused player is re-bound through the factory, which applies the
+        // configured media source (cache/CDN/headers pipeline) for the new media.
+        verify { playerFactory.bindMedia(player, config2) }
     }
 }
 

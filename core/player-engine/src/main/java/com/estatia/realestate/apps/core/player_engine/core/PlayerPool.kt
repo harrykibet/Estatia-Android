@@ -20,7 +20,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -45,9 +47,13 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
  * - Concurrency: Thread-safe via Main-thread confinement check [checkConfinement].
  * - Lifecycle: Automatically trims and releases resources based on [IPlayerPoolSizingPolicy].
  * - Invariants:
- *   1. Active player count never exceeds [maxPoolSize].
+ *   1. Active player count never exceeds [maxPoolSize], except when an urgent request is
+ *      admitted while every other player is pinned: the urgent request is never rejected and
+ *      the player it just created is never the one evicted to make room.
  *   2. Pinned media IDs [pinnedMediaIds] are never evicted.
  *   3. Released players are neutralized (stopped/cleared) before being returned to the idle pool.
+ *   4. A [release] that arrives while a player for that media ID is still being created wins:
+ *      the new player is discarded instead of being registered after the fact.
  */
 // Justification: Required for low-level Media3 playback orchestration.
 @UnstableApi
@@ -64,6 +70,13 @@ class PlayerPool @Inject constructor(
     poolSizingPolicy: IPlayerPoolSizingPolicy
 ) {
     private val inFlightCreations = mutableMapOf<String, InFlightRequest>()
+
+    private companion object {
+        const val MAX_REMEMBERED_POSITIONS = 100
+    }
+
+    // Media IDs whose in-flight creation was superseded by a release() call.
+    private val releasedWhileCreating = mutableSetOf<String>()
     private val playerToIdMap = IdentityHashMap<Player, String>()
     private val playbackPositions = mutableMapOf<String, Long>()
 
@@ -96,6 +109,19 @@ class PlayerPool @Inject constructor(
             .flatMapLatest {
                 players[mediaId]?.reducer?.state ?: flowOf(PlaybackStateReducer.State.Idle)
             }
+    }
+
+    /**
+     * Emits the [Player] currently registered for [mediaId], or `null` when none is.
+     *
+     * Unlike [get], this follows the pool: when the player is replaced (decoder fallback),
+     * evicted, or reclaimed after a long background period, observers see the change instead of
+     * holding a released instance or one that was recycled for different media.
+     */
+    fun observePlayer(mediaId: String): Flow<Player?> {
+        return poolUpdates.onStart { emit(Unit) }
+            .map { players[mediaId]?.player as Player? }
+            .distinctUntilChanged()
     }
 
     suspend fun getOrCreate(
@@ -146,6 +172,10 @@ class PlayerPool @Inject constructor(
                 PrewarmResult.Success(existing.deferred.await())
             } catch (e: PoolCapacityExceededException) {
                 PrewarmResult.Rejected
+            } catch (e: PlayerReleasedDuringCreationException) {
+                // The creation we joined was superseded by release(); report it as a result,
+                // not as this caller's own cancellation.
+                PrewarmResult.Failure(e)
             } catch (e: CancellationException) {
                 // 🛡️ Structured Concurrency: If this specific caller is cancelled, rethrow.
                 // Other callers (including the one who started the creation) are unaffected.
@@ -183,18 +213,29 @@ class PlayerPool @Inject constructor(
                         created
                     }
 
+                    // 🛡️ A release() that arrived while we were suspended wins. Registering the
+                    // player now would resurrect media the caller already let go of.
+                    if (releasedWhileCreating.remove(mediaId)) {
+                        discardUnregistered(m)
+                        throw PlayerReleasedDuringCreationException(
+                            "Player for $mediaId was released while it was being created"
+                        )
+                    }
+
                     // 🏎️ Late-bound Capacity Check:
                     // Check the LATEST urgency state (may have been promoted while suspended).
                     val currentUrgency = request.isUrgent
                     if (!currentUrgency && players.size >= maxPoolSize && !players.containsKey(mediaId)) {
-                        m.player.release()
+                        discardUnregistered(m)
                         throw PoolCapacityExceededException("Capacity reached ($maxPoolSize)")
                     }
 
                     players[mediaId] = m
                     playerToIdMap[m.player] = mediaId
                     poolUpdates.tryEmit(Unit)
-                    trimIfNeeded(pinnedMediaIds)
+                    // The player we just created must survive its own trim: if every other
+                    // player is pinned, evicting it would hand the caller an already-released player.
+                    trimIfNeeded(pinnedMediaIds + mediaId)
                     
                     newDeferred.complete(m)
                     m
@@ -206,6 +247,10 @@ class PlayerPool @Inject constructor(
             PrewarmResult.Success(managed)
         } catch (e: PoolCapacityExceededException) {
             PrewarmResult.Rejected
+        } catch (e: PlayerReleasedDuringCreationException) {
+            // Must precede the CancellationException clause below: this one is a result for
+            // the caller to act on, not a signal that the caller itself was cancelled.
+            PrewarmResult.Failure(e)
         } catch (e: CancellationException) {
             // 🛡️ Rethrow cancellation so the caller's coroutine unwinds.
             throw e
@@ -213,7 +258,21 @@ class PlayerPool @Inject constructor(
             PrewarmResult.Failure(e)
         } finally {
             inFlightCreations.remove(mediaId)
+            releasedWhileCreating.remove(mediaId)
         }
+    }
+
+    /**
+     * Fully disposes of a player that was created but never registered in [players]:
+     * detaches and releases its analytics listener, cancels reducer jobs, and releases the
+     * underlying [ExoPlayer]. Mirrors the teardown used for registered players.
+     */
+    private fun discardUnregistered(managed: ManagedPlayer) {
+        managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
+        managed.player.removeAnalyticsListener(managed.analyticsListener)
+        managed.analyticsListener.release()
+        managed.player.clearMediaItems()
+        managed.player.release()
     }
 
     private suspend fun ensureIdlePlayers() {
@@ -257,9 +316,7 @@ class PlayerPool @Inject constructor(
         val listener = analyticsListenerProvider.get()
         
         player.addAnalyticsListener(listener)
-        player.trackSelectionParameters = playerConfig.trackSelectionParameters
-        player.clearMediaItems()
-        player.setMediaItem(playerConfig.mediaItem)
+        playerFactory.bindMedia(player, playerConfig)
 
         // Restore saved position if it exists
         playbackPositions[mediaId]?.let { position ->
@@ -308,6 +365,12 @@ class PlayerPool @Inject constructor(
         return managed
     }
 
+    /** Remembers where playback stopped so a re-created player resumes there. */
+    private fun rememberPosition(managed: ManagedPlayer) {
+        playbackPositions.remove(managed.mediaId)
+        playbackPositions[managed.mediaId] = managed.player.currentPosition
+    }
+
     fun forEachPlayer(block: (ExoPlayer, MediaType) -> Unit) {
         Confinement.checkMainThread()
         players.values.forEach { block(it.player, it.mediaType) }
@@ -320,8 +383,13 @@ class PlayerPool @Inject constructor(
 
     fun release(mediaId: String) {
         Confinement.checkMainThread()
+        // If a player for this ID is still being created there is nothing in [players] to
+        // release yet. Record the request so the creation discards its result on completion.
+        if (inFlightCreations.containsKey(mediaId)) {
+            releasedWhileCreating.add(mediaId)
+        }
         players.remove(mediaId)?.let { managed ->
-            playbackPositions[mediaId] = managed.player.currentPosition
+            rememberPosition(managed)
             playerToIdMap.remove(managed.player)
             // 🛡️ Hygiene: Reset state to cancel in-flight watchdog jobs before recycling
             managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
@@ -349,6 +417,7 @@ class PlayerPool @Inject constructor(
         playerToIdMap.clear()
 
         playersToRelease.forEach { managed ->
+            rememberPosition(managed)
             managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
             managed.player.removeAnalyticsListener(managed.analyticsListener)
             managed.analyticsListener.release()
@@ -403,6 +472,7 @@ class PlayerPool @Inject constructor(
         toRemove.forEach { mediaId ->
             players.remove(mediaId)?.let { managed ->
                 metricsTracker.incrementCounter("player.pool.evict")
+                rememberPosition(managed)
                 managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
                 managed.player.removeAnalyticsListener(managed.analyticsListener)
                 managed.analyticsListener.release()
