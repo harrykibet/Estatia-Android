@@ -33,10 +33,10 @@ class TogglePropertyLikeUseCaseTest {
 
     @Test
     fun `invoke should return Error when user not authenticated`() = runTest {
-        every { authRepository.getCurrentUserId() } returns null
-        
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(null)
+
         val result = useCase("prop_1", false)
-        
+
         val error = result.assertError()
         assertEquals(AuthException.UserNotAuthenticated, error)
     }
@@ -45,11 +45,11 @@ class TogglePropertyLikeUseCaseTest {
     fun `invoke should call likeProperty and reportInteraction when not currently liked`() = runTest {
         val userId = "user_1"
         val propertyId = "prop_1"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         coEvery { propertyRepository.likeProperty(userId, propertyId) } returns AppResult.Success(Unit)
-        
+
         useCase(propertyId, false).assertSuccess()
-        
+
         // Verify via Witness in FakeEngagementRepository
         engagementRepository.witness.assertContains(
             FakeEngagementRepository.EngagementSignal.Interaction(propertyId, EngagementAction.LIKE)
@@ -60,11 +60,11 @@ class TogglePropertyLikeUseCaseTest {
     fun `invoke should call unlikeProperty and NOT reportInteraction when currently liked`() = runTest {
         val userId = "user_1"
         val propertyId = "prop_1"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         coEvery { propertyRepository.unlikeProperty(userId, propertyId) } returns AppResult.Success(Unit)
-        
+
         useCase(propertyId, true).assertSuccess()
-        
+
         // Verify interaction was NOT recorded using getActions()
         val interactions = engagementRepository.witness.getActions().filterIsInstance<FakeEngagementRepository.EngagementSignal.Interaction>()
         assert(interactions.isEmpty())

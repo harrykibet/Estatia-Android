@@ -51,12 +51,50 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
+      - name: Restore Dependency-Check database cache
+        uses: actions/cache@v4
         with:
-          project: Estatia
-          path: "."
-          format: "HTML"
+          path: ${{ runner.temp }}/dependency-check-data
+          key: owasp-dependency-check-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-dependency-check-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check with NVD API
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$RUNNER_TEMP/dependency-check-data" "$GITHUB_WORKSPACE/reports"
+
+          if [[ -n "${NVD_API_KEY:-}" ]]; then
+            nvd_api_args=(--nvdApiKey "$NVD_API_KEY" --nvdApiDelay 3500)
+            echo "NVD API authentication is configured."
+          elif [[ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+            nvd_api_args=()
+            echo "::warning::NVD_API_KEY is not available to fork pull requests; scanning will use unauthenticated NVD access."
+          else
+            echo "::error::The repository secret NVD_API_KEY is required for this repository's Dependency-Check scan."
+            exit 1
+          fi
+
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --volume "$GITHUB_WORKSPACE:/src" \
+            --volume "$RUNNER_TEMP/dependency-check-data:/usr/share/dependency-check/data" \
+            --volume "$GITHUB_WORKSPACE/reports:/report" \
+            owasp/dependency-check:13.0.0 \
+            --project Estatia \
+            --scan /src \
+            --format HTML \
+            --out /report \
+            --nvdValidForHours 4 \
+            --exclude "/src/.git/**" \
+            --exclude "/src/.gradle/**" \
+            --exclude "/src/**/build/**" \
+            "${nvd_api_args[@]}"
 
       - name: Upload report
         uses: actions/upload-artifact@v4

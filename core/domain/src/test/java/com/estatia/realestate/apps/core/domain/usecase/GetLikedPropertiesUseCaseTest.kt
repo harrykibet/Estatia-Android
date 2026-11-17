@@ -30,10 +30,10 @@ class GetLikedPropertiesUseCaseTest {
 
     @Test
     fun `invoke should return Error when user not authenticated using platform assertions`() = runTest {
-        every { authRepository.getCurrentUserId() } returns null
-        
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(null)
+
         val result = useCase()
-        
+
         val error = result.assertError()
         assertEquals(AuthException.UserNotAuthenticated, error)
     }
@@ -42,11 +42,11 @@ class GetLikedPropertiesUseCaseTest {
     fun `invoke should return liked properties for authenticated user`() = runTest {
         val userId = "user_1"
         val mockProperties = listOf(mockk<PropertyDomainModel>())
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         coEvery { propertyRepository.fetchLikedProperties(userId) } returns AppResult.Success(mockProperties)
-        
+
         val result = useCase()
-        
+
         val data = result.assertSuccess()
         assertEquals(mockProperties, data)
     }
