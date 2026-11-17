@@ -71,6 +71,12 @@ jobs:
           --stacktrace
           --console=plain
 
+      - name: Prepare Firebase configuration for full architecture and lint gates
+        if: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
       - name: Run Full Architecture and Lint Gates
         if: ${{  github.event_name != 'pull_request' || github.event.action == 'ready_for_review'  }}
         run: ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
