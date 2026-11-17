@@ -2,7 +2,6 @@ package com.estatia.realestate.apps.feature.property.ui.uploads
 
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
-import app.cash.turbine.test
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.PropertyException
 import com.estatia.realestate.apps.core.domain.repository.IPropertyRepository
@@ -109,17 +108,14 @@ class AddPropertyViewModelTest {
     fun `viewModel handles batch media generation correctly`() = runTest {
         val imageUri = mockk<Uri>(relaxed = true)
         val videoUri = mockk<Uri>(relaxed = true)
-        
-        viewModel.uiState.test {
-            // Drop initial empty list
-            assertEquals(emptyList<Uri>(), awaitItem().allMedia)
-            
-            viewModel.addImage(imageUri)
-            viewModel.addVideo(videoUri)
-            advanceUntilIdle()
-            
-            val current = awaitItem().allMedia
-            assertEquals("Expected 2 media items", 2, current.size)
-        }
+        coEvery { intelligenceService.extractAmenities(any()) } returns AppResult.Success(emptyList())
+
+        viewModel.addImage(imageUri)
+        viewModel.addVideo(videoUri)
+        advanceUntilIdle()
+
+        // Assert the authoritative final StateFlow snapshot, not an intermediate emission.
+        val current = viewModel.uiState.value.allMedia
+        assertEquals("Expected 2 media items", 2, current.size)
     }
 }
