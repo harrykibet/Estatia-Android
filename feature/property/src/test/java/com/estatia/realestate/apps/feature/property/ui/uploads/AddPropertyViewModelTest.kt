@@ -74,7 +74,7 @@ class AddPropertyViewModelTest {
         
         coEvery { intelligenceService.extractAmenities(any()) } coAnswers {
             delay(10.seconds)
-            emptyList()
+            AppResult.Success(emptyList<String>())
         }
 
         viewModel.addImage(uri)
@@ -92,7 +92,7 @@ class AddPropertyViewModelTest {
 
     @Test
     fun `saveProperty failure when repository returns error`() = runTest {
-        every { authRepository.getCurrentUserId() } returns "user_1"
+        every { authRepository.getCurrentUserId() } returns AppResult.Success("user_1")
         viewModel.updateTitle("Villa")
         
         coEvery { repository.uploadProperty(any(), any(), any()) } returns 
