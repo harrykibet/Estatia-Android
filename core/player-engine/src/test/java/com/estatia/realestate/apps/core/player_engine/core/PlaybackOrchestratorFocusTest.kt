@@ -43,7 +43,8 @@ class PlaybackOrchestratorFocusTest {
         every { Looper.myLooper() } returns looper
 
         player = mockk(relaxed = true)
-        val managed = mockk<ManagedPlayer>(relaxed = true) { every { this@mockk.player } returns this@PlaybackOrchestratorFocusTest.player }
+        val exo = player
+        val managed = mockk<ManagedPlayer>(relaxed = true) { every { player } returns exo }
         val pool = mockk<PlayerPool>(relaxed = true) {
             io.mockk.coEvery { getOrCreate(any(), any(), any(), any(), any(), any(), any()) } returns managed
             every { get("m1") } returns managed
