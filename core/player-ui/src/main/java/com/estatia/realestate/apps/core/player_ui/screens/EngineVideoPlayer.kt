@@ -87,10 +87,17 @@ fun EngineVideoPlayer(
         mutableStateOf<Player?>(null)
     }
 
-    // Acquire player only when mediaId/uri changes - reaction is now immediate
+    val playerManager = com.estatia.realestate.apps.core.player_ui.core.LocalPlayerManager.current
+
+    // Acquire player only when mediaId/uri changes - reaction is now immediate.
+    // After the first acquisition, keep following the pool: a decoder fallback replaces the
+    // player and a background reclaim releases it, so a one-shot reference would go stale.
     LaunchedEffect(mediaId, uri, mediaType, matchScore, isActive) {
         if (isActive) {
             playerState.value = getPlayer(mediaId, uri, mediaType, matchScore)
+            playerManager.observePlayer(mediaId).collect { current ->
+                playerState.value = current
+            }
         } else {
             playerState.value = null
         }
@@ -98,7 +105,6 @@ fun EngineVideoPlayer(
 
     // 🏎️ Eviction Safety: Pin this mediaId while it's composed in the UI.
     // This prevents the pool from releasing the hardware resources for a visible video.
-    val playerManager = com.estatia.realestate.apps.core.player_ui.core.LocalPlayerManager.current
     DisposableEffect(mediaId) {
         playerManager.notifyMediaBound(mediaId)
         onDispose {
@@ -184,9 +190,17 @@ fun EngineVideoPlayer(
     // Stable surface reference to avoid flicker during player swaps
     var activeSurface by remember { mutableStateOf<android.view.Surface?>(null) }
 
-    LaunchedEffect(player, activeSurface) {
-        if (player != null && activeSurface != null) {
-            player.setVideoSurface(activeSurface)
+    // Detach the surface from a player we stop following, so a replaced or recycled player
+    // does not keep rendering into it.
+    DisposableEffect(player, activeSurface) {
+        val surface = activeSurface
+        if (player != null && surface != null) {
+            player.setVideoSurface(surface)
+        }
+        onDispose {
+            if (player != null && surface != null) {
+                player.clearVideoSurface(surface)
+            }
         }
     }
 

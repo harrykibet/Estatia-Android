@@ -13,6 +13,7 @@ import com.estatia.realestate.apps.core.model.config.PlayerTuningConfig
 import com.estatia.realestate.apps.core.model.player.EnvironmentState
 import androidx.media3.exoplayer.ExoPlayer
 import com.estatia.realestate.apps.core.player_engine.configuration.PlayerConfiguration
+import androidx.media3.common.Player
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -24,6 +25,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
@@ -238,5 +241,58 @@ class PlayerPoolTest {
         assertTrue(pool.debugIsIdActive("id1"))
         assertEquals(2, pool.debugPlayerCount)
         verify(exactly = 0) { urgent.player.release() }
+    }
+
+    @Test
+    fun `observePlayer follows the player through creation and release`() = runTest {
+        val uri = MediaReference("http://test.com")
+        val player = mockk<ExoPlayer>(relaxed = true)
+        every { playerFactory.create(any()) } returns
+            PlayerFactory.CreatedPlayer(player, mockk(relaxed = true))
+
+        val seen = mutableListOf<Player?>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            pool.observePlayer("id1").toList(seen)
+        }
+
+        // Nothing registered yet.
+        assertEquals(listOf<Player?>(null), seen)
+
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+        assertEquals(player, seen.last())
+
+        // Released (e.g. background reclaim): observers must drop the stale instance.
+        pool.release("id1")
+        assertEquals(null, seen.last())
+
+        job.cancel()
+    }
+
+    @Test
+    fun `observePlayer emits the replacement after a forced legacy re-create`() = runTest {
+        val uri = MediaReference("http://test.com")
+        val first = mockk<ExoPlayer>(relaxed = true)
+        val second = mockk<ExoPlayer>(relaxed = true)
+        every { playerFactory.create(any()) } returnsMany listOf(
+            PlayerFactory.CreatedPlayer(first, mockk(relaxed = true)),
+            PlayerFactory.CreatedPlayer(second, mockk(relaxed = true))
+        )
+
+        val seen = mutableListOf<Player?>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            pool.observePlayer("id1").toList(seen)
+        }
+
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+        pool.getOrCreate("id1", uri, MediaType.VOD, forceLegacy = true)
+
+        // Sequence: nothing, original player, the gap while it is released, then the player
+        // bound to the re-created media (which may be the recycled instance or a new one).
+        assertEquals(4, seen.size)
+        assertEquals(first, seen[1])
+        assertEquals(null, seen[2])
+        assertTrue(seen[3] != null)
+
+        job.cancel()
     }
 }

@@ -40,7 +40,8 @@ class PlayerEnvironmentManager @Inject constructor(
 
     fun start(
         onAppBackgrounded: suspend () -> Unit,
-        onAppForegrounded: suspend () -> Unit
+        onAppForegrounded: suspend () -> Unit,
+        onResourcesReclaimed: suspend () -> Unit = {}
     ) {
         Confinement.checkMainThread()
         environmentCoordinator.start(engineScope)
@@ -58,6 +59,8 @@ class PlayerEnvironmentManager @Inject constructor(
                         graceJob = launch {
                             delay(60000.milliseconds)
                             pool.releaseAll()
+                            activeMediaId = null
+                            onResourcesReclaimed()
                         }
                     }
                     wasEffectivelyBackgrounded = true

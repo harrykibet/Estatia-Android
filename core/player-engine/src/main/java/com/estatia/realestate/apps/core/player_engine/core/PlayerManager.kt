@@ -62,8 +62,20 @@ class PlayerManager @Inject constructor(
             },
             onAppForegrounded = {
                 if (wasPlayingBeforePause) {
-                    orchestrator.resumeCurrentPlayer()
+                    // After a background reclaim the player is gone: rebuild it, otherwise
+                    // resume the paused one.
+                    val restored = orchestrator.restoreLastPlayback()
+                    if (restored) {
+                        orchestrator.activeMediaId?.let { environmentManager.updateActiveMediaId(it) }
+                    } else {
+                        orchestrator.resumeCurrentPlayer()
+                    }
+                    audioFocusManager.request()
                 }
+            },
+            onResourcesReclaimed = {
+                orchestrator.onPoolReleased()
+                orchestrator.clearAttachedPlayers()
             }
         )
     }
@@ -110,6 +122,9 @@ class PlayerManager @Inject constructor(
 
     override fun observeState(mediaId: String): Flow<PlaybackStateReducer.State> =
         pool.observeMediaState(mediaId)
+
+    override fun observePlayer(mediaId: String): Flow<Player?> =
+        pool.observePlayer(mediaId)
 
     override fun shutdown() {
         engineScope.launch(playerDispatcher) {
