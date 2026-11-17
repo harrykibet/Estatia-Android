@@ -295,4 +295,22 @@ class PlayerPoolTest {
 
         job.cancel()
     }
+
+    @Test
+    fun `position survives a background reclaim`() = runTest {
+        val uri = MediaReference("http://test.com")
+        val first = mockk<ExoPlayer>(relaxed = true)
+        val second = mockk<ExoPlayer>(relaxed = true)
+        every { first.currentPosition } returns 5_000L
+        every { playerFactory.create(any()) } returnsMany listOf(
+            PlayerFactory.CreatedPlayer(first, mockk(relaxed = true)),
+            PlayerFactory.CreatedPlayer(second, mockk(relaxed = true))
+        )
+
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+        pool.releaseAll()
+        pool.getOrCreate("id1", uri, MediaType.VOD)
+
+        verify { second.seekTo(5_000L) }
+    }
 }

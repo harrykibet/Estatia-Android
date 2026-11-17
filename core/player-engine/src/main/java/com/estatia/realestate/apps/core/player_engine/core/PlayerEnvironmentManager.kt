@@ -51,9 +51,14 @@ class PlayerEnvironmentManager @Inject constructor(
                 val isEffectivelyBackgrounded = !env.isAppVisible || !env.isInteractive
                 
                 if (isEffectivelyBackgrounded) {
-                    // Immediate action: Stop playback and focus
-                    onAppBackgrounded()
-                    
+                    // Immediate action: Stop playback and focus. Only on the transition: the
+                    // environment keeps emitting while backgrounded (bandwidth, battery, screen
+                    // off after visibility loss...) and a repeat call would overwrite the
+                    // "was playing" snapshot with false, losing the resume on return.
+                    if (!wasEffectivelyBackgrounded) {
+                        onAppBackgrounded()
+                    }
+
                     // Delayed action: Reclaim hardware resources after 60s
                     if (graceJob == null) {
                         graceJob = launch {

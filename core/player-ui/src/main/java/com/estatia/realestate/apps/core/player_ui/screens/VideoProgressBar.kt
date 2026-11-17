@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,9 @@ fun VideoProgressBar(
     onSeekRequest: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // The pointerInput blocks below never restart (keyed on Unit), so they must read the
+    // latest callback through a state holder, not the one captured on first composition.
+    val currentOnSeekRequest by rememberUpdatedState(onSeekRequest)
     var isDragging by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableStateOf(0f) }
 
@@ -60,7 +64,7 @@ fun VideoProgressBar(
                     },
                     onDragEnd = {
                         isDragging = false
-                        onSeekRequest(dragProgress)
+                        currentOnSeekRequest(dragProgress)
                     },
                     onDragCancel = {
                         isDragging = false
@@ -73,7 +77,7 @@ fun VideoProgressBar(
             .pointerInput(Unit) {
                 // Tap to seek
                 detectTapGestures { offset ->
-                    onSeekRequest((offset.x / size.width).coerceIn(0f, 1f))
+                    currentOnSeekRequest((offset.x / size.width).coerceIn(0f, 1f))
                 }
             },
         contentAlignment = Alignment.Center

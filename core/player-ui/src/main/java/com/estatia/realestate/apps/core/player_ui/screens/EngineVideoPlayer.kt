@@ -301,9 +301,12 @@ fun EngineVideoPlayer(
             progress = progress,
             bufferedProgress = bufferedProgress,
             onSeekRequest = { seekTo ->
-                player?.let {
-                    val targetMs = (seekTo * it.duration).toLong()
-                    it.seekTo(targetMs)
+                // Read the player at call time: this lambda outlives the composition that made it.
+                playerState.value?.let {
+                    val duration = it.duration
+                    if (duration > 0) {
+                        it.seekTo((seekTo * duration).toLong())
+                    }
                 }
             },
             modifier = Modifier
@@ -344,10 +347,11 @@ private fun EnvironmentAwareProgressPoller(
 ) {
     val environment = com.estatia.realestate.apps.core.player_ui.core.LocalEnvironmentState.current
 
-    // Derived states ensure we only react to the specific fields we care about
-    val isAppVisible by remember { derivedStateOf { environment.isAppVisible } }
-    val isInteractive by remember { derivedStateOf { environment.isInteractive } }
-    val shouldThrottle by remember { derivedStateOf { environment.shouldThrottlePerformance } }
+    // Read the fields directly. A derivedStateOf over a plain (non-State) value captured on first
+    // composition would never update, freezing these flags at their initial values.
+    val isAppVisible = environment.isAppVisible
+    val isInteractive = environment.isInteractive
+    val shouldThrottle = environment.shouldThrottlePerformance
 
     LaunchedEffect(player, isActive, isPlaying, isAppVisible, isInteractive) {
         if (player != null && isActive && isAppVisible && isInteractive) {

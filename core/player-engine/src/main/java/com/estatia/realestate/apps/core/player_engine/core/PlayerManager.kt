@@ -77,6 +77,8 @@ class PlayerManager @Inject constructor(
             },
             onResourcesReclaimed = {
                 orchestrator.onPoolReleased()
+                // The session still points at a released player.
+                sessionCoordinator.release()
                 orchestrator.clearAttachedPlayers()
             }
         )

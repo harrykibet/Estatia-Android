@@ -71,6 +71,10 @@ class PlayerPool @Inject constructor(
 ) {
     private val inFlightCreations = mutableMapOf<String, InFlightRequest>()
 
+    private companion object {
+        const val MAX_REMEMBERED_POSITIONS = 100
+    }
+
     // Media IDs whose in-flight creation was superseded by a release() call.
     private val releasedWhileCreating = mutableSetOf<String>()
     private val playerToIdMap = IdentityHashMap<Player, String>()
@@ -361,6 +365,12 @@ class PlayerPool @Inject constructor(
         return managed
     }
 
+    /** Remembers where playback stopped so a re-created player resumes there. */
+    private fun rememberPosition(managed: ManagedPlayer) {
+        playbackPositions.remove(managed.mediaId)
+        playbackPositions[managed.mediaId] = managed.player.currentPosition
+    }
+
     fun forEachPlayer(block: (ExoPlayer, MediaType) -> Unit) {
         Confinement.checkMainThread()
         players.values.forEach { block(it.player, it.mediaType) }
@@ -379,7 +389,7 @@ class PlayerPool @Inject constructor(
             releasedWhileCreating.add(mediaId)
         }
         players.remove(mediaId)?.let { managed ->
-            playbackPositions[mediaId] = managed.player.currentPosition
+            rememberPosition(managed)
             playerToIdMap.remove(managed.player)
             // 🛡️ Hygiene: Reset state to cancel in-flight watchdog jobs before recycling
             managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
@@ -407,6 +417,7 @@ class PlayerPool @Inject constructor(
         playerToIdMap.clear()
 
         playersToRelease.forEach { managed ->
+            rememberPosition(managed)
             managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
             managed.player.removeAnalyticsListener(managed.analyticsListener)
             managed.analyticsListener.release()
@@ -461,6 +472,7 @@ class PlayerPool @Inject constructor(
         toRemove.forEach { mediaId ->
             players.remove(mediaId)?.let { managed ->
                 metricsTracker.incrementCounter("player.pool.evict")
+                rememberPosition(managed)
                 managed.reducer.dispatch(PlaybackStateReducer.Event.Reset)
                 managed.player.removeAnalyticsListener(managed.analyticsListener)
                 managed.analyticsListener.release()

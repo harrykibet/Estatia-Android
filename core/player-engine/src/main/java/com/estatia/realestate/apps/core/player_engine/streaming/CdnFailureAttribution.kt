@@ -24,8 +24,13 @@ object CdnFailureAttribution {
      * health monitor; `false` if it is explained by the device being offline.
      */
     fun isCdnAtFault(error: IOException, networkState: NetworkState): Boolean {
-        // Any HTTP response, even an error status, proves the device reached the CDN.
-        if (error is HttpDataSource.InvalidResponseCodeException) return true
+        // Any HTTP response proves the device reached the CDN, so connectivity is irrelevant.
+        // Only server-side statuses say something about its health: a 404/403/410 means this
+        // media is missing or forbidden, and counting it would trip the circuit breaker for
+        // every video served from that endpoint after three bad links.
+        if (error is HttpDataSource.InvalidResponseCodeException) {
+            return error.responseCode >= 500 || error.responseCode == 408 || error.responseCode == 429
+        }
         return networkState !is NetworkState.NoInternet
     }
 }
