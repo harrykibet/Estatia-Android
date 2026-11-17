@@ -40,7 +40,7 @@ class HomeViewModelTest {
         Dispatchers.setMain(testDispatcher)
         propertyRepository = mockk()
         authRepository = mockk {
-            every { getCurrentUserId() } returns "user_123"
+            every { getCurrentUserId() } returns AppResult.Success("user_123")
         }
         togglePropertyLikeUseCase = mockk()
         val metricsTracker = mockk<com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker>(relaxed = true)
