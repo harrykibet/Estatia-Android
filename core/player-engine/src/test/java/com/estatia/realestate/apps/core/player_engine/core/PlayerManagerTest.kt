@@ -161,4 +161,24 @@ class PlayerManagerTest {
         verify(exactly = 0) { orchestrator.resumeCurrentPlayer() }
         coVerify(exactly = 0) { orchestrator.restoreLastPlayback() }
     }
+
+    @Test
+    fun `focus callbacks are wired to the matching orchestrator operations`() = testScope.runTest {
+        val onLost = slot<(Boolean) -> Unit>()
+        val onGained = slot<() -> Unit>()
+        val onDuck = slot<() -> Unit>()
+        val onUnduck = slot<() -> Unit>()
+        verify { audioFocusManager.setCallbacks(capture(onLost), capture(onGained), capture(onDuck), capture(onUnduck)) }
+
+        onLost.captured(false)
+        verify { orchestrator.pauseForFocusLoss(true) }
+        onLost.captured(true)
+        verify { orchestrator.pauseForFocusLoss(false) }
+        onDuck.captured()
+        verify { orchestrator.duck() }
+        onGained.captured()
+        verify { orchestrator.resumeAfterFocusGain() }
+        onUnduck.captured()
+        verify { orchestrator.unduck() }
+    }
 }

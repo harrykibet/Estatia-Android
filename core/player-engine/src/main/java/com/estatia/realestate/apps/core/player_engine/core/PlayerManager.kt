@@ -50,8 +50,10 @@ class PlayerManager @Inject constructor(
         networkRecovery.start()
         
         audioFocusManager.setCallbacks(
-            onLost = { orchestrator.pauseCurrentPlayer() },
-            onGained = { orchestrator.resumeCurrentPlayer() }
+            onLost = { permanent -> orchestrator.pauseForFocusLoss(resumeWhenGained = !permanent) },
+            onGained = { orchestrator.resumeAfterFocusGain() },
+            onDuck = { orchestrator.duck() },
+            onUnduck = { orchestrator.unduck() }
         )
 
         environmentManager.start(

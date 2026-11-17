@@ -34,14 +34,20 @@ class AudioFocusManager @Inject constructor(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private var activeFocusRequest: AudioFocusRequest? = null
     
-    private var onFocusLost: (() -> Unit)? = null
+    private var onFocusLost: ((permanent: Boolean) -> Unit)? = null
     private var onFocusGained: (() -> Unit)? = null
+    private var onDuck: (() -> Unit)? = null
+    private var onUnduck: (() -> Unit)? = null
+
+    /** What an Android focus-change code means for playback. */
+    internal enum class FocusSignal { LOST_PERMANENT, LOST_TRANSIENT, DUCK, GAINED, IGNORE }
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
                 engineScope.launch(playerDispatcher) {
-                    onFocusLost?.invoke()
+                    // Unplugged headphones: pause, but never auto-resume.
+                    onFocusLost?.invoke(true)
                 }
             }
         }
@@ -49,11 +55,20 @@ class AudioFocusManager @Inject constructor(
 
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         engineScope.launch(playerDispatcher) {
-            when (focusChange) {
-                AudioManager.AUDIOFOCUS_LOSS,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> onFocusLost?.invoke()
-                AudioManager.AUDIOFOCUS_GAIN -> onFocusGained?.invoke()
+            when (classify(focusChange)) {
+                FocusSignal.LOST_PERMANENT -> {
+                    // Another app took focus for good. Drop our request so the next play()
+                    // asks again instead of believing it still holds focus.
+                    abandon()
+                    onFocusLost?.invoke(true)
+                }
+                FocusSignal.LOST_TRANSIENT -> onFocusLost?.invoke(false)
+                FocusSignal.DUCK -> onDuck?.invoke()
+                FocusSignal.GAINED -> {
+                    onUnduck?.invoke()
+                    onFocusGained?.invoke()
+                }
+                FocusSignal.IGNORE -> Unit
             }
         }
     }
@@ -67,9 +82,23 @@ class AudioFocusManager @Inject constructor(
         }
     }
 
-    fun setCallbacks(onLost: () -> Unit, onGained: () -> Unit) {
+    /**
+     * @param onLost called with `permanent = true` when focus is lost for good (or headphones
+     * were unplugged): playback must pause and stay paused. `false` means a transient loss that
+     * [onGained] will undo.
+     * @param onDuck focus was lost but the system allows playing quietly.
+     * @param onUnduck volume should return to normal (focus regained).
+     */
+    fun setCallbacks(
+        onLost: (permanent: Boolean) -> Unit,
+        onGained: () -> Unit,
+        onDuck: () -> Unit = {},
+        onUnduck: () -> Unit = {}
+    ) {
         this.onFocusLost = onLost
         this.onFocusGained = onGained
+        this.onDuck = onDuck
+        this.onUnduck = onUnduck
     }
 
     fun request(): Boolean {
@@ -89,8 +118,20 @@ class AudioFocusManager @Inject constructor(
             .setOnAudioFocusChangeListener(audioFocusListener)
             .build()
 
-        activeFocusRequest = request
-        return audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        // Only remember the request if the system accepted it (granted or delayed). Keeping a
+        // failed request would make every later request() a no-op and playback would never
+        // regain focus.
+        return when (audioManager.requestAudioFocus(request)) {
+            AudioManager.AUDIOFOCUS_REQUEST_GRANTED -> {
+                activeFocusRequest = request
+                true
+            }
+            AudioManager.AUDIOFOCUS_REQUEST_DELAYED -> {
+                activeFocusRequest = request
+                false
+            }
+            else -> false
+        }
     }
 
     fun abandon() {
@@ -98,6 +139,16 @@ class AudioFocusManager @Inject constructor(
             audioManager?.abandonAudioFocusRequest(request)
         }
         activeFocusRequest = null
+    }
+
+    internal companion object {
+        fun classify(focusChange: Int): FocusSignal = when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> FocusSignal.LOST_PERMANENT
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> FocusSignal.LOST_TRANSIENT
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> FocusSignal.DUCK
+            AudioManager.AUDIOFOCUS_GAIN -> FocusSignal.GAINED
+            else -> FocusSignal.IGNORE
+        }
     }
 
     fun cleanup() {

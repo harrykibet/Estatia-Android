@@ -55,6 +55,11 @@ class PlaybackOrchestrator @Inject constructor(
         val artist: String?
     )
 
+    // True only when playback was paused by a transient focus loss and should resume on regain.
+    private var resumeOnFocusGain = false
+    private var duckedPlayer: ExoPlayer? = null
+    private var preDuckVolume = 1f
+
     // The last request that reached play(); kept across a pool reclaim so playback can resume.
     private var lastRequest: PlayRequest? = null
 
@@ -67,6 +72,8 @@ class PlaybackOrchestrator @Inject constructor(
         artist: String?
     ) = withContext(playerDispatcher) {
         Confinement.checkMainThread()
+        resumeOnFocusGain = false
+        restoreVolume()
         val forceLegacy = decoderPolicy.shouldForceLegacy(mediaId)
         val managed = pool.getOrCreate(mediaId, uri, mediaType, matchScore, forceLegacy, title, artist)
         val environment = environmentCoordinator.environment.value
@@ -110,7 +117,51 @@ class PlaybackOrchestrator @Inject constructor(
 
     fun pauseCurrentPlayer() {
         Confinement.checkMainThread()
+        // Any explicit pause cancels a pending focus-based resume.
+        resumeOnFocusGain = false
         activeMediaId?.let { pool.get(it)?.player?.pause() }
+    }
+
+    /**
+     * Pauses because audio focus was lost. With [resumeWhenGained] (transient loss) playback
+     * resumes on [resumeAfterFocusGain], but only if it was actually playing: a video the user
+     * had paused must not start itself when focus returns.
+     */
+    fun pauseForFocusLoss(resumeWhenGained: Boolean) {
+        Confinement.checkMainThread()
+        val wasPlaying = isCurrentlyPlaying()
+        pauseCurrentPlayer()
+        resumeOnFocusGain = resumeWhenGained && wasPlaying
+    }
+
+    fun resumeAfterFocusGain() {
+        Confinement.checkMainThread()
+        restoreVolume()
+        if (resumeOnFocusGain) {
+            resumeOnFocusGain = false
+            resumeCurrentPlayer()
+        }
+    }
+
+    /** Lowers the active player's volume while another app speaks over us. */
+    fun duck() {
+        Confinement.checkMainThread()
+        val player = activeMediaId?.let { pool.get(it)?.player } ?: return
+        if (duckedPlayer == null) {
+            duckedPlayer = player
+            preDuckVolume = player.volume
+        }
+        player.volume = preDuckVolume * DUCK_VOLUME_FACTOR
+    }
+
+    fun unduck() {
+        Confinement.checkMainThread()
+        restoreVolume()
+    }
+
+    private fun restoreVolume() {
+        duckedPlayer?.volume = preDuckVolume
+        duckedPlayer = null
     }
 
     fun resumeCurrentPlayer() {
@@ -211,6 +262,10 @@ class PlaybackOrchestrator @Inject constructor(
 
     internal fun clearAttachedPlayers() {
         attachedPlayers.clear()
+    }
+
+    private companion object {
+        const val DUCK_VOLUME_FACTOR = 0.2f
     }
 
     val debugAttachedPlayersCount: Int
