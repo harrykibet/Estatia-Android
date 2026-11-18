@@ -399,7 +399,7 @@ runs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: \${{ inputs.artifact_name }}
-        path: \${{ runner.temp }}/smoke-ui-diagnostics/
+        name: ${{ inputs.artifact_name }}
+        path: ${{ runner.temp }}/smoke-ui-diagnostics/
         if-no-files-found: warn
         retention-days: 5
