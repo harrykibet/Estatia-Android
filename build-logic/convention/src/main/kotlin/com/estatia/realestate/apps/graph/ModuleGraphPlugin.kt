@@ -72,7 +72,8 @@ class ModuleGraphPlugin : Plugin<Project> {
                             val selectedTasks = ImpactVerificationTaskSelector.select(
                                 projectPath = module.path,
                                 pluginIds = pluginIds,
-                                registeredTaskNames = module.tasks.names
+                                registeredTaskNames = module.tasks.names,
+                                changedFiles = diffOutput
                             )
                             if (selectedTasks.isEmpty()) {
                                 println(

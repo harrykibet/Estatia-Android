@@ -1,9 +1,12 @@
 package com.estatia.realestate.apps.core.network.sources.aws
 
+import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
+@Utility
 class AwsAmplifyPluginPlanTest {
 
     @Test

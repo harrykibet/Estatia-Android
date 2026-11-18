@@ -1,5 +1,7 @@
 package com.estatia.realestate.apps.core.network.sources.aws
 
+import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import io.mockk.mockk
@@ -8,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
+@Utility
 class AwsAnalyticsRemoteDataSourceTest {
 
     @Test

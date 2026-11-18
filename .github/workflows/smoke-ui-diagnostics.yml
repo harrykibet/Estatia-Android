@@ -30,7 +30,7 @@ env:
 
 jobs:
   smoke-ui:
-    name: ProdDebug instrumentation on local API 34 emulator
+    name: DemoDebug + ProdDebug validation on local API 34 emulator
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
@@ -51,17 +51,21 @@ jobs:
       - name: Prepare Android local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      - name: Prepare Firebase configuration for prod
+      - name: Prepare Firebase configuration for demo and prod
         env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
-        run: bash ./.github/scripts/prepare-google-services.sh prod
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
-      - name: Run config and AWS backend unit tests
+      - name: Run DemoDebug and ProdDebug config and network unit tests
         shell: bash
-        timeout-minutes: 8
+        timeout-minutes: 12
         run: |
           ./gradlew \
+            :core:config:testDemoDebugUnitTest \
             :core:config:testProdDebugUnitTest \
+            :core:network:compileDemoDebugUnitTestKotlin \
+            :core:network:testDemoDebugUnitTest \
             :core:network:testProdDebugUnitTest \
             --no-configuration-cache --stacktrace --console=plain
 
