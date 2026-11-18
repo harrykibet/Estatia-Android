@@ -89,7 +89,7 @@ runs:
         set -euo pipefail
 
         # Confirm the instrumentation runtime resolves the expected runner and monitor.
-        if ! report="$(./gradlew :app:dependencyInsight \
+        if ! report="$(bash ./.github/scripts/run-gradle-with-diagnostics.sh dependency-insight ./gradlew :app:dependencyInsight \
           --configuration prodDebugAndroidTestRuntimeClasspath \
           --dependency androidx.test:monitor \
           --no-configuration-cache --console=plain 2>&1)"; then
@@ -110,7 +110,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        ./gradlew \
+        bash ./.github/scripts/run-gradle-with-diagnostics.sh assemble-prod-debug ./gradlew \
           :app:assembleProdDebug \
           :app:assembleProdDebugAndroidTest \
           --no-configuration-cache --stacktrace --console=plain
@@ -277,7 +277,7 @@ runs:
 
         # Keep device-side runner output so discovery and instrumentation errors are diagnosable.
         adb logcat -c
-        ./gradlew :app:connectedProdDebugAndroidTest \
+        bash ./.github/scripts/run-gradle-with-diagnostics.sh connected-prod-debug-tests ./gradlew :app:connectedProdDebugAndroidTest \
           --no-configuration-cache --stacktrace --info --console=plain
 
         # A successful Gradle task is not sufficient: AGP can otherwise report zero tests.

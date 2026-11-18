@@ -64,7 +64,7 @@ jobs:
       - name: Run Fast Architecture Regression Suite
         if: ${{  github.event_name == 'pull_request' && github.event.pull_request.draft  }}
         run: >-
-          ./gradlew
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh fast-architecture ./gradlew
           :core:ksp-architecture:test
           :core:testing-architecture:test
           :lint:test
@@ -79,11 +79,11 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
       - name: Run Full Architecture and Lint Gates
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
 
       - name: Test Build Logic Convention Plugins
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
 
       - name: Calculate Impacted Verification Tasks
         id: impact
@@ -102,7 +102,7 @@ jobs:
             exit 0
           fi
 
-          ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
           TASKS="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
 
           # A root build/dependency change can map to the selector's broad fallback.
@@ -124,6 +124,15 @@ jobs:
             **/build/reports/lint-results-*.sarif
             **/build/intermediates/lint_intermediate_text_report/**/*.txt
           if-no-files-found: warn
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   selective-verification:
     name: Level 1 - Impacted Verification
@@ -172,12 +181,23 @@ jobs:
           if [[ "$FULL_VALIDATION" == "true" ]]; then
             tasks+=(jacocoProdDebugVerification)
           fi
-          ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh impacted-verification ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   release-r8-validation:
     name: Level 3 - Minified Release (R8 / Protobuf)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
+    env:
+      GRADLE_CI_MAX_WORKERS: 2
     if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
     steps:
       - name: Checkout Code
@@ -208,7 +228,7 @@ jobs:
 
       # Both release flavors are minified; PR validation does not require signing secrets.
       - name: Assemble Minified Demo and Production Releases
-        run: ./gradlew :app:assembleDemoRelease :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh dual-flavor-release ./gradlew :app:assembleDemoRelease :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
 
       - name: Verify R8 Outputs for Both Release Flavors
         shell: bash
@@ -220,11 +240,22 @@ jobs:
               || test -s "app/build/outputs/apk/${flavor}/release/app-${flavor}-release.apk"
           done
 
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
   smoke-test:
     name: Level 2 - Smoke UI (Pixel 2)
     runs-on: ubuntu-24.04
     needs: [ selective-verification ]
     timeout-minutes: 75
+    env:
+      GRADLE_CI_MAX_WORKERS: 2
     if: ${{  (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.selective-verification.result == 'success'  }}
     steps:
       - name: Checkout Code
@@ -252,7 +283,7 @@ jobs:
 
       - name: Compile all module instrumented test source sets
         run: |
-          ./gradlew \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh instrumentation-compile ./gradlew \
             :app:assembleDemoDebugAndroidTest \
             :app:assembleProdDebugAndroidTest \
             :core:common:assembleDemoDebugAndroidTest \
@@ -269,3 +300,12 @@ jobs:
         uses: ./.github/actions/smoke-ui-local
         with:
           artifact_name: smoke-ui-pr-${{ github.run_number }}
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5

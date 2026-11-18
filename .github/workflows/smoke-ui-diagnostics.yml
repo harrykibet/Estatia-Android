@@ -17,6 +17,7 @@ on:
       - "build.gradle.kts"
       - "gradle/libs.versions.toml"
       - ".github/scripts/prepare-google-services.sh"
+      - ".github/scripts/run-gradle-with-diagnostics.sh"
       - ".github/actions/smoke-ui-local/**"
       - ".github/workflows/smoke-ui-diagnostics.yml"
   workflow_dispatch:
@@ -33,6 +34,8 @@ jobs:
     name: DemoDebug + ProdDebug validation on local API 34 emulator
     runs-on: ubuntu-24.04
     timeout-minutes: 55
+    env:
+      GRADLE_CI_MAX_WORKERS: 2
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,7 +64,7 @@ jobs:
         shell: bash
         timeout-minutes: 12
         run: |
-          ./gradlew \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh config-network-tests ./gradlew \
             :core:config:testDemoDebugUnitTest \
             :core:config:testProdDebugUnitTest \
             :core:network:compileDemoDebugUnitTestKotlin \
@@ -73,3 +76,12 @@ jobs:
         uses: ./.github/actions/smoke-ui-local
         with:
           artifact_name: smoke-ui-diagnostics-${{ github.run_number }}
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
