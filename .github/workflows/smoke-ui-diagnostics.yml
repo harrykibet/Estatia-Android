@@ -82,6 +82,12 @@ jobs:
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
           "$ANDROID_HOME/platform-tools/adb" version
 
+          # Use one explicit AVD location across creation, emulator launch, and diagnostics.
+          avd_home="$RUNNER_TEMP/android-avd"
+          mkdir -p "$avd_home"
+          echo "ANDROID_AVD_HOME=$avd_home" >> "$GITHUB_ENV"
+          echo "Android AVD home: $avd_home"
+
       - name: Diagnose runner virtualization and KVM
         shell: bash
         timeout-minutes: 3
@@ -134,11 +140,17 @@ jobs:
             :app:assembleProdDebugAndroidTest \
             --no-configuration-cache --stacktrace --console=plain
 
-      - name: Create Pixel 2 API 34 AVD
+      - name: Create and verify Pixel 2 API 34 AVD
         shell: bash
         timeout-minutes: 5
         run: |
           set -euo pipefail
+
+          avd_name="estatia_pixel2_api34"
+          : "${ANDROID_AVD_HOME:=$RUNNER_TEMP/android-avd}"
+          export ANDROID_AVD_HOME
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "Using ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
 
           avdmanager_path="$(command -v avdmanager || true)"
           if [[ -z "$avdmanager_path" ]]; then
@@ -149,23 +161,57 @@ jobs:
             exit 1
           fi
 
+          avd_path="$ANDROID_AVD_HOME/$avd_name.avd"
           printf 'no\n' | "$avdmanager_path" create avd \
             --force \
-            --name estatia_pixel2_api34 \
+            --name "$avd_name" \
+            --path "$avd_path" \
             --package "system-images;android-34;default;x86_64" \
             --device "pixel_2"
 
-          "$ANDROID_HOME/emulator/emulator" -list-avds
+          avd_ini="$ANDROID_AVD_HOME/$avd_name.ini"
+          avd_config="$avd_path/config.ini"
+          if [[ ! -s "$avd_ini" || ! -s "$avd_config" ]]; then
+            echo "::error::AVD creation did not produce the expected ini and config files."
+            echo "Expected AVD ini: $avd_ini"
+            echo "Expected AVD config: $avd_config"
+            find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
 
+          avd_list="$("$ANDROID_HOME/emulator/emulator" -list-avds)"
+          printf 'Available AVDs:\n%s\n' "$avd_list"
+          if ! grep -Fxq "$avd_name" <<< "$avd_list"; then
+            echo "::error::Created AVD '$avd_name' is not discoverable by the emulator."
+            echo "AVD home: $ANDROID_AVD_HOME"
+            cat "$avd_ini" || true
+            find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          echo "Verified AVD files:"
+          ls -la "$ANDROID_AVD_HOME" "$avd_path"
       - name: Boot emulator and wait for Android
         shell: bash
         timeout-minutes: 8
         run: |
           set -euo pipefail
 
+          avd_name="estatia_pixel2_api34"
+          emulator_serial="emulator-5554"
           emulator_log="$RUNNER_TEMP/estatia-emulator.log"
+          : "${ANDROID_AVD_HOME:=$RUNNER_TEMP/android-avd}"
+          export ANDROID_AVD_HOME
+
+          if [[ ! -s "$ANDROID_AVD_HOME/$avd_name.ini" || ! -s "$ANDROID_AVD_HOME/$avd_name.avd/config.ini" ]]; then
+            echo "::error::The expected AVD files are missing before emulator launch."
+            echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+            find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
           "$ANDROID_HOME/emulator/emulator" \
-            -avd estatia_pixel2_api34 \
+            -avd "$avd_name" \
             -port 5554 \
             -no-window \
             -no-audio \
@@ -177,6 +223,7 @@ jobs:
             > "$emulator_log" 2>&1 &
           emulator_pid=$!
           echo "$emulator_pid" > "$RUNNER_TEMP/estatia-emulator.pid"
+          echo "Started emulator PID=$emulator_pid for $avd_name"
 
           if ! command -v adb >/dev/null 2>&1; then
             echo "::error::ADB is not on PATH after Android platform-tools installation."
@@ -184,35 +231,70 @@ jobs:
           fi
           echo "Using ADB: $(command -v adb)"
           adb version
-          adb start-server
-          timeout 180s adb -s emulator-5554 wait-for-device
+          timeout 15s adb start-server
 
-          booted=false
-          for attempt in $(seq 1 90); do
-            boot_state="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-            if [[ "$boot_state" == "1" ]]; then
-              booted=true
-              break
-            fi
+          # Detect process exit immediately instead of blindly waiting on a device that may never appear.
+          device_deadline=$((SECONDS + 180))
+          device_connected=false
+          last_device_state=""
+          while (( SECONDS < device_deadline )); do
             if ! kill -0 "$emulator_pid" 2>/dev/null; then
-              echo "::error::The Android emulator process exited before boot completed."
-              tail -n 250 "$emulator_log" || true
+              echo "::error::The emulator process exited before registering with ADB."
+              tail -n 300 "$emulator_log" || true
               exit 1
+            fi
+
+            devices_output="$(timeout 10s adb devices 2>&1 || true)"
+            device_state="$(awk -v serial="$emulator_serial" '$1 == serial { print $2; exit }' <<< "$devices_output")"
+            if [[ "$device_state" != "$last_device_state" ]]; then
+              echo "ADB state for $emulator_serial: ${device_state:-not listed}"
+              last_device_state="$device_state"
+            fi
+            if [[ "$device_state" == "device" ]]; then
+              device_connected=true
+              break
             fi
             sleep 2
           done
 
-          if [[ "$booted" != "true" ]]; then
-            echo "::error::The Android emulator did not finish booting within 180 seconds."
+          if [[ "$device_connected" != "true" ]]; then
+            echo "::error::Emulator did not register as an ADB device within 180 seconds."
             adb devices -l || true
-            tail -n 250 "$emulator_log" || true
+            tail -n 300 "$emulator_log" || true
             exit 1
           fi
 
-          adb -s emulator-5554 shell getprop ro.build.version.release
-          adb -s emulator-5554 shell getprop ro.build.version.sdk
-          adb -s emulator-5554 shell wm size
-          adb -s emulator-5554 shell wm density
+          # ADB connectivity is not the same as Android having completed its boot sequence.
+          boot_deadline=$((SECONDS + 180))
+          android_booted=false
+          while (( SECONDS < boot_deadline )); do
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              echo "::error::The emulator process exited while Android was booting."
+              tail -n 300 "$emulator_log" || true
+              exit 1
+            fi
+
+            boot_state="$(timeout 10s adb -s "$emulator_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            if [[ "$boot_state" == "1" ]]; then
+              android_booted=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ "$android_booted" != "true" ]]; then
+            echo "::error::ADB connected, but Android did not reach sys.boot_completed=1 within 180 seconds."
+            adb -s "$emulator_serial" shell getprop sys.boot_completed || true
+            adb devices -l || true
+            tail -n 300 "$emulator_log" || true
+            exit 1
+          fi
+
+          echo "Android boot completed successfully."
+          adb -s "$emulator_serial" shell getprop ro.build.version.release
+          adb -s "$emulator_serial" shell getprop ro.build.version.sdk
+          adb -s "$emulator_serial" shell wm size
+          adb -s "$emulator_serial" shell wm density
           adb devices -l
 
       - name: Run connected ProdDebug UI tests
@@ -243,8 +325,13 @@ jobs:
             df -h /
             echo "KVM:"
             ls -l /dev/kvm
+            echo "ANDROID_AVD_HOME: $ANDROID_AVD_HOME"
+            echo "Available AVDs:"
+            "$ANDROID_HOME/emulator/emulator" -list-avds
+            echo "AVD files:"
+            find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print
             echo "ADB devices:"
-            adb devices -l
+            timeout 10s adb devices -l
           } > "$output/runner-summary.txt" 2>&1
 
           if [[ -f "$RUNNER_TEMP/estatia-emulator.log" ]]; then
