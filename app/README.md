@@ -20,11 +20,12 @@ The `app` module requires two critical configuration files to enable remote back
 - **Location**: `app/src/main/res/raw/amplifyconfiguration.json`
 - **Purpose**: This file contains the endpoint information, regions, and client IDs for AWS services managed via the Amplify SDK.
 - **Note**: The version committed to source control is a **stub/placeholder** configuration. It is included explicitly (and not gitignored like `google-services.json`) to demonstrate that the application is fully "AWS Ready" and to show the expected structure for reviewers. In a production environment, this file should be excluded from the repository.
-- **Enabled Services**:
-    - **Auth**: Cognito User Pool and Identity Pool settings.
-    - **API**: AppSync GraphQL endpoint details for Aurora Serverless data.
+- **Configured Services in the checked-in stub**:
+    - **Auth**: Cognito User Pool and Identity Pool settings (replace placeholder IDs with deployed resources before production use).
     - **Storage**: S3 bucket information for property media uploads.
-    - **Analytics**: Pinpoint project IDs for event tracking.
+    - **API**: Not configured in the checked-in stub. The AppSync plugin is registered only when a valid GraphQL endpoint, region, and authorization mode are present under `api.plugins.awsAPIPlugin`.
+    - **CloudWatch Logging**: Optional; enabled only when `amplifyconfiguration_logging.json` is supplied in the same raw-resource directory.
+    - **Analytics**: Amazon Pinpoint analytics is disabled. AWS ended support for Pinpoint engagement analytics on October 30, 2026; use a supported destination for any future remote-event integration.
 
 ### Google Services (`google-services.json`)
 - **Location**: `app/google-services.json`

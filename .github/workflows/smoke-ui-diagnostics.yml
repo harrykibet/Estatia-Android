@@ -153,11 +153,13 @@ jobs:
             fi
           done
 
-      - name: Run config parser unit tests
+      - name: Run config and AWS backend unit tests
         shell: bash
-        timeout-minutes: 6
+        timeout-minutes: 8
         run: |
-          ./gradlew :core:config:testProdDebugUnitTest \
+          ./gradlew \
+            :core:config:testProdDebugUnitTest \
+            :core:network:testProdDebugUnitTest \
             --no-configuration-cache --stacktrace --console=plain
 
       - name: Build app and instrumentation APKs
