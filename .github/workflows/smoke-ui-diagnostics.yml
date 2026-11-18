@@ -77,6 +77,11 @@ jobs:
           test -x "$ANDROID_HOME/emulator/emulator"
           test -x "$ANDROID_HOME/platform-tools/adb"
 
+          # sdkmanager installs platform-tools but does not guarantee adb is on PATH.
+          # Persist this path for the emulator, diagnostics, and cleanup steps below.
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          "$ANDROID_HOME/platform-tools/adb" version
+
       - name: Diagnose runner virtualization and KVM
         shell: bash
         timeout-minutes: 3
@@ -173,6 +178,12 @@ jobs:
           emulator_pid=$!
           echo "$emulator_pid" > "$RUNNER_TEMP/estatia-emulator.pid"
 
+          if ! command -v adb >/dev/null 2>&1; then
+            echo "::error::ADB is not on PATH after Android platform-tools installation."
+            exit 1
+          fi
+          echo "Using ADB: $(command -v adb)"
+          adb version
           adb start-server
           timeout 180s adb -s emulator-5554 wait-for-device
 
