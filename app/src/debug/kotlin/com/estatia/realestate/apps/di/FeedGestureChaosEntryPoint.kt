@@ -20,5 +20,6 @@ import dagger.hilt.components.SingletonComponent
 interface FeedGestureChaosEntryPoint {
     @UnstableApi
     fun playerPool(): PlayerPool
+    @UnstableApi
     fun playerManager(): PlayerManager
 }
