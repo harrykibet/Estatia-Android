@@ -41,6 +41,31 @@ jobs:
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
+      - name: Enable KVM for Android emulators
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::GitHub runner does not expose the KVM device required by x86_64 Android emulators."
+            exit 1
+          fi
+          sudo chmod 0666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Install Android Emulator SDK package once
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            echo "::error::Android SDK manager was not found under ANDROID_HOME."
+            exit 1
+          fi
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "emulator"
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
