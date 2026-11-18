@@ -274,5 +274,51 @@ jobs:
           test -w /dev/kvm
           ls -l /dev/kvm
 
+      - name: Provision Pixel 2 managed emulator
+        run: |
+          ./gradlew :app:pixel2Api34Setup \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            --no-configuration-cache --stacktrace --console=plain
+
+      - name: Verify nested KVM virtualization
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== CPU virtualization extensions ==="
+          cpu_flags="$(grep -m1 '^flags' /proc/cpuinfo || true)"
+          if ! grep -Eq '(^|[[:space:]])(vmx|svm)([[:space:]]|$)' <<< "$cpu_flags"; then
+            echo "::error::The runner does not expose Intel VT-x (vmx) or AMD-V (svm) CPU flags."
+            exit 1
+          fi
+          grep -oE '(^|[[:space:]])(vmx|svm)([[:space:]]|$)' <<< "$cpu_flags" | tr '\n' ' '
+          echo
+
+          echo "=== KVM device ==="
+          test -c /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          ls -l /dev/kvm
+
+          echo "=== Android Emulator hypervisor acceleration ==="
+          accel_output="$("$ANDROID_HOME/emulator/emulator" -accel-check 2>&1)" || {
+            printf '%s\n' "$accel_output"
+            echo "::error::Android Emulator could not use hardware virtualization through KVM."
+            exit 1
+          }
+          printf '%s\n' "$accel_output"
+          if ! grep -Eiq 'KVM .*installed and usable|KVM .*is usable' <<< "$accel_output"; then
+            echo "::error::Android Emulator did not confirm that KVM acceleration is usable."
+            exit 1
+          fi
+
+          echo "=== Runner resources ==="
+          nproc
+          free -h
+          df -h /
+
       - name: Run Smoke UI Tests
-        run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --stacktrace --console=plain
+        run: |
+          ./gradlew :app:pixel2Api34ProdDebugAndroidTest \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect \
+            --no-configuration-cache --stacktrace --info --console=plain
