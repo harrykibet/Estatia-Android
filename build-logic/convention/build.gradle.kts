@@ -31,6 +31,8 @@ dependencies {
     compileOnly(libs.sonarqube.gradle.plugin)
     compileOnly(libs.androidx.baselineprofile.gradle.plugin)
     implementation(libs.truth)
+
+    testImplementation(libs.junit.junit)
 }
 
 tasks {

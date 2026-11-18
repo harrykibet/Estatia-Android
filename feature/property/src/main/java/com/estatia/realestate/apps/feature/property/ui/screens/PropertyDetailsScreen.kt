@@ -54,7 +54,10 @@ import com.estatia.realestate.apps.core.designsystem.component.EstatiaButton
 import com.estatia.realestate.apps.core.designsystem.component.EstatiaText
 import com.estatia.realestate.apps.core.designsystem.theme.EstatiaTheme
 import com.estatia.realestate.apps.core.model.property.PropertyDomainModel
-import com.estatia.realestate.apps.core.testing.fixtures.PropertyFixtures
+import com.estatia.realestate.apps.core.model.property.PropertyId
+import com.estatia.realestate.apps.core.model.property.Money
+import com.estatia.realestate.apps.core.model.property.Coordinates
+import com.estatia.realestate.apps.core.model.property.ContactInfo
 import com.estatia.realestate.apps.core.ui.DevicePreviews
 import com.estatia.realestate.apps.core.localization.api.LocalCurrencyFormatter
 import com.estatia.realestate.apps.core.localization.api.LocalMeasurementFormatter
@@ -79,8 +82,9 @@ fun PropertyDetailsRoute(
     playbackViewModel: PropertyDetailsVideoPlaybackViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val playbackUiState by playbackViewModel.uiState.collectAsStateWithLifecycle()
-    val isMuted by playbackViewModel.isMuted.collectAsStateWithLifecycle()
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val playbackUiState = playbackState.playback
+    val isMuted = playbackState.isMuted
 
     LaunchedEffect(propertyId) {
         viewModel.loadProperty(propertyId)
@@ -379,7 +383,7 @@ fun PropertyDetailsScreenSuccessPreview() {
     EstatiaTheme {
         EstatiaBackground {
             PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Success(PropertyFixtures.single()),
+                uiState = PropertyDetailsUiState.Success(propertyDetailsPreviewModel()),
                 onBackClick = {},
                 playbackUiState = PlayerUiState.Idle,
                 isMuted = false,
@@ -399,7 +403,7 @@ fun PropertyDetailsScreenSwahiliPreview() {
     EstatiaTheme {
         EstatiaBackground {
             PropertyDetailsScreen(
-                uiState = PropertyDetailsUiState.Success(PropertyFixtures.single()),
+                uiState = PropertyDetailsUiState.Success(propertyDetailsPreviewModel()),
                 onBackClick = {},
                 playbackUiState = PlayerUiState.Idle,
                 isMuted = false,
@@ -454,3 +458,45 @@ fun PropertyDetailsScreenErrorPreview() {
         }
     }
 }
+
+
+/**
+ * A local preview model keeps production source sets independent of core:testing
+ * test fixtures, which are intentionally available only to test/debug variants.
+ */
+private fun propertyDetailsPreviewModel() = PropertyDomainModel(
+    id = PropertyId("preview-property"),
+    title = "Modern 2 Bedroom Apartment",
+    description = "A spacious apartment in the heart of Nairobi.",
+    price = Money(55_000.0),
+    imageUrls = listOf(
+        "https://via.placeholder.com/600x400.png?text=Living+Room",
+        "https://via.placeholder.com/600x400.png?text=Bedroom"
+    ),
+    directVideoUrls = emptyList(),
+    hlsUrls = emptyList(),
+    videosAvailable = false,
+    coordinates = Coordinates(latitude = -1.2921, longitude = 36.8219),
+    createdAt = 1_746_619_200_000,
+    ownerId = "preview-owner",
+    ownerName = "Estatia Preview",
+    contact = ContactInfo(phone = null, email = null),
+    county = "Nairobi",
+    active = true,
+    viewsCount = 120,
+    likesCount = 24,
+    commentsCount = 4,
+    sharesCount = 2,
+    matchScore = 0.95f,
+    propertyType = "Apartment",
+    bedrooms = 2,
+    bathrooms = 2,
+    areaSize = 85.0,
+    amenities = listOf("Parking", "WiFi"),
+    features = "Balcony",
+    depositAmount = Money(55_000.0),
+    address = "Westlands, Nairobi",
+    availableFrom = "2026-12-01",
+    leaseTerms = "12 months",
+    available = true
+)

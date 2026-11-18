@@ -4,6 +4,8 @@ import android.net.Uri
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -21,6 +23,12 @@ class CacheKeyRegressionTest {
         mockkStatic("androidx.core.net.UriKt")
 
         factory = DefaultCacheKeyFactory()
+    }
+
+    @After
+    fun tearDown() {
+        unmockkStatic(Uri::class)
+        unmockkStatic("androidx.core.net.UriKt")
     }
 
     @Test

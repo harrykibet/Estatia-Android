@@ -54,8 +54,43 @@ class ModuleGraphPlugin : Plugin<Project> {
                     }
 
                     val fullImpact = ModuleGraphExtractor.findImpactedModules(diffOutput, modules, edges, rootDir)
-                    val tasks = fullImpact.flatMap { listOf("$it:lintDemoDebug", "$it:testDemoDebugUnitTest") }
-                    println("IMPACT_TASKS=" + tasks.joinToString(" "))
+                    val tasks = fullImpact.sorted().flatMap { modulePath ->
+                        val module = target.findProject(modulePath)
+                        if (module == null) {
+                            println("INFO: Skipping $modulePath because the Gradle project is not present.")
+                            emptyList()
+                        } else {
+                            val pluginIds = listOf(
+                                "com.android.application",
+                                "com.android.library",
+                                "com.android.test",
+                                "org.jetbrains.kotlin.jvm",
+                                "java",
+                                "java-library"
+                            ).filter { module.plugins.hasPlugin(it) }.toSet()
+
+                            val selectedTasks = ImpactVerificationTaskSelector.select(
+                                projectPath = module.path,
+                                pluginIds = pluginIds,
+                                registeredTaskNames = module.tasks.names,
+                                changedFiles = diffOutput
+                            )
+                            if (selectedTasks.isEmpty()) {
+                                println(
+                                    "INFO: Skipping ${module.path}; no supported impacted verification tasks " +
+                                        "are registered for its plugins: ${pluginIds.ifEmpty { setOf("none") }}."
+                                )
+                            }
+                            selectedTasks
+                        }
+                    }.distinct()
+
+                    if (tasks.isEmpty()) {
+                        println("INFO: No module-specific verification tasks were selected; using full test/lint task selectors.")
+                        println("IMPACT_TASKS=test lint")
+                    } else {
+                        println("IMPACT_TASKS=" + tasks.joinToString(" "))
+                    }
                 }
             }
         }

@@ -4,6 +4,8 @@ import com.estatia.realestate.apps.core.network.interfaces.IAuthRemoteDataSource
 import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import com.estatia.realestate.apps.core.testing.fixtures.AuthFixtures
 import com.estatia.realestate.apps.core.network.db_entities.NetworkUserEntity
+import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.common.exceptions.getOrNull
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -26,19 +28,22 @@ class AuthRepositoryTest {
     @Test
     fun `getCurrentUser returns mapped domain user from remote source`() {
         val fixtureUser = AuthFixtures.default()
-        
-        every { remoteDataSource.getCurrentUser() } returns NetworkUserEntity(
-            userId = fixtureUser.userId,
-            displayName = fixtureUser.displayName,
-            email = fixtureUser.email,
-            phoneNumber = fixtureUser.phoneNumber,
-            photoUrl = fixtureUser.photoUrl,
-            isEmailVerified = fixtureUser.isEmailVerified
+
+        every { remoteDataSource.getCurrentUser() } returns AppResult.Success(
+            NetworkUserEntity(
+                userId = fixtureUser.userId,
+                displayName = fixtureUser.displayName,
+                email = fixtureUser.email,
+                phoneNumber = fixtureUser.phoneNumber,
+                photoUrl = fixtureUser.photoUrl,
+                isEmailVerified = fixtureUser.isEmailVerified
+            )
         )
 
         val result = repository.getCurrentUser()
-        
-        assertEquals(fixtureUser.displayName, result?.displayName)
-        assertEquals(fixtureUser.userId, result?.userId)
+        val currentUser = result.getOrNull()
+
+        assertEquals(fixtureUser.displayName, currentUser?.displayName)
+        assertEquals(fixtureUser.userId, currentUser?.userId)
     }
 }

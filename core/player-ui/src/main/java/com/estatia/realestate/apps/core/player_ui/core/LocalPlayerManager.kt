@@ -1,6 +1,7 @@
 package com.estatia.realestate.apps.core.player_ui.core
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.estatia.realestate.apps.core.player_engine.core.IPlayerManager
 

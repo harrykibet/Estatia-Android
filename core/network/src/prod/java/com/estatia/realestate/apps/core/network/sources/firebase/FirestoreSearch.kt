@@ -1,30 +1,30 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
-import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
+import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.estatia.realestate.apps.core.network.interfaces.ISearchRemoteDataSource
-import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.tasks.await
+import java.lang.Math
 import javax.inject.Inject
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
-import com.estatia.realestate.apps.core.architecture.annotations.Data.EntityModel
-
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.tasks.await
 
 /**
  * Firebase implementation of [ISearchRemoteDataSource].
- * 
+ *
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Perform remote searches and geospatial queries via Firestore.
- * - Performance: 
+ * - Performance:
  *   - Basic Search: O(log N) via Firestore ordered indexes.
  *   - Nearby Search: Currently O(N) due to client-side filtering; target geospatial indexing for future.
  * - Concurrency: Thread-safe.
@@ -40,8 +40,8 @@ internal class FirestoreSearch @Inject constructor(
 
 
     override suspend fun searchProperties(
-        query:String,
-        limit:Int
+        query: String,
+        limit: Int
     ): AppResult<List<PropertyEntityModel>> {
 
         val startTime = System.currentTimeMillis()
@@ -67,7 +67,7 @@ internal class FirestoreSearch @Inject constructor(
                         PropertyEntityModel::class.java
                     )
                 }
-            
+
             val duration = System.currentTimeMillis() - startTime
             metricsTracker.trackDuration("network.search.latency", duration.milliseconds)
             metricsTracker.incrementCounter("network.search.success")
@@ -98,9 +98,9 @@ internal class FirestoreSearch @Inject constructor(
      * read costs, and provides predictable performance for large datasets.
      */
     override suspend fun getNearbyProperties(
-        latitude:Double,
-        longitude:Double,
-        radiusKm:Double
+        latitude: Double,
+        longitude: Double,
+        radiusKm: Double
     ): AppResult<List<PropertyEntityModel>> {
 
 
@@ -148,11 +148,11 @@ internal class FirestoreSearch @Inject constructor(
 
 
     private fun calculateDistance(
-        lat1:Double,
-        lng1:Double,
-        lat2:Double,
-        lng2:Double
-    ):Double {
+        lat1: Double,
+        lng1: Double,
+        lat2: Double,
+        lng2: Double
+    ): Double {
 
 
         val earthRadius = 6371.0

@@ -67,7 +67,7 @@ class MainActivityViewModelTest {
         val viewModel = MainActivityViewModel(userRepository, authRepository, configProvider)
         
         viewModel.uiState.test {
-            assertEquals(MainActivityViewModel.MainActivityUiState.Loading, awaitItem())
+            assertEquals(MainActivityViewModel.MainActivityUiState.Loading(), awaitItem())
 
             val initialState = awaitItem()
             assertEquals(
@@ -78,6 +78,16 @@ class MainActivityViewModelTest {
                 initialState,
             )
 
+            viewModel.updatePiPMode(inPiP = true)
+            assertEquals(
+                MainActivityViewModel.MainActivityUiState.Success(
+                    userData = defaultUserData,
+                    isAuthenticated = true,
+                    isInPiPMode = true,
+                ),
+                awaitItem(),
+            )
+
             userDataFlow.value = defaultUserData.copy(useDynamicColor = true)
             
             val updatedState = awaitItem()
@@ -85,6 +95,7 @@ class MainActivityViewModelTest {
                 MainActivityViewModel.MainActivityUiState.Success(
                     userData = defaultUserData.copy(useDynamicColor = true),
                     isAuthenticated = true,
+                    isInPiPMode = true,
                 ),
                 updatedState,
             )

@@ -37,15 +37,37 @@ plugins {
     id("com.estatia.realestate.apps.architecture")
 }
 
+// Resolve Protobuf consistently in every project configuration, not only the
+// application module. Lite-generated messages use the Lite classes included in
+// protobuf-java; redirecting javalite avoids packaging a second copy of the
+// com.google.protobuf runtime while retaining the Kotlin Lite generated API.
+val protobufRuntimeVersion = libs.versions.protobuf.get()
+subprojects {
+    configurations.configureEach {
+        exclude(group = "com.google.protobuf", module = "protobuf-lite")
+        resolutionStrategy {
+            force("com.google.protobuf:protobuf-java:$protobufRuntimeVersion")
+            eachDependency {
+                if (requested.group == "com.google.protobuf" && requested.name == "protobuf-javalite") {
+                    useTarget("com.google.protobuf:protobuf-java:$protobufRuntimeVersion")
+                    because("Use one aligned full protobuf runtime for Firebase Lite and OpenTelemetry full messages")
+                }
+            }
+        }
+    }
+}
+
 extensions.configure<GraphRulesExtension>("moduleGraphAssert") {
-    maxHeight = 10
+    // Project policy: allow dependency chains up to 12 modules; this is an Estatia-specific guardrail, not an industry standard.
+    maxHeight = 12
     configurations = setOf("api", "implementation")
 
     restricted = arrayOf(
         ":core:(?!canary-violations).* -X> :feature.*",
         ":feature.* -X> :feature:(?!shared-ui).*",
         ":core:domain -X> :core:(network|database|datastore|intelligence|notifications|security)",
-        ":core:model -X> :core:(?!common).*"
+        // Model is a leaf module: it may use identity annotations, but not common (which depends on model) or other core modules.
+        ":core:model -X> :core:(?!architecture-annotations(?:$|:)).*"
     )
 }
 

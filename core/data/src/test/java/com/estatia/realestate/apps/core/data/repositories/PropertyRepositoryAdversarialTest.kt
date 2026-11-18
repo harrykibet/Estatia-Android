@@ -64,13 +64,13 @@ class PropertyRepositoryAdversarialTest {
         metricsTracker = mockk(relaxed = true)
         engagementRepository = mockk(relaxed = true)
         contentSafetyService = mockk(relaxed = true)
-        coEvery { contentSafetyService.validateText(any()) } returns SafetyResult.Safe
-        coEvery { contentSafetyService.validateImage(any()) } returns SafetyResult.Safe
-        coEvery { contentSafetyService.validateVideo(any()) } returns SafetyResult.Safe
-        
+        coEvery { contentSafetyService.validateText(any()) } returns AppResult.Success(SafetyResult.Safe)
+        coEvery { contentSafetyService.validateImage(any()) } returns AppResult.Success(SafetyResult.Safe)
+        coEvery { contentSafetyService.validateVideo(any()) } returns AppResult.Success(SafetyResult.Safe)
+
         exceptionTranslator = mockk(relaxed = true)
         clock = TestClock()
-        
+
         repository = PropertyRepository(
             localDataSource,
             remoteDataSource,
@@ -91,9 +91,11 @@ class PropertyRepositoryAdversarialTest {
     @Test
     fun `uploadProperty blocks and returns error when content safety flags description`() = runTest {
         val property = PropertyFixtures.default().copy(description = "Abusive content")
-        
+
         // 🧪 Chaos: Safety service flags the text
-        coEvery { contentSafetyService.validateText(any()) } returns SafetyResult.Flagged("Abusive language detected", 0.99f)
+        coEvery { contentSafetyService.validateText(any()) } returns AppResult.Success(
+            SafetyResult.Flagged("Abusive language detected", 0.99f)
+        )
 
         val result = repository.uploadProperty(property, emptyList(), emptyList())
 
@@ -106,13 +108,13 @@ class PropertyRepositoryAdversarialTest {
     fun `fetchLikedProperties uses local user data when remote fails via fake chaos`() = runTest {
         // 🧪 Chaos Scenario: Remote fails with Unavailable
         fakeRemoteSource.setNextBehavior(DatabaseBehavior.Unavailable)
-        
+
         // Local user has liked IDs
         val mockUserData = mockk<UserData>(relaxed = true) {
             every { likedProperties } returns setOf("liked_1", "liked_2")
         }
         every { userRepository.userData } returns flowOf(mockUserData)
-        
+
         // Local cache has the properties
         val cached = listOf(mockk<PropertyCacheEntity>(relaxed = true))
         coEvery { localDataSource.getCachedPropertiesByIds(any()) } returns AppResult.Success(cached)
@@ -128,7 +130,7 @@ class PropertyRepositoryAdversarialTest {
     fun `uploadProperty propagates cancellation mid-flight`() = runTest {
         val property = PropertyFixtures.default()
         val reachedRemote = CompletableDeferred<Unit>()
-        
+
         val hangingRemote = object : IPropertyRemoteDatasource by FakePropertyRemoteDataSource() {
             override suspend fun uploadProperty(
                 property: PropertyEntityModel,
@@ -142,7 +144,7 @@ class PropertyRepositoryAdversarialTest {
         }
 
         val adversarialRepo = PropertyRepository(
-            localDataSource, hangingRemote, userRepository, metricsTracker, 
+            localDataSource, hangingRemote, userRepository, metricsTracker,
             engagementRepository, contentSafetyService, exceptionTranslator,
             clock
         )
@@ -150,12 +152,12 @@ class PropertyRepositoryAdversarialTest {
         val job = launch(UnconfinedTestDispatcher(testScheduler)) {
             adversarialRepo.uploadProperty(property, emptyList(), emptyList())
         }
-        
+
         // Pump the scheduler until the remote is reached
         while (!reachedRemote.isCompleted) {
             yield()
         }
-        
+
         job.cancelAndJoin()
     }
 
@@ -174,14 +176,14 @@ class PropertyRepositoryAdversarialTest {
 
         // When: Fetch first page of 3
         val page1 = repository.fetchPropertiesPaginated(null, null, 3).assertSuccess()
-        
+
         // Then: 3 items, has cursor
         assertEquals(3, page1.properties.size)
         assertNotNull(page1.cursor)
 
         // When: Fetch second page using cursor from first page
         val page2 = repository.fetchPropertiesPaginated(null, page1.cursor, 3).assertSuccess()
-        
+
         // Then: 3 more items, no overlap with page 1
         assertEquals(3, page2.properties.size)
         val p1Ids = page1.properties.map { it.id.value }.toSet()

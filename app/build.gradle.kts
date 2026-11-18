@@ -53,6 +53,9 @@ dependencies {
     implementation(libs.androidx.compose.material3.windowSizeClass)
 
     androidTestImplementation(libs.hilt.android.testing)
+    // Keep AndroidJUnitRunner and its test-storage implementation on the instrumentation APK classpath.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.monitor)
     androidTestImplementation(libs.uiautomator)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.espresso.intents)

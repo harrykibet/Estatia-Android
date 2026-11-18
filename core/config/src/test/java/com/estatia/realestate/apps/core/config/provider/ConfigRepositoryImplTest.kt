@@ -15,6 +15,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -51,20 +52,26 @@ class ConfigRepositoryImplTest {
     }
 
     @Test
-    fun `initialize loads from assets and refreshes from remote successfully`() = runTest {
+    fun `initialize publishes local config before remote refresh completes`() = runTest(testDispatcher) {
         val json = "{}"
         coEvery { assetSource.loadNetworkConfig() } returns json
         coEvery { assetSource.loadSecurityConfig() } returns json
         coEvery { assetSource.loadPlayerConfig() } returns json
-        
+
         coEvery { dataRepository.fetchRemoteConfig() } returns AppResult.Success(json)
-        
+
         every { parser.parseNetwork(any()) } returns mockk(relaxed = true)
         every { parser.parseSecurity(any()) } returns mockk(relaxed = true)
         every { parser.parsePlayer(any()) } returns mockk(relaxed = true)
         every { parser.parse(any()) } returns mockConfig
 
         repository.initialize()
+
+        // Local asset config is ready as soon as initialize returns; remote refresh is separate.
+        assertTrue(repository.isInitialized)
+        assertTrue(repository.isReady.value)
+
+        runCurrent() // Drain the asynchronously launched remote refresh before asserting its effects.
 
         assertTrue(repository.isInitialized)
         verify { assetSource.loadNetworkConfig() }
@@ -73,7 +80,7 @@ class ConfigRepositoryImplTest {
     }
 
     @Test
-    fun `refresh handles transient network failures gracefully using platform models`() = runTest {
+    fun `refresh handles transient network failures gracefully using platform models`() = runTest(testDispatcher) {
         // 🧪 Chaos: Remote fetch fails
         coEvery { dataRepository.fetchRemoteConfig() } returns AppResult.Error(NetworkException.Timeout)
 

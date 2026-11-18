@@ -10,7 +10,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.net.toUri
@@ -19,6 +18,7 @@ import com.estatia.realestate.apps.core.model.property.MediaType
 import com.estatia.realestate.apps.core.model.property.PropertyDomainModel
 import com.estatia.realestate.apps.core.model.property.toListingUiModel
 import com.estatia.realestate.apps.core.player_ui.screens.EngineVideoPlayer
+import com.estatia.realestate.apps.core.player_ui.state.PlayerUiState
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedItem
 import com.estatia.realestate.apps.feature.shared_ui.PropertyFeedScreen
 import com.estatia.realestate.apps.feature.shared_ui.RememberFeedPlaybackCoordinator
@@ -33,7 +33,8 @@ fun FavoritesRoute(
     commentsContent: @Composable (propertyId: String) -> Unit,
     playbackViewModel: FavoritesVideoPlaybackViewModel = hiltViewModel()
 ) {
-    val isMuted by playbackViewModel.isMuted.collectAsStateWithLifecycle()
+    val playbackState by playbackViewModel.uiState.collectAsStateWithLifecycle()
+    val isMuted = playbackState.isMuted
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(playbackViewModel.autoAdvanceEvent) {
@@ -53,6 +54,7 @@ fun FavoritesRoute(
             onLikeClick = {},
             onShareClick = {},
             isMuted = isMuted,
+            playbackUiState = playbackState.playback,
             onMuteToggle = playbackViewModel::toggleMute,
             autoAdvanceEvent = playbackViewModel.autoAdvanceEvent,
             onPropertyClick = onPropertyClick,
@@ -74,6 +76,7 @@ fun FavoritesScreen(
     onPropertyClick: (String) -> Unit,
     commentsContent: @Composable (propertyId: String) -> Unit,
     playbackViewModel: FavoritesVideoPlaybackViewModel,
+    playbackUiState: PlayerUiState = PlayerUiState.Idle,
     modifier: Modifier = Modifier,
     autoAdvanceEvent: kotlinx.coroutines.flow.Flow<Unit>? = null
 ) {
@@ -95,11 +98,7 @@ fun FavoritesScreen(
             )
         },
         itemContent = { listing, isActive, onCommentClick ->
-            val playerUiState by if (isActive) {
-                playbackViewModel.uiState.collectAsStateWithLifecycle()
-            } else {
-                remember { mutableStateOf(null) }
-            }
+            val playerUiState = if (isActive) playbackUiState else null
 
             PropertyFeedItem(
                 listing = listing,

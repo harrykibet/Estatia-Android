@@ -142,7 +142,7 @@ class MediaUploadResilienceTest {
     @Test
     fun `upload retry succeeds after transient timeout`() = runTest {
         val userId = "user_1"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         viewModel.updateTitle("Resilience Test")
 
         // 🧪 Script: Timeout -> Success
@@ -159,7 +159,7 @@ class MediaUploadResilienceTest {
     @Test
     fun `upload fails after exhausting all retries`() = runTest {
         val userId = "user_1"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         viewModel.updateTitle("Persistent Failure")
 
         // Script 6 timeouts (max is 5)
@@ -183,7 +183,7 @@ class MediaUploadResilienceTest {
     @Test
     fun `upload does not retry on non-retryable error`() = runTest {
         val userId = "user_1"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         
         // 401 Unauthorized is not retryable
         networkChaos.script(NetworkBehavior.HttpError(401))

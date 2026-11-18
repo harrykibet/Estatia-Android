@@ -44,7 +44,7 @@ class ProfileViewModelTest {
         val userId = "user_123"
         val mockUser = UserFixtures.build(id = userId, name = "John Doe")
         
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         coEvery { userRepository.getUserById(userId) } returns AppResult.Success(mockUser)
 
         val metricsTracker = mockk<com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker>(relaxed = true)
@@ -57,7 +57,7 @@ class ProfileViewModelTest {
     @Test
     fun `loadUserProfile timeout updates error state`() = runTest {
         val userId = "user_123"
-        every { authRepository.getCurrentUserId() } returns userId
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(userId)
         
         coEvery { userRepository.getUserById(userId) } returns AppResult.Error(NetworkException.Timeout)
 
@@ -69,7 +69,7 @@ class ProfileViewModelTest {
 
     @Test
     fun `loadUserProfile when not authenticated updates state with error`() = runTest {
-        every { authRepository.getCurrentUserId() } returns null
+        every { authRepository.getCurrentUserId() } returns AppResult.Success(null)
 
         val metricsTracker = mockk<com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker>(relaxed = true)
         viewModel = ProfileViewModel(authRepository, userRepository, metricsTracker)

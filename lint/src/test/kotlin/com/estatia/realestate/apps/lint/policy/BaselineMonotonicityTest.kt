@@ -19,7 +19,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class BaselineMonotonicityTest {
 
-    private val rootDir = File("C:/Users/Administrator/StudioProjects/RealEstateApp-Android")
+    private val rootDir: File = resolveRootDir()
 
     data class BaselineSummary(
         val blockCount: Int,
@@ -32,13 +32,12 @@ class BaselineMonotonicityTest {
     @Test
     fun `baseline must follow the Monotonicity Ratchet policy`() {
         val baselineFile = File(rootDir, "lint-baseline.xml")
-        
-        if (!baselineFile.exists()) {
-            println("INFO: No baseline found. System is in Pure State.")
-            return
-        }
+        val currentSummary = baselineFile.takeIf { it.isFile }?.let(::analyzeBaseline)
+            ?: emptyBaselineSummary()
 
-        val currentSummary = analyzeBaseline(baselineFile)
+        if (!baselineFile.isFile) {
+            println("INFO: No PR lint baseline exists; current baseline count is zero.")
+        }
 
         // 1. LAW-035: BLOCK (FATAL) issues must ALWAYS be zero in baseline
         assertTrue(
@@ -50,23 +49,29 @@ class BaselineMonotonicityTest {
 
         // 2. LAW-040: Check against reference baseline if provided (Monotonicity)
         val referencePath = System.getProperty("MAIN_BASELINE_PATH")
-        if (referencePath != null) {
+            ?: System.getenv("MAIN_BASELINE_PATH")
+        if (!referencePath.isNullOrBlank()) {
             val referenceFile = File(referencePath)
-            if (referenceFile.exists()) {
-                val refSummary = analyzeBaseline(referenceFile)
-                
-                assertTrue(
-                    "LAW-040 Violation: Architectural ERROR/WARN baseline count increased from " +
-                    "${refSummary.warnCount} to ${currentSummary.warnCount}.",
-                    currentSummary.warnCount <= refSummary.warnCount
-                )
-                
-                assertTrue(
-                    "LAW-040 Violation: Total lint baseline count increased from " +
-                    "${refSummary.totalCount} to ${currentSummary.totalCount}.",
-                    currentSummary.totalCount <= refSummary.totalCount
-                )
+            val refSummary = referenceFile.takeIf { it.isFile }?.let(::analyzeBaseline)
+                ?: emptyBaselineSummary()
+
+            if (!referenceFile.isFile) {
+                println("INFO: No main-branch lint baseline exists; reference baseline count is zero.")
             }
+
+            assertTrue(
+                "LAW-040 Violation: Architectural ERROR/WARN baseline count increased from " +
+                    "${refSummary.warnCount} to ${currentSummary.warnCount}.",
+                currentSummary.warnCount <= refSummary.warnCount
+            )
+
+            assertTrue(
+                "LAW-040 Violation: Total lint baseline count increased from " +
+                    "${refSummary.totalCount} to ${currentSummary.totalCount}.",
+                currentSummary.totalCount <= refSummary.totalCount
+            )
+        } else {
+            println("INFO: MAIN_BASELINE_PATH is not configured; cross-branch comparison was not requested.")
         }
         
         println("Architectural Baseline Summary:")
@@ -74,6 +79,33 @@ class BaselineMonotonicityTest {
         println("  - WARN/ERROR: ${currentSummary.warnCount}")
         println("  - INFO: ${currentSummary.infoCount}")
         println("  - Total Issues: ${currentSummary.totalCount}")
+    }
+
+    private fun emptyBaselineSummary() = BaselineSummary(
+        blockCount = 0,
+        warnCount = 0,
+        infoCount = 0,
+        totalCount = 0,
+        architecturalIssues = emptyList()
+    )
+
+    private fun resolveRootDir(): File {
+        val configuredRoot = System.getProperty("PROJECT_ROOT")
+        if (!configuredRoot.isNullOrBlank()) {
+            return File(configuredRoot).canonicalFile
+        }
+
+        var candidate: File? = File(".").canonicalFile
+        while (candidate != null) {
+            if (File(candidate, "settings.gradle.kts").isFile) {
+                return candidate
+            }
+            candidate = candidate.parentFile
+        }
+
+        throw IllegalStateException(
+            "Unable to locate repository root: PROJECT_ROOT is unset and no settings.gradle.kts was found."
+        )
     }
 
     private fun analyzeBaseline(file: File): BaselineSummary {

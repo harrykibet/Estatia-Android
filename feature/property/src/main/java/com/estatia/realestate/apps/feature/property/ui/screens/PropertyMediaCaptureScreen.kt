@@ -53,7 +53,8 @@ fun PropertyMediaCaptureScreen(
 ) {
     val context = LocalContext.current
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
-    val mediaUris by viewModel.allMedia.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val mediaUris = uiState.allMedia
     
     val imageCapture = remember { ImageCapture.Builder().build() }
     val mainExecutor = remember { ContextCompat.getMainExecutor(context) }

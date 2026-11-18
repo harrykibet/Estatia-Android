@@ -1,9 +1,9 @@
 package com.estatia.realestate.apps.core.network.core
 
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
-
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.NetworkException
+import com.estatia.realestate.apps.core.common.interfaces.IClock
 import com.estatia.realestate.apps.core.common.interfaces.ILogger
 import com.estatia.realestate.apps.core.network.interfaces.IExceptionMapper
 import com.estatia.realestate.apps.core.network.interfaces.IRetryPolicy
@@ -19,6 +19,7 @@ class ProductionNetworkClientChaosTest {
 
     private lateinit var retryPolicy: IRetryPolicy
     private lateinit var exceptionMapper: IExceptionMapper
+    private lateinit var clock: IClock
     private lateinit var logger: ILogger
     private lateinit var client: ProductionNetworkClient
 
@@ -26,9 +27,10 @@ class ProductionNetworkClientChaosTest {
     fun setup() {
         retryPolicy = mockk()
         exceptionMapper = mockk()
+        clock = mockk(relaxed = true)
         val metricsTracker = mockk<com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker>(relaxed = true)
         logger = mockk(relaxed = true)
-        client = ProductionNetworkClient(retryPolicy, exceptionMapper, metricsTracker, logger)
+        client = ProductionNetworkClient(retryPolicy, exceptionMapper, metricsTracker, clock, logger)
     }
 
     @Test
@@ -46,7 +48,7 @@ class ProductionNetworkClientChaosTest {
     fun `execute returns mapped error when retry policy fails`() = runTest {
         val original = IOException("Connection reset")
         val mapped = NetworkException.ConnectionFailed
-        
+
         coEvery { retryPolicy.execute<String>(any(), any()) } throws original
         every { exceptionMapper.map(original) } returns mapped
 

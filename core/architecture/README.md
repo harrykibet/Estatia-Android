@@ -6,7 +6,7 @@ This module serves as the **Single Source of Truth (SSoT)** for all architectura
 
 In a multi-layered enforcement model (Lint, KSP, Konsist), documentation and code naturally drift apart. `:core:architecture` solves this by providing a unified registry that all enforcement tools must reference.
 
-1.  **Unified Identity**: Every architectural rule has a unique `Law` ID (e.g., `LAW-001`).
+1.  **Unified Law Registry**: Every architectural rule has a unique `Law` ID (e.g., `LAW-001`). Identity annotation declarations live in `:core:architecture-annotations`; this module owns their governing rules and invariants.
 2.  **Multi-Dimensional Risk Model**: Every law is categorized by **Risk**, **Confidence**, and **Enforcement** level.
 3.  **Actionable Intelligence**: Centralizes the `rationale` and `recommendation` for every rule, enabling high-fidelity diagnostics.
 

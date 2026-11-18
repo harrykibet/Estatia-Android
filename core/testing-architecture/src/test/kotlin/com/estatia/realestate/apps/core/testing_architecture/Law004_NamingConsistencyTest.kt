@@ -33,9 +33,15 @@ class Law004_NamingConsistencyTest {
                 }
                 
                 val packageName = file.packagee?.name ?: ""
-                val expected = "com.estatia.realestate.apps.$layer.${moduleName.replace("-", "_")}"
+                // Some modules intentionally publish a nested package namespace that
+                // cannot be derived by mechanically replacing the module-name hyphen.
+                val modulePackage = when (moduleName) {
+                    "architecture-annotations" -> "architecture.annotations"
+                    else -> moduleName.replace("-", "_")
+                }
+                val expected = "com.estatia.realestate.apps.$layer.$modulePackage"
                 val expectedPlain = "com.estatia.realestate.apps.$layer.${moduleName.replace("-", "")}"
-                
+
                 packageName.startsWith(expected) || packageName.startsWith(expectedPlain)
             }
     }

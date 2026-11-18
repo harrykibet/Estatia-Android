@@ -46,7 +46,8 @@ fun MediaUploadsForm(
             }, null
     )
 ) {
-    val mediaUris by viewModel.allMedia.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val mediaUris = uiState.allMedia
 
     Column(
         modifier = Modifier.fillMaxWidth(),

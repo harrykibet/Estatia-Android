@@ -23,6 +23,8 @@ androidx-swiperefreshlayout = "1.2.0"
 androidx-test-core = "1.7.0"
 androidx-test-espresso = "3.7.0"
 androidx-test-ext-junit = "1.3.0"
+androidx-test-runner = "1.7.0"
+androidx-test-monitor = "1.8.0"
 androidx-test-uiautomator = "2.4.0"
 androidx-compose-ui-test = "1.12.0"
 androidx-viewpager2 = "1.1.0"
@@ -88,7 +90,8 @@ googleServices = "4.5.0"
 guava = "33.7.1-jre"
 mapsPlatformSecrets = "2.0.1"
 micrometer = "1.17.1"
-protobufJava = "3.25.5"
+prometheusMetrics = "1.7.0"
+protobufJava = "4.36.0"
 retrofitSerialization = "1.0.0"
 
 [plugins]
@@ -329,7 +332,6 @@ androidx-compose-material3-adaptive-layout = { group = "androidx.compose.materia
 androidx-compose-material3-adaptive-navigation = { group = "androidx.compose.material3.adaptive", name = "adaptive-navigation"}
 androidx-compose-material3-windowSizeClass = { group = "androidx.compose.material3", name = "material3-window-size-class" }
 androidx-compose-material3-navigationSuite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
-google-accompanist = { group = "com.google.accompanist", name = "accompanist-pager", version.ref = "accompanist" }
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
 
 # Lifecycle
@@ -379,6 +381,8 @@ glide-compiler = { group = "com.github.bumptech.glide", name = "compiler", versi
 
 # Testing
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
+androidx-test-monitor = { group = "androidx.test", name = "monitor", version.ref = "androidx-test-monitor" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidx-test-espresso" }
 core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "androidx-arch-core" }
 espresso-intents = { group = "androidx.test.espresso", name = "espresso-intents", version.ref = "androidx-test-espresso" }
@@ -398,7 +402,6 @@ amplify-core = { group = "com.amplifyframework", name = "aws-core", version.ref 
 amplify-api = { group = "com.amplifyframework", name = "aws-api", version.ref = "amplify" }
 amplify-auth = { group = "com.amplifyframework", name = "aws-auth-cognito", version.ref = "amplify" }
 amplify-storage = { group = "com.amplifyframework", name = "aws-storage-s3", version.ref = "amplify" }
-amplify-analytics = { group = "com.amplifyframework", name = "aws-analytics-pinpoint", version.ref = "amplify" }
 amplify-logging = { group = "com.amplifyframework", name = "aws-logging-cloudwatch", version.ref = "amplify" }
 aws-appconfig = { group = "aws.sdk.kotlin", name = "appconfigdata", version.ref = "aws-sdk-kotlin-appconfigdata" }
 android-desugarJdkLibs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "androidDesugarJdkLibs" }
@@ -480,6 +483,7 @@ opentelemetry-sdk = "io.opentelemetry:opentelemetry-sdk:1.34.1"
 opentelemetry-exporter-otlp = "io.opentelemetry:opentelemetry-exporter-otlp:1.65.0"
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
+prometheus-metrics-annotations = { group = "io.prometheus", name = "prometheus-metrics-annotations", version.ref = "prometheusMetrics" }
 micrometer-registry-otlp = { module = "io.micrometer:micrometer-registry-otlp", version.ref = "micrometer" }
 conscrypt-openjdk-uber = "org.conscrypt:conscrypt-openjdk-uber:2.6.3"
 metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "androidx-metrics" }

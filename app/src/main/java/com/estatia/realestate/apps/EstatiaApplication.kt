@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
@@ -53,11 +54,14 @@ class EstatiaApplication : Application(), Configuration.Provider  {
         initializeBouncyCastle()
         configureGlobalExceptionHandler()
         
-        applicationScope.launch {
-            // 1. Initialize config first as others depend on it
+        // Config-backed singletons are created while MainActivity is injected.
+        // Load the bundled snapshot before Application.onCreate returns. ConfigProvider
+        // performs asset IO on its injected IO dispatcher and starts remote refresh separately.
+        runBlocking {
             config.initialize()
-            
-            // 2. Initialize backends
+        }
+
+        applicationScope.launch {
             initializeBackends()
         }
     }

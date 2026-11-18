@@ -1,11 +1,20 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
 import android.net.Uri
+import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
 import com.estatia.realestate.apps.core.common.media.MediaFormat
+import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import com.estatia.realestate.apps.core.model.feature.LikesDomainModel
+import com.estatia.realestate.apps.core.model.property.PropertyCursor
+import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
+import com.estatia.realestate.apps.core.network.core.RetryConfig
+import com.estatia.realestate.apps.core.network.core.RetryConfigs
 import com.estatia.realestate.apps.core.network.db_entities.LikesEntity
 import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
-import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
+import com.estatia.realestate.apps.core.network.db_entities.PropertyRemotePage
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.PROPERTIES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.CONTACT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKED_PROPERTIES
@@ -17,29 +26,19 @@ import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.SHARES_
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.VIEWS_COUNT
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDatasource
-import com.estatia.realestate.apps.core.common.exceptions.AppResult
-import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
-import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
-import com.estatia.realestate.apps.core.model.property.PropertyCursor
-import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
-import com.estatia.realestate.apps.core.network.core.RetryConfig
-import com.estatia.realestate.apps.core.network.core.RetryConfigs
-import com.estatia.realestate.apps.core.network.db_entities.PropertyRemotePage
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
-import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
-import com.estatia.realestate.apps.core.architecture.annotations.Data.EntityModel
-
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.tasks.await
 
 /**
  * Firebase implementation of [IPropertyRemoteDatasource].
- * 
+ *
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Low-level Firestore and Storage operations for property entities.
  * - Idempotency: Enforces client-side ID generation [propertyId] to ensure retries don't create duplicate documents.
@@ -205,7 +204,7 @@ internal class FirestoreProperties @Inject constructor(
                 ?: throw DatabaseException.InvalidData(
                     "Unable to parse property"
                 )
-            
+
             // Try to fetch contact info if available (gated by rules)
             val contactSnapshot = database.collection(PROPERTIES)
                 .document(propertyId)
@@ -213,9 +212,9 @@ internal class FirestoreProperties @Inject constructor(
                 .document("info")
                 .get()
                 .await()
-            
+
             val contactInfo = contactSnapshot.toObject(PropertyContactEntity::class.java)
-            
+
             property.copy(contact = contactInfo)
         }
     }
@@ -310,6 +309,7 @@ internal class FirestoreProperties @Inject constructor(
         propertyId: String
     ): AppResult<Unit> {
 
+
         return networkClient.execute {
 
             val propertyRef =
@@ -333,7 +333,7 @@ internal class FirestoreProperties @Inject constructor(
 
                 batch.delete(likesRef)
                 batch.delete(likedPropertiesRef)
-                
+
                 batch.update(propertyRef, LIKES_COUNT, FieldValue.increment(-1))
 
             }.await()

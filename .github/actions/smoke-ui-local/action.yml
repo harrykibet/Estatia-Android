@@ -1,0 +1,405 @@
+name: Local API 34 Smoke UI
+description: Provision a Pixel 2 API 34 local emulator, run ProdDebug instrumentation, verify execution, and upload diagnostics.
+
+inputs:
+  artifact_name:
+    description: Unique name for the smoke UI diagnostics artifact.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Android Emulator and API 34 system image
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        sdkmanager_path="$(command -v sdkmanager || true)"
+        if [[ -z "$sdkmanager_path" ]]; then
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+        fi
+        if [[ ! -x "$sdkmanager_path" ]]; then
+          echo "::error::Android SDK sdkmanager was not found."
+          exit 1
+        fi
+
+        echo "Using sdkmanager: $sdkmanager_path"
+        (yes | "$sdkmanager_path" --licenses >/dev/null) || true
+
+        "$sdkmanager_path" --install \
+          "emulator" \
+          "platform-tools" \
+          "platforms;android-34" \
+          "system-images;android-34;default;x86_64"
+
+        test -x "$ANDROID_HOME/emulator/emulator"
+        test -x "$ANDROID_HOME/platform-tools/adb"
+
+        # sdkmanager does not guarantee that platform-tools is already on PATH.
+        echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+        echo "ANDROID_SERIAL=emulator-5554" >> "$GITHUB_ENV"
+        "$ANDROID_HOME/platform-tools/adb" version
+
+        # Use one explicit AVD location for creation, launch, diagnostics, and cleanup.
+        avd_home="$RUNNER_TEMP/android-avd"
+        mkdir -p "$avd_home"
+        echo "ANDROID_AVD_HOME=$avd_home" >> "$GITHUB_ENV"
+        echo "Android AVD home: $avd_home"
+
+    - name: Verify runner virtualization and KVM
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        echo "=== Runner image ==="
+        cat /etc/os-release
+        uname -a
+        echo "CPU count: $(nproc)"
+        free -h
+
+        echo "=== CPU virtualization flags ==="
+        flags="$(grep -m1 '^flags' /proc/cpuinfo || true)"
+        printf '%s\n' "$flags" | grep -oE '\b(vmx|svm)\b' | sort -u || true
+
+        echo "=== KVM device ==="
+        if [[ ! -c /dev/kvm ]]; then
+          echo "::error::/dev/kvm is not exposed to this GitHub-hosted runner."
+          exit 1
+        fi
+        sudo chmod a+rw /dev/kvm
+        ls -l /dev/kvm
+        test -r /dev/kvm
+        test -w /dev/kvm
+
+        echo "=== Android Emulator hypervisor check ==="
+        accel_output="$("$ANDROID_HOME/emulator/emulator" -accel-check 2>&1)" || {
+          printf '%s\n' "$accel_output"
+          echo "::error::The Android Emulator cannot use hardware virtualization on this runner."
+          exit 1
+        }
+        printf '%s\n' "$accel_output"
+        if ! grep -Eiq 'KVM.*(installed and usable|is usable)' <<< "$accel_output"; then
+          echo "::error::The emulator did not confirm that KVM acceleration is usable."
+          exit 1
+        fi
+
+    - name: Verify AndroidX Test runtime dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Confirm the instrumentation runtime resolves the expected runner and monitor.
+        if ! report="$(bash ./.github/scripts/run-gradle-with-diagnostics.sh dependency-insight ./gradlew :app:dependencyInsight \
+          --configuration prodDebugAndroidTestRuntimeClasspath \
+          --dependency androidx.test:monitor \
+          --no-configuration-cache --console=plain 2>&1)"; then
+          printf '%s\n' "$report"
+          echo "::error::Could not resolve the ProdDebug AndroidX Test runtime dependency graph."
+          exit 1
+        fi
+        printf '%s\n' "$report"
+
+        for expected in "androidx.test:runner:1.7.0" "androidx.test:monitor:1.8.0"; do
+          if ! grep -Fq "$expected" <<< "$report"; then
+            echo "::error::Expected $expected in prodDebugAndroidTestRuntimeClasspath."
+            exit 1
+          fi
+        done
+
+    - name: Build ProdDebug app and instrumentation APKs
+      shell: bash
+      run: |
+        set -euo pipefail
+        bash ./.github/scripts/run-gradle-with-diagnostics.sh assemble-prod-debug ./gradlew \
+          :app:assembleProdDebug \
+          :app:assembleProdDebugAndroidTest \
+          --no-configuration-cache --stacktrace --console=plain
+
+    - name: Create and verify Pixel 2 API 34 AVD
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        avd_name="estatia_pixel2_api34"
+        avd_home="$ANDROID_AVD_HOME"
+        mkdir -p "$avd_home"
+        echo "Using ANDROID_AVD_HOME=$avd_home"
+
+        avdmanager_path="$(command -v avdmanager || true)"
+        if [[ -z "$avdmanager_path" ]]; then
+          avdmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | sort -V | tail -n 1)"
+        fi
+        if [[ ! -x "$avdmanager_path" ]]; then
+          echo "::error::Android SDK avdmanager was not found."
+          exit 1
+        fi
+
+        avd_path="$avd_home/$avd_name.avd"
+        printf 'no\n' | "$avdmanager_path" create avd \
+          --force \
+          --name "$avd_name" \
+          --path "$avd_path" \
+          --package "system-images;android-34;default;x86_64" \
+          --device "pixel_2"
+
+        avd_ini="$avd_home/$avd_name.ini"
+        avd_config="$avd_path/config.ini"
+        if [[ ! -s "$avd_ini" || ! -s "$avd_config" ]]; then
+          echo "::error::AVD creation did not produce the expected ini and config files."
+          echo "Expected AVD ini: $avd_ini"
+          echo "Expected AVD config: $avd_config"
+          find "$avd_home" -maxdepth 3 -type f -print || true
+          exit 1
+        fi
+
+        avd_list="$("$ANDROID_HOME/emulator/emulator" -list-avds)"
+        printf 'Available AVDs:\n%s\n' "$avd_list"
+        if ! grep -Fxq "$avd_name" <<< "$avd_list"; then
+          echo "::error::Created AVD '$avd_name' is not discoverable by the emulator."
+          echo "AVD home: $avd_home"
+          cat "$avd_ini" || true
+          find "$avd_home" -maxdepth 3 -type f -print || true
+          exit 1
+        fi
+
+        echo "Verified AVD files:"
+        ls -la "$avd_home" "$avd_path"
+
+    - name: Boot emulator and wait for Android
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        avd_name="estatia_pixel2_api34"
+        emulator_serial="emulator-5554"
+        emulator_log="$RUNNER_TEMP/estatia-emulator.log"
+
+        if [[ ! -s "$ANDROID_AVD_HOME/$avd_name.ini" || ! -s "$ANDROID_AVD_HOME/$avd_name.avd/config.ini" ]]; then
+          echo "::error::The expected AVD files are missing before emulator launch."
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print || true
+          exit 1
+        fi
+
+        "$ANDROID_HOME/emulator/emulator" \
+          -avd "$avd_name" \
+          -port 5554 \
+          -no-window \
+          -no-audio \
+          -no-boot-anim \
+          -no-snapshot \
+          -wipe-data \
+          -gpu swiftshader \
+          -accel on \
+          > "$emulator_log" 2>&1 &
+        emulator_pid=$!
+        echo "$emulator_pid" > "$RUNNER_TEMP/estatia-emulator.pid"
+        echo "Started emulator PID=$emulator_pid for $avd_name"
+
+        if ! command -v adb >/dev/null 2>&1; then
+          echo "::error::ADB is not on PATH after Android platform-tools installation."
+          exit 1
+        fi
+        echo "Using ADB: $(command -v adb)"
+        adb version
+        timeout 15s adb start-server
+
+        # ADB registration and Android boot completion are separate states.
+        device_deadline=$((SECONDS + 180))
+        device_connected=false
+        last_device_state=""
+        while (( SECONDS < device_deadline )); do
+          if ! kill -0 "$emulator_pid" 2>/dev/null; then
+            echo "::error::The emulator process exited before registering with ADB."
+            tail -n 300 "$emulator_log" || true
+            exit 1
+          fi
+
+          devices_output="$(timeout 10s adb devices 2>&1 || true)"
+          device_state="$(awk -v serial="$emulator_serial" '$1 == serial { print $2; exit }' <<< "$devices_output")"
+          if [[ "$device_state" != "$last_device_state" ]]; then
+            echo "ADB state for $emulator_serial: $device_state"
+            last_device_state="$device_state"
+          fi
+          if [[ "$device_state" == "device" ]]; then
+            device_connected=true
+            break
+          fi
+          sleep 2
+        done
+
+        if [[ "$device_connected" != "true" ]]; then
+          echo "::error::Emulator did not register as an ADB device within 180 seconds."
+          adb devices -l || true
+          tail -n 300 "$emulator_log" || true
+          exit 1
+        fi
+
+        boot_deadline=$((SECONDS + 180))
+        android_booted=false
+        while (( SECONDS < boot_deadline )); do
+          if ! kill -0 "$emulator_pid" 2>/dev/null; then
+            echo "::error::The emulator process exited while Android was booting."
+            tail -n 300 "$emulator_log" || true
+            exit 1
+          fi
+
+          boot_state="$(timeout 10s adb -s "$emulator_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+          if [[ "$boot_state" == "1" ]]; then
+            android_booted=true
+            break
+          fi
+          sleep 2
+        done
+
+        if [[ "$android_booted" != "true" ]]; then
+          echo "::error::ADB connected, but Android did not reach sys.boot_completed=1 within 180 seconds."
+          adb -s "$emulator_serial" shell getprop sys.boot_completed || true
+          adb devices -l || true
+          tail -n 300 "$emulator_log" || true
+          exit 1
+        fi
+
+        echo "Android boot completed successfully."
+        adb -s "$emulator_serial" shell getprop ro.build.version.release
+        adb -s "$emulator_serial" shell getprop ro.build.version.sdk
+        adb -s "$emulator_serial" shell wm size
+        adb -s "$emulator_serial" shell wm density
+        adb devices -l
+
+    - name: Run connected ProdDebug UI tests and verify reports
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Never allow reports from an earlier invocation to satisfy the test-count guard.
+        rm -rf app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected
+
+        # Keep device-side runner output so discovery and instrumentation errors are diagnosable.
+        adb logcat -c
+        bash ./.github/scripts/run-gradle-with-diagnostics.sh connected-prod-debug-tests ./gradlew :app:connectedProdDebugAndroidTest \
+          --no-configuration-cache --stacktrace --info --console=plain
+
+        # A successful Gradle task is not sufficient: AGP can otherwise report zero tests.
+        python3 - <<'PY'
+        from pathlib import Path
+        import sys
+        import xml.etree.ElementTree as ET
+
+        reports_root = Path("app/build/outputs/androidTest-results/connected")
+        reports = sorted(reports_root.rglob("TEST-*.xml")) if reports_root.exists() else []
+        if not reports:
+            print("::error::No Android instrumentation XML reports were produced.")
+            sys.exit(1)
+
+        total = failures = errors = skipped = 0
+        discovered = set()
+        for report in reports:
+            try:
+                root = ET.parse(report).getroot()
+            except ET.ParseError as exc:
+                print(f"::error::Invalid instrumentation XML {report}: {exc}")
+                sys.exit(1)
+
+            suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+            if not suites and root.tag == "testsuites":
+                total += int(root.attrib.get("tests", "0"))
+                failures += int(root.attrib.get("failures", "0"))
+                errors += int(root.attrib.get("errors", "0"))
+                skipped += int(root.attrib.get("skipped", "0"))
+            for suite in suites:
+                cases = list(suite.iter("testcase"))
+                total += int(suite.attrib.get("tests", str(len(cases))))
+                failures += int(suite.attrib.get("failures", "0"))
+                errors += int(suite.attrib.get("errors", "0"))
+                skipped += int(suite.attrib.get("skipped", "0"))
+                discovered.update(case.attrib.get("name", "") for case in cases)
+
+            print(f"Instrumentation report: {report}")
+            print(f"  tests={root.attrib.get('tests', 'n/a')} failures={root.attrib.get('failures', 'n/a')} errors={root.attrib.get('errors', 'n/a')} skipped={root.attrib.get('skipped', 'n/a')}")
+
+        expected = {"fastFlickThroughFeed", "rapidReversalScroll"}
+        missing = sorted(expected - discovered)
+        print(f"Total executed tests: {total}")
+        print(f"Discovered test methods: {', '.join(sorted(discovered)) or '(none)'}")
+        if total < len(expected) or missing:
+            print("::error::Instrumentation did not execute both expected FeedGestureChaosTest methods.")
+            if missing:
+                print(f"Missing test methods: {', '.join(missing)}")
+            sys.exit(1)
+        if failures or errors:
+            print(f"::error::Instrumentation reported failures={failures}, errors={errors}.")
+            sys.exit(1)
+        print("Both FeedGestureChaosTest methods executed without failures.")
+        PY
+
+    - name: Collect emulator and test diagnostics
+      if: always()
+      shell: bash
+      run: |
+        set +e
+        output="$RUNNER_TEMP/smoke-ui-diagnostics"
+        mkdir -p "$output"
+
+        {
+          echo "UTC time: $(date -u --iso-8601=seconds)"
+          echo "Runner: $RUNNER_OS"
+          echo "Image:"
+          cat /etc/os-release
+          echo "CPU count: $(nproc)"
+          echo "Memory:"
+          free -h
+          echo "Disk:"
+          df -h /
+          echo "KVM:"
+          ls -l /dev/kvm
+          echo "ANDROID_AVD_HOME: $ANDROID_AVD_HOME"
+          echo "Available AVDs:"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+          echo "AVD files:"
+          find "$ANDROID_AVD_HOME" -maxdepth 3 -type f -print
+          echo "ADB devices:"
+          timeout 10s adb devices -l
+        } > "$output/runner-summary.txt" 2>&1
+
+        if [[ -f "$RUNNER_TEMP/estatia-emulator.log" ]]; then
+          tail -n 500 "$RUNNER_TEMP/estatia-emulator.log" > "$output/emulator.log"
+        fi
+
+        # Preserve AndroidJUnitRunner/UTP messages, including instrumentation discovery counts.
+        if command -v adb >/dev/null 2>&1 && timeout 10s adb get-state >/dev/null 2>&1; then
+          timeout 20s adb logcat -d -v threadtime -t 12000 > "$output/instrumentation-logcat.txt" 2>&1 || true
+          grep -E 'AndroidJUnitRunner|TestRunner|Instrumentation|HiltTestApplication|INSTRUMENTATION_' \
+            "$output/instrumentation-logcat.txt" > "$output/instrumentation-runner.log" || true
+        fi
+
+        for result_dir in \
+          app/build/reports/androidTests/connected \
+          app/build/outputs/androidTest-results/connected; do
+          if [[ -d "$result_dir" ]]; then
+            destination="$output/$(basename "$(dirname "$result_dir")")-$(basename "$result_dir")"
+            mkdir -p "$destination"
+            cp -R "$result_dir"/. "$destination"/
+          fi
+        done
+
+        find app/build/reports -maxdepth 4 -type f -name "*.html" -print 2>/dev/null \
+          | head -n 50 > "$output/report-files.txt" || true
+
+    - name: Stop emulator
+      if: always()
+      shell: bash
+      run: |
+        adb -s emulator-5554 emu kill || true
+        if [[ -f "$RUNNER_TEMP/estatia-emulator.pid" ]]; then
+          kill "$(cat "$RUNNER_TEMP/estatia-emulator.pid")" 2>/dev/null || true
+        fi
+
+    - name: Upload smoke UI diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: ${{ runner.temp }}/smoke-ui-diagnostics/
+        if-no-files-found: warn
+        retention-days: 5

@@ -39,8 +39,8 @@ dependencies {
     implementation(libs.amplify.api)
     implementation(libs.amplify.auth)
     implementation(libs.amplify.storage)
-    implementation(libs.amplify.analytics)
     implementation(libs.amplify.logging)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.aws.appconfig)
 
     implementation(projects.core.common)

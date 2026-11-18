@@ -3,7 +3,18 @@ name: PR Check (High Maturity)
 on:
   pull_request:
     branches: [ "main" ]
-    types: [ opened, synchronize, reopened ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+  merge_group:
+    types: [ checks_requested ]
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: pr-check-${{  github.event.pull_request.number || github.event.merge_group.head_sha || github.ref  }}
+  cancel-in-progress: ${{  github.event_name == 'pull_request'  }}
+
+permissions:
+  contents: read
 
 env:
   CI: true
@@ -12,52 +23,123 @@ jobs:
   architecture-gate:
     name: Level 0 - Architecture & Policy
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     outputs:
-      impact_tasks: ${{ steps.impact.outputs.tasks }}
+      impact_tasks: ${{  steps.impact.outputs.tasks  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for git diff origin/main
+          fetch-depth: 0
+
+      - name: Prepare main-branch lint baseline reference
+        shell: bash
+        run: |
+          baseline_path="${RUNNER_TEMP}/main-lint-baseline.xml"
+          if git cat-file -e "origin/main:lint-baseline.xml" 2>/dev/null; then
+            git show "origin/main:lint-baseline.xml" > "$baseline_path"
+          else
+            rm -f "$baseline_path"
+            echo "No lint-baseline.xml exists on origin/main; LAW-040 reference count is zero."
+          fi
+          echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
 
       - name: Set Up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
 
-      - name: Verify Architecture Contract
-        # 🏗️ AUTHORITATIVE GATE: Runs Lint, KSP, Konsist, Canary, and Drift checks.
-        run: ./gradlew verifyArchitecture --no-configuration-cache --info
+      - name: Run Fast Architecture Regression Suite
+        if: ${{  github.event_name == 'pull_request' && github.event.pull_request.draft  }}
+        run: >-
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh fast-architecture ./gradlew
+          :core:ksp-architecture:test
+          :core:testing-architecture:test
+          :lint:test
+          --stacktrace
+          --console=plain
 
-      - name: Calculate Impact (Selective Testing)
+      - name: Prepare Firebase configuration for full architecture and lint gates
+        if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+      - name: Run Full Architecture and Lint Gates
+        if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
+
+      - name: Test Build Logic Convention Plugins
+        if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
+
+      - name: Calculate Impacted Verification Tasks
         id: impact
+        shell: bash
         run: |
-          ./gradlew calculateImpact --no-configuration-cache > impact_output.txt
-          TASKS=$(grep "IMPACT_TASKS=" impact_output.txt | cut -d'=' -f2)
-          if [ -z "$TASKS" ]; then TASKS="test lint"; fi
-          echo "tasks=$TASKS" >> $GITHUB_OUTPUT
-          echo "Identified Impacted Tasks: $TASKS"
+          set -euo pipefail
+          changed_files="$(git diff --name-only origin/main...HEAD)"
+          if [[ -z "$changed_files" ]]; then
+            echo "tasks=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: Self-Healing Ratchet (Update Lint Baselines)
-        # Automatically update baselines if violations decreased
-        run: ./gradlew lint -Dlint.update.baseline=true --no-configuration-cache
-      
-      - name: Commit Baseline Updates
-        uses: stefanzweifel/git-auto-commit-action@v5
+          if ! grep -Eq '^(app/|core/|feature/|lint/|benchmark/|build-logic/|buildSrc/|build.gradle.kts$|settings.gradle.kts$|gradle/|gradle.properties$)' <<< "$changed_files"; then
+            echo "No source or build-logic files changed; skipping impacted Gradle tasks."
+            echo "tasks=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
+          TASKS="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
+
+          # A root build/dependency change can map to the selector's broad fallback.
+          # Keep PR feedback bounded; the merge-group run performs the exhaustive checks.
+          if [[ "$TASKS" == "test lint" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            TASKS=":app:compileDemoDebugKotlin"
+          fi
+
+          echo "tasks=$TASKS" >> "$GITHUB_OUTPUT"
+          echo "Selected impacted tasks: ${TASKS:-none}"
+
+      - name: Upload Lint Diagnostic Reports
+        if: ${{  always() && github.event_name != 'pull_request'  }}
+        uses: actions/upload-artifact@v4
         with:
-          commit_message: "chore: auto-update lint baselines (ratchet)"
-          file_pattern: "**/lint-baseline.xml"
+          name: lint-diagnostics
+          path: |
+            **/build/reports/lint-results-*.html
+            **/build/reports/lint-results-*.sarif
+            **/build/intermediates/lint_intermediate_text_report/**/*.txt
+          if-no-files-found: warn
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   selective-verification:
     name: Level 1 - Impacted Verification
     runs-on: ubuntu-latest
-    needs: [architecture-gate]
-    if: needs.architecture-gate.outputs.impact_tasks != ''
+    timeout-minutes: 45
+    needs: [ architecture-gate ]
+    if: ${{  needs.architecture-gate.outputs.impact_tasks != ''  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -66,20 +148,115 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
 
-      - name: Run Impacted Tasks
-        run: ./gradlew ${{ needs.architecture-gate.outputs.impact_tasks }} --no-configuration-cache --info
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
-      - name: Verify Coverage Ratchet
-        run: ./gradlew jacocoProdDebugVerification --no-configuration-cache --info
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Prepare Firebase configuration for impacted verification
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+          FULL_VALIDATION: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+        shell: bash
+        run: |
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
+            bash ./.github/scripts/prepare-google-services.sh demo prod
+          else
+            bash ./.github/scripts/prepare-google-services.sh demo
+          fi
+
+      - name: Run Impacted Tasks and Coverage Ratchet
+        env:
+          IMPACT_TASKS: ${{  needs.architecture-gate.outputs.impact_tasks  }}
+          FULL_VALIDATION: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+        shell: bash
+        run: |
+          read -r -a tasks <<< "$IMPACT_TASKS"
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
+            tasks+=(jacocoProdDebugVerification)
+          fi
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh impacted-verification ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  release-r8-validation:
+    name: Level 3 - Minified Release (R8 / Protobuf)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      GRADLE_CI_MAX_WORKERS: 2
+    if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android SDK properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Set Executable Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
+      # Both release flavors are minified; PR validation does not require signing secrets.
+      - name: Assemble Minified Demo and Production Releases
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh dual-flavor-release ./gradlew :app:assembleDemoRelease :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
+
+      - name: Verify R8 Outputs for Both Release Flavors
+        shell: bash
+        run: |
+          for flavor in demo prod; do
+            variant="${flavor}Release"
+            test -s "app/build/outputs/mapping/${variant}/mapping.txt"
+            test -s "app/build/outputs/apk/${flavor}/release/app-${flavor}-release-unsigned.apk" \
+              || test -s "app/build/outputs/apk/${flavor}/release/app-${flavor}-release.apk"
+          done
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   smoke-test:
     name: Level 2 - Smoke UI (Pixel 2)
-    runs-on: ubuntu-latest
-    needs: [selective-verification]
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    needs: [ selective-verification ]
+    timeout-minutes: 75
+    env:
+      GRADLE_CI_MAX_WORKERS: 2
+    if: ${{  (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.selective-verification.result == 'success'  }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -88,8 +265,47 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: 17
-          distribution: 'temurin'
-          cache: gradle
+          distribution: temurin
 
-      - name: Run Smoke UI Tests
-        run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --info
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
+      - name: Compile all module instrumented test source sets
+        run: |
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh instrumentation-compile ./gradlew \
+            :app:assembleDemoDebugAndroidTest \
+            :app:assembleProdDebugAndroidTest \
+            :core:common:assembleDemoDebugAndroidTest \
+            :core:common:assembleProdDebugAndroidTest \
+            :core:database:assembleDemoDebugAndroidTest \
+            :core:database:assembleProdDebugAndroidTest \
+            :core:datastore:assembleDemoDebugAndroidTest \
+            :core:datastore:assembleProdDebugAndroidTest \
+            :core:player-ui:assembleDemoDebugAndroidTest \
+            :core:player-ui:assembleProdDebugAndroidTest \
+            --no-configuration-cache --stacktrace --console=plain
+
+      - name: Run shared local API 34 smoke UI diagnostics
+        uses: ./.github/actions/smoke-ui-local
+        with:
+          artifact_name: smoke-ui-pr-${{ github.run_number }}
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5

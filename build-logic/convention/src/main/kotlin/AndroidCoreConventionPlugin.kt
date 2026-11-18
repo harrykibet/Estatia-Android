@@ -12,7 +12,7 @@ class AndroidCoreConventionPlugin : Plugin<Project> {
         pluginManager.apply("com.estatia.realestate.apps.android.jacoco")
 
         dependencies {
-            "implementation"(project(":core:architecture"))
+            "implementation"(project(":core:architecture-annotations"))
         }
     }
 }

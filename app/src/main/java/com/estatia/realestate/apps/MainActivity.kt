@@ -108,13 +108,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Ensure the uiState is collected so the flow starts emitting Success
-        lifecycleScope.launch {
-            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect {}
-            }
-        }
-
         splashScreen.setKeepOnScreenCondition { viewModel.uiState.value.shouldKeepSplashScreen() }
 
         setContent {
@@ -126,7 +119,8 @@ class MainActivity : ComponentActivity() {
 
             val currentTimeZone by appState.currentTimeZone.collectAsStateWithLifecycle()
             val isSystemDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-            val isInPiPMode by viewModel.isInPiPMode.collectAsStateWithLifecycle()
+            val mainActivityState by viewModel.uiState.collectAsStateWithLifecycle()
+            val isInPiPMode = mainActivityState.isInPiPMode
             val environmentState by playerManager.environment.collectAsStateWithLifecycle()
 
             CompositionLocalProvider(

@@ -12,47 +12,11 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         providers.gradleProperty(name).orNull
             ?: providers.environmentVariable(name).orNull
 
-    /**
-     * Generates a debug keystore at the given path if it doesn't already exist.
-     * Uses the same defaults as the Android SDK debug keystore so behavior is
-     * identical to what Android Studio would generate automatically.
-     */
-    private fun ensureDebugKeystore(keystoreFile: File) {
-        if (keystoreFile.exists()) return
-
-        keystoreFile.parentFile?.mkdirs()
-
-        // Delegate to keytool — available in any JDK, which Gradle already requires
-        val keytoolPath = "${System.getProperty("java.home")}/bin/keytool"
-
-        val process = ProcessBuilder(
-            keytoolPath,
-            "-genkeypair",
-            "-keystore", keystoreFile.absolutePath,
-            "-alias", "androiddebugkey",
-            "-keyalg", "RSA",
-            "-keysize", "2048",
-            "-validity", "10000",
-            "-keypass", "android",
-            "-storepass", "android",
-            "-dname", "CN=Android Debug,O=Android,C=US",
-            "-storetype", "JKS"
-        )
-            .redirectErrorStream(true)
-            .start()
-
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            val output = process.inputStream.bufferedReader().readText()
-            error("Failed to generate debug keystore at ${keystoreFile.absolutePath}:\n$output")
-        }
-    }
 
     override fun apply(target: Project) = with(target) {
 
         pluginManager.apply("com.android.application")
         pluginManager.apply("androidx.baselineprofile")
-        pluginManager.apply("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
         pluginManager.apply("com.estatia.realestate.apps.android.hilt")
         pluginManager.apply("com.estatia.realestate.apps.android.config")
         pluginManager.apply("com.estatia.realestate.apps.android.protolite")
@@ -62,6 +26,43 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         pluginManager.apply("com.estatia.realestate.apps.android.compose")
         pluginManager.apply("com.estatia.realestate.apps.android.packaging")
         pluginManager.apply("com.estatia.realestate.apps.android.jacoco")
+
+        // Generate the Android debug keystore only when a debug APK is packaged.
+        // Keeping external processes out of project configuration makes Gradle
+        // configuration-cache and GitHub dependency-submission validation safe.
+        val debugKeystoreFile = rootProject.file("AppKeyStore/debug.keystore")
+        val generateDebugKeystore = tasks.register("generateDebugKeystore") {
+            outputs.file(debugKeystoreFile)
+            doLast {
+                if (!debugKeystoreFile.exists()) {
+                    debugKeystoreFile.parentFile?.mkdirs()
+                    val keytoolPath = File(System.getProperty("java.home"), "bin/keytool").absolutePath
+                    val process = ProcessBuilder(
+                        keytoolPath,
+                        "-genkeypair",
+                        "-keystore", debugKeystoreFile.absolutePath,
+                        "-alias", "androiddebugkey",
+                        "-keyalg", "RSA",
+                        "-keysize", "2048",
+                        "-validity", "10000",
+                        "-keypass", "android",
+                        "-storepass", "android",
+                        "-dname", "CN=Android Debug,O=Android,C=US",
+                        "-storetype", "JKS"
+                    ).redirectErrorStream(true).start()
+                    val output = process.inputStream.bufferedReader().readText()
+                    val exitCode = process.waitFor()
+                    if (exitCode != 0) {
+                        error("Failed to generate debug keystore at ${debugKeystoreFile.absolutePath}:\\n$output")
+                    }
+                }
+            }
+        }
+        tasks.configureEach {
+            if (name.startsWith("package", ignoreCase = true) && name.contains("Debug", ignoreCase = true)) {
+                dependsOn(generateDebugKeystore)
+            }
+        }
 
         extensions.configure<ApplicationExtension>("android") {
 
@@ -90,9 +91,6 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 // Fixed credentials match Android SDK defaults — safe to hardcode,
                 // nothing sensitive, debug APKs are never shipped.
                 getByName("debug") {
-                    val debugKeystoreFile = rootProject.file("AppKeyStore/debug.keystore")
-                    ensureDebugKeystore(debugKeystoreFile)
-
                     storeFile = debugKeystoreFile
                     storePassword = "android"
                     keyAlias = "androiddebugkey"
@@ -156,8 +154,18 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                     group = "verification"
                     description = "Audits release symbols for variant ${variant.name} (LAW-038)."
                     this.mappingFile.set(mappingFile)
-                    this.forbiddenPatterns.set(listOf("""\bSecret\w*""", """\bInternalImpl\w*""", """\bSecretStore\w*""", """\bDebugConfig\w*"""))
-                    this.allowlist.set(listOf("ApiKeyValidator", "IApiKeyValidator", "ApiKeyValidatorModule"))
+                    this.applicationPackage.set("com.estatia.realestate.apps")
+                    this.forbiddenPatterns.set(
+                        listOf(
+                            """\bSecret\w*""",
+                            """\bInternalImpl\w*""",
+                            """\bSecretStore\w*""",
+                            """\bDebugConfig\w*"""
+                        )
+                    )
+                    this.allowlist.set(
+                        listOf("ApiKeyValidator", "IApiKeyValidator", "ApiKeyValidatorModule")
+                    )
                     this.reportFile.set(layout.buildDirectory.file("reports/architecture/obfuscation/${variant.name}.txt"))
                 }
                 
@@ -169,7 +177,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         }
 
         dependencies {
-            "implementation"(project(":core:architecture"))
+            "implementation"(project(":core:architecture-annotations"))
         }
     }
 }

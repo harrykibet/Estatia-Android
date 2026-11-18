@@ -33,7 +33,7 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 
 /**
  * Module providing remote data source implementations for the production environment.
- * Uses AWS Amplify and Pinpoint as the primary infrastructure.
+ * Uses Firebase and the configured AWS Amplify categories. Remote Pinpoint analytics is disabled.
  */
 @Module
 @InstallIn(SingletonComponent::class)
