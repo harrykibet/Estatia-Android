@@ -4,15 +4,15 @@ set -euo pipefail
 # Decode and validate the production signing keystore at the exact path used
 # by AndroidApplicationConventionPlugin. Secret values are never printed.
 required_secrets=(KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD)
-for secret_name in "\${required_secrets[@]}"; do
-  secret_value="\${!secret_name:-}"
+for secret_name in "${required_secrets[@]}"; do
+  secret_value="${!secret_name:-}"
   if [[ -z "$secret_value" || -z "$(printf '%s' "$secret_value" | tr -d '[:space:]')" ]]; then
     echo "::error::Required repository Actions secret $secret_name is missing or empty."
     exit 1
   fi
 done
 
-workspace="\${GITHUB_WORKSPACE:-$PWD}"
+workspace="${GITHUB_WORKSPACE:-$PWD}"
 keystore_dir="$workspace/AppKeyStore"
 keystore_path="$keystore_dir/keystore.jks"
 mkdir -p "$keystore_dir"
@@ -29,13 +29,13 @@ if ! printf '%s' "$encoded_keystore" | base64 --decode > "$temporary_keystore"; 
   echo "::error::KEYSTORE_BASE64 is not valid Base64."
   exit 1
 fi
-unset encoded_keystore
+unset encoded_keystore KEYSTORE_BASE64
 if [[ ! -s "$temporary_keystore" ]]; then
   echo "::error::The decoded keystore is empty."
   exit 1
 fi
 
-if [[ -n "\${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/keytool" ]]; then
+if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/keytool" ]]; then
   keytool_bin="$JAVA_HOME/bin/keytool"
 else
   keytool_bin="$(command -v keytool || true)"
@@ -53,7 +53,7 @@ if ! "$keytool_bin" -list -keystore "$temporary_keystore" \
 fi
 
 # A temporary CSR proves the alias is a private-key entry and KEY_PASSWORD unlocks it.
-temporary_csr="$(mktemp "\${RUNNER_TEMP:-/tmp}/estatia-signing-check.XXXXXX.csr")"
+temporary_csr="$(mktemp "${RUNNER_TEMP:-/tmp}/estatia-signing-check.XXXXXX.csr")"
 if ! "$keytool_bin" -certreq -keystore "$temporary_keystore" \
   -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" \
   -keypass:env KEY_PASSWORD -file "$temporary_csr" >/dev/null 2>&1; then
