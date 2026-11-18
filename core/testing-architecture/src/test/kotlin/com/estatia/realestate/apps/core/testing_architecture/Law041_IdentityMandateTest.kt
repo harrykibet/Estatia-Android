@@ -49,12 +49,12 @@ class Law041_IdentityMandateTest {
         }
 
         val violationDetails = missingIdentity.joinToString(separator = "\n") { decl ->
-            " - \${decl.name}: \${decl.path}"
+            " - ${decl.name}: ${decl.path}"
         }
         val failureMessage = buildString {
             appendLine("LAW-041: Every governed top-level class or interface must declare a recognized architectural identity.")
             appendLine("WHAT: Anonymous component detected.")
-            appendLine("WHY: \${Law.LAW_041.rationale}")
+            appendLine("WHY: ${Law.LAW_041.rationale}")
             appendLine("GOVERNANCE: High-fidelity semantic checks require explicit metadata.")
             if (missingIdentity.isEmpty()) {
                 appendLine("Missing declarations: <none>")
@@ -62,7 +62,7 @@ class Law041_IdentityMandateTest {
                 appendLine("Missing declarations:")
                 appendLine(violationDetails)
             }
-            append("[LAW: \${Law.LAW_041.id} | RISK: \${Law.LAW_041.risk.name} | CONFIDENCE: \${Law.LAW_041.confidence.name}]")
+            append("[LAW: ${Law.LAW_041.id} | RISK: ${Law.LAW_041.risk.name} | CONFIDENCE: ${Law.LAW_041.confidence.name}]")
         }
 
         org.junit.Assert.assertTrue(failureMessage, missingIdentity.isEmpty())
