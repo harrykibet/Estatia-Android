@@ -48,7 +48,7 @@ jobs:
           cache-provider: basic
 
       - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
       - name: Install Android Emulator and API 34 system image
         shell: bash
@@ -91,7 +91,7 @@ jobs:
 
           echo "=== CPU virtualization flags ==="
           flags="$(grep -m1 '^flags' /proc/cpuinfo || true)"
-          printf '%s\n' "$flags" | grep -oE '\\b(vmx|svm)\\b' | sort -u || true
+          printf '%s\n' "$flags" | grep -oE '\b(vmx|svm)\b' | sort -u || true
 
           echo "=== KVM device ==="
           if [[ ! -c /dev/kvm ]]; then
@@ -178,7 +178,7 @@ jobs:
 
           booted=false
           for attempt in $(seq 1 90); do
-            boot_state="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r' || true)"
+            boot_state="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [[ "$boot_state" == "1" ]]; then
               booted=true
               break
