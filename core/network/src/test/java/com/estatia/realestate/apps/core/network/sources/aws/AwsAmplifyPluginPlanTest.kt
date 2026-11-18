@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 class AwsAmplifyPluginPlanTest {
 
     @Test
-    fun \`checked in stub enables only the configured Cognito and S3 plugins\`() {
+    fun checkedInStubEnablesOnlyConfiguredCognitoAndS3Plugins() {
         val configuration = """
             {
               "auth": {
@@ -47,7 +47,7 @@ class AwsAmplifyPluginPlanTest {
     }
 
     @Test
-    fun \`AppSync is enabled only when a complete GraphQL endpoint is configured\`() {
+    fun appSyncRequiresACompleteGraphQlEndpoint() {
         val configuration = """
             {
               "api": {
@@ -74,7 +74,7 @@ class AwsAmplifyPluginPlanTest {
     }
 
     @Test
-    fun \`AppSync is not enabled for an incomplete GraphQL endpoint\`() {
+    fun appSyncRejectsAnIncompleteGraphQlEndpoint() {
         val configuration = """
             {
               "api": {
@@ -101,7 +101,7 @@ class AwsAmplifyPluginPlanTest {
     }
 
     @Test
-    fun \`CloudWatch is enabled only when its separate configuration resource exists\`() {
+    fun cloudWatchRequiresItsSeparateConfigurationResource() {
         val baseConfiguration = """
             {
               "auth": {
