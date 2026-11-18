@@ -2,27 +2,39 @@ package com.estatia.realestate.apps.chaos
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.media3.common.util.UnstableApi
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.estatia.realestate.apps.MainActivity
-import com.estatia.realestate.apps.core.player_engine.core.PlayerPool
 import com.estatia.realestate.apps.core.player_engine.core.PlayerManager
-import dagger.hilt.android.testing.HiltAndroidRule
-import dagger.hilt.android.testing.HiltAndroidTest
+import com.estatia.realestate.apps.core.player_engine.core.PlayerPool
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
-import org.junit.runner.RunWith
 import org.junit.Test
-import javax.inject.Inject
-
+import org.junit.runner.RunWith
 import kotlin.random.Random
+
+/**
+ * Exposes production singletons to instrumentation without installing Hilt's test application.
+ *
+ * These diagnostics deliberately run against EstatiaApplication, so they use the application's
+ * real SingletonComponent rather than @HiltAndroidTest / HiltTestApplication.
+ */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+internal interface FeedGestureChaosEntryPoint {
+    fun playerPool(): PlayerPool
+    fun playerManager(): PlayerManager
+}
 
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
-@HiltAndroidTest
 class FeedGestureChaosTest {
 
     private companion object {
@@ -31,24 +43,26 @@ class FeedGestureChaosTest {
         const val REVERSAL_SCROLL_OPERATIONS = 30
     }
 
-    @get:Rule(order = 0)
-    var hiltRule = HiltAndroidRule(this)
-
-    @get:Rule(order = 1)
+    @get:Rule
     val composeTestRule = createAndroidComposeRule<MainActivity>()
 
-    @Inject
-    lateinit var pool: PlayerPool
-
-    @Inject
-    lateinit var playerManager: PlayerManager
-
+    private lateinit var pool: PlayerPool
+    private lateinit var playerManager: PlayerManager
     private lateinit var device: UiDevice
     private lateinit var random: Random
 
     @Before
     fun setup() {
-        hiltRule.inject()
+        val appContext = InstrumentationRegistry.getInstrumentation()
+            .targetContext
+            .applicationContext
+        val entryPoint = EntryPointAccessors.fromApplication(
+            appContext,
+            FeedGestureChaosEntryPoint::class.java
+        )
+        pool = entryPoint.playerPool()
+        playerManager = entryPoint.playerManager()
+
         device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         random = Random(CHAOS_SEED)
     }
@@ -73,7 +87,10 @@ class FeedGestureChaosTest {
 
         val settledId = playerManager.debugActiveMediaId
         if (settledId != null) {
-            assertTrue("Visible video $settledId was evicted during chaos! (Seed=$CHAOS_SEED)", pool.debugIsIdActive(settledId))
+            assertTrue(
+                "Visible video $settledId was evicted during chaos! (Seed=$CHAOS_SEED)",
+                pool.debugIsIdActive(settledId)
+            )
         }
 
         assertPoolInvariant(opIndex = FAST_FLICK_OPERATIONS)
@@ -92,7 +109,7 @@ class FeedGestureChaosTest {
             device.swipe(centerX, startY, centerX, endY, 10)
             // Swipe Down
             device.swipe(centerX, endY, centerX, startY, 10)
-            
+
             // Check invariant periodically during stress
             if (i % 5 == 0) {
                 assertPoolInvariant(opIndex = i)
@@ -106,10 +123,16 @@ class FeedGestureChaosTest {
 
     private fun assertPoolInvariant(opIndex: Int) {
         val currentCount = pool.debugPlayerCount
-        val maxAllowed = pool.debugMaxPoolSize + 2 
+        val maxAllowed = pool.debugMaxPoolSize + 2
         val context = "Seed=$CHAOS_SEED, Op=$opIndex"
-        
-        assertTrue("Pool size ($currentCount) exceeded max allowed ($maxAllowed) - $context", currentCount <= maxAllowed)
-        assertFalse("Duplicate player instances detected in pool - $context", pool.debugHasDuplicateInstances())
+
+        assertTrue(
+            "Pool size ($currentCount) exceeded max allowed ($maxAllowed) - $context",
+            currentCount <= maxAllowed
+        )
+        assertFalse(
+            "Duplicate player instances detected in pool - $context",
+            pool.debugHasDuplicateInstances()
+        )
     }
 }
