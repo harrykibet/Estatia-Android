@@ -2,6 +2,7 @@ package com.estatia.realestate.apps.core.analytics.di
 
 import com.estatia.realestate.apps.core.analytics.FirebaseAnalyticsHelper
 import com.estatia.realestate.apps.core.analytics.IAnalyticsHelper
+import com.estatia.realestate.apps.core.analytics.MeterRegistryFactory
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 import com.estatia.realestate.apps.core.domain.config.INetworkConfig
 import dagger.Binds
@@ -11,7 +12,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import io.micrometer.core.instrument.Clock
-import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.registry.otlp.OtlpConfig
 import io.micrometer.registry.otlp.OtlpMeterRegistry
 import javax.inject.Singleton
@@ -27,18 +27,18 @@ abstract class ProdAnalyticsModule {
     companion object {
         @Provides
         @IntoSet
-        fun provideOtlpMeterRegistry(
+        fun provideOtlpMeterRegistryFactory(
             networkConfig: INetworkConfig
-        ): MeterRegistry {
+        ): MeterRegistryFactory = MeterRegistryFactory {
             val otlpConfig = object : OtlpConfig {
                 override fun url(): String {
                     val base = networkConfig.baseUrl
-                    return if (base.endsWith("/")) "${base}v1/metrics" else "$base/v1/metrics"
+                    return if (base.endsWith("/")) "${base}v1/metrics" else "${base}/v1/metrics"
                 }
                 override fun get(key: String): String? = null
                 override fun step(): java.time.Duration = java.time.Duration.ofMinutes(1)
             }
-            return OtlpMeterRegistry(otlpConfig, Clock.SYSTEM)
+            OtlpMeterRegistry(otlpConfig, Clock.SYSTEM)
         }
     }
 }

@@ -12,9 +12,6 @@ import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.logging.LoggingMeterRegistry
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
-import io.micrometer.registry.otlp.OtlpConfig
-import io.micrometer.registry.otlp.OtlpMeterRegistry
-import io.micrometer.core.instrument.Clock
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -33,14 +30,13 @@ class ObservabilityInitializerTest {
     private lateinit var securityConfig: ISecurityConfig
     private lateinit var registrar: FakeMetricsRegistrar
     private lateinit var initializer: ObservabilityInitializer
-    
+    private lateinit var testRegistries: Set<MeterRegistry>
+    private lateinit var meterRegistryFactories: Set<MeterRegistryFactory>
+    private var networkConfigReady = false
+    private var factoryCreationCount = 0
+
     private val chaosEnvironment = ChaosEnvironmentController(
         EnvironmentState(false, false, 10_000_000L)
-    )
-
-    private val testRegistries = setOf(
-        LoggingMeterRegistry(),
-        PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
     )
 
     @Before
@@ -51,17 +47,39 @@ class ObservabilityInitializerTest {
         networkConfig = mockk(relaxed = true)
         securityConfig = mockk(relaxed = true)
         registrar = FakeMetricsRegistrar()
+        networkConfigReady = false
+        factoryCreationCount = 0
+
+        testRegistries = setOf(
+            LoggingMeterRegistry(),
+            PrometheusMeterRegistry(PrometheusConfig.DEFAULT)
+        )
+        meterRegistryFactories = testRegistries.map { registry ->
+            MeterRegistryFactory {
+                assertTrue(
+                    "Meter registries must not be created before network configuration is ready",
+                    networkConfigReady
+                )
+                factoryCreationCount++
+                registry
+            }
+        }.toSet()
+
+        coEvery { networkConfig.awaitReady() } coAnswers {
+            networkConfigReady = true
+            Unit
+        }
     }
 
     @Test
     fun `initialize adds multiple registries when telemetry enabled`() = runTest {
         every { securityConfig.isTelemetryEnabled } returns true
-        coEvery { networkConfig.awaitReady() } returns Unit
-        
+
         initializer = createInitializer(isDebug = false)
         initializer.initialize()
 
         assertEquals(testRegistries.size, registrar.registered.size)
+        assertEquals(testRegistries.size, factoryCreationCount)
         assertTrue(registrar.registered.any { it is LoggingMeterRegistry })
         assertTrue(registrar.registered.any { it is PrometheusMeterRegistry })
     }
@@ -69,23 +87,35 @@ class ObservabilityInitializerTest {
     @Test
     fun `initialize adds registries when in debug mode regardless of telemetry flag`() = runTest {
         every { securityConfig.isTelemetryEnabled } returns false
-        coEvery { networkConfig.awaitReady() } returns Unit
-        
+
         initializer = createInitializer(isDebug = true)
         initializer.initialize()
 
         assertEquals(testRegistries.size, registrar.registered.size)
+        assertEquals(testRegistries.size, factoryCreationCount)
     }
 
     @Test
-    fun `initialize does not add registries when telemetry disabled and not in debug`() = runTest {
+    fun `initialize does not create or add registries when telemetry disabled and not in debug`() = runTest {
         every { securityConfig.isTelemetryEnabled } returns false
-        coEvery { networkConfig.awaitReady() } returns Unit
-        
+
         initializer = createInitializer(isDebug = false)
         initializer.initialize()
 
         assertTrue(registrar.registered.isEmpty())
+        assertEquals(0, factoryCreationCount)
+    }
+
+    @Test
+    fun `initialize reuses lazily created registries on repeated calls`() = runTest {
+        every { securityConfig.isTelemetryEnabled } returns true
+
+        initializer = createInitializer(isDebug = false)
+        initializer.initialize()
+        initializer.initialize()
+
+        assertEquals(testRegistries.size, factoryCreationCount)
+        assertEquals(testRegistries.size * 2, registrar.registered.size)
     }
 
     private fun createInitializer(isDebug: Boolean) = ObservabilityInitializer(
@@ -94,7 +124,7 @@ class ObservabilityInitializerTest {
         authRepository,
         networkConfig,
         securityConfig,
-        testRegistries,
+        meterRegistryFactories,
         registrar,
         FakeBuildEnvironment(isDebug)
     )

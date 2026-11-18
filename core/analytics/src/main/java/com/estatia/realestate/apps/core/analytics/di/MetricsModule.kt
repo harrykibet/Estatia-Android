@@ -1,5 +1,6 @@
 package com.estatia.realestate.apps.core.analytics.di
 
+import com.estatia.realestate.apps.core.analytics.MeterRegistryFactory
 import com.estatia.realestate.apps.core.analytics.MetricsRegistrar
 import com.estatia.realestate.apps.core.analytics.MicrometerMetricsRegistrar
 import io.micrometer.core.instrument.MeterRegistry
@@ -29,8 +30,8 @@ internal abstract class MetricsModule {
     companion object {
         @Provides
         @IntoSet
-        fun providePrometheusMeterRegistry(): MeterRegistry =
-            PrometheusMeterRegistry(createAndroidPrometheusConfig())
+        fun providePrometheusMeterRegistryFactory(): MeterRegistryFactory =
+            MeterRegistryFactory { PrometheusMeterRegistry(createAndroidPrometheusConfig()) }
     }
 }
 
