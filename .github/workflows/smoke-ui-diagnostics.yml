@@ -140,6 +140,31 @@ jobs:
             :app:assembleProdDebugAndroidTest \
             --no-configuration-cache --stacktrace --console=plain
 
+      - name: Verify AndroidX Test runtime dependencies
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+
+          configuration="prodDebugAndroidTestRuntimeClasspath"
+          for artifact in runner monitor; do
+            report="$(./gradlew :app:dependencyInsight \
+              --configuration "$configuration" \
+              --dependency "androidx.test:$artifact" \
+              --no-configuration-cache --console=plain 2>&1)"
+            printf '%s\n' "$report"
+
+            case "$artifact" in
+              runner) expected="androidx.test:runner:1.7.0" ;;
+              monitor) expected="androidx.test:monitor:1.8.0" ;;
+            esac
+
+            if ! grep -Fq "$expected" <<< "$report"; then
+              echo "::error::Expected $expected on $configuration but it was not resolved."
+              exit 1
+            fi
+          done
+
       - name: Create and verify Pixel 2 API 34 AVD
         shell: bash
         timeout-minutes: 5
@@ -302,6 +327,9 @@ jobs:
         timeout-minutes: 22
         run: |
           set -euo pipefail
+
+          # Never allow reports from an earlier invocation to satisfy the test-count guard.
+          rm -rf app/build/outputs/androidTest-results/connected app/build/reports/androidTests/connected
 
           # Keep device-side runner output so discovery and instrumentation errors are diagnosable.
           adb logcat -c
