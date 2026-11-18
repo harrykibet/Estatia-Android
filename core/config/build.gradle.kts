@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.estatia.android.core)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {

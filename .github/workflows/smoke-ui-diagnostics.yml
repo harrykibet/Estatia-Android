@@ -153,6 +153,13 @@ jobs:
             fi
           done
 
+      - name: Run config parser unit tests
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          ./gradlew :core:config:testProdDebugUnitTest \
+            --no-configuration-cache --stacktrace --console=plain
+
       - name: Build app and instrumentation APKs
         shell: bash
         timeout-minutes: 20

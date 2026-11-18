@@ -72,6 +72,25 @@ class ConfigParserTest {
     }
 
     @Test
+    fun `parsePlayer deserializes player tuning fragment`() {
+        val json = """
+            {
+              "player_tuning": {
+                "watchdog_timeout_ms": 4200,
+                "default_cache_bytes": 268435456,
+                "vod_buffer_multiplier": 0.75
+              }
+            }
+        """.trimIndent()
+
+        val result = parser.parsePlayer(json)
+
+        assertEquals(4200L, result.watchdogTimeoutMs)
+        assertEquals(268435456L, result.defaultCacheBytes)
+        assertEquals(0.75, result.vodBufferMultiplier, 0.0)
+    }
+
+    @Test
     fun `parseNetwork returns populated model`() {
         val json = """
             {
