@@ -35,6 +35,7 @@ We use a "funnel" approach where expensive operations are deferred to later stag
 *   **Key Operations**:
     *   **Exhaustive Analysis**: Full `./gradlew lint` and `./gradlew test` across all modules.
     *   **Fleet Testing**: Runs instrumented tests across four distinct device shapes (Small Phone, Modern Pixel, Medium Phone, Tablet).
+    *   **Linux Emulator Readiness**: The Main Branch workflow grants the hosted runner KVM access and installs the Android Emulator SDK package once before Gradle Managed Device setup, avoiding concurrent SDK package installation races.
     *   **Release Build**: `assembleProdRelease` with full R8 shrinking and production signing.
     *   **Artifact Archival**: Signed APKs are archived for internal QA distribution.
 
