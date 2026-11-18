@@ -24,38 +24,48 @@ class Law041_IdentityMandateTest {
         val classes = Konsist.scopeFromProject().classes()
         val interfaces = Konsist.scopeFromProject().interfaces()
 
-        (classes + interfaces)
+        val governedDeclarations = (classes + interfaces)
             .filter { it.isTopLevel }
-            .filterNot { decl -> 
+            .filterNot { decl ->
                 val path = decl.path.replace("\\", "/")
                 ArchitecturalPolicy.Law041.FoundationModules.any { path.contains(it) } ||
-                path.contains("/test/") || 
-                path.contains("/androidTest/") ||
-                path.contains("/testFixtures/") ||
-                path.contains("/build/generated/") ||
-                path.contains("/build/kspCaches/")
+                    path.contains("/test/") ||
+                    path.contains("/androidTest/") ||
+                    path.contains("/testFixtures/") ||
+                    path.contains("/build/generated/") ||
+                    path.contains("/build/kspCaches/")
             }
-            // 3. Exclude passive types: enums, annotation classes
-            .filterNot { 
+            // Exclude passive types: enums and annotation classes.
+            .filterNot {
                 (it as? KoClassDeclaration)?.hasEnumModifier == true ||
-                (it as? KoClassDeclaration)?.hasAnnotationModifier == true
+                    (it as? KoClassDeclaration)?.hasAnnotationModifier == true
             }
-            // 4. Enforce identity via annotations
-            .assertTrue(
-                additionalMessage = """
-                    |
-                    |WHAT: Anonymous component detected. Every class or interface must declare its role.
-                    |WHY: ${Law.LAW_041.rationale}
-                    |GOVERNANCE: High-fidelity semantic checks require explicit metadata.
-                    |
-                    |[LAW: ${Law.LAW_041.id} | RISK: ${Law.LAW_041.risk.name} | CONFIDENCE: ${Law.LAW_041.confidence.name}]
-                """.trimMargin()
-            ) { decl ->
-                decl.annotations.any { ann -> 
-                    val name = ann.name.substringAfterLast(".")
-                    ArchitecturalPolicy.Law041.RecognizedArchitecturalAnnotations.contains(name)
-                }
+
+        val missingIdentity = governedDeclarations.filterNot { decl ->
+            decl.annotations.any { ann ->
+                val name = ann.name.substringAfterLast(".")
+                ArchitecturalPolicy.Law041.RecognizedArchitecturalAnnotations.contains(name)
             }
+        }
+
+        val violationDetails = missingIdentity.joinToString(separator = "\n") { decl ->
+            " - \${decl.name}: \${decl.path}"
+        }
+        val failureMessage = buildString {
+            appendLine("LAW-041: Every governed top-level class or interface must declare a recognized architectural identity.")
+            appendLine("WHAT: Anonymous component detected.")
+            appendLine("WHY: \${Law.LAW_041.rationale}")
+            appendLine("GOVERNANCE: High-fidelity semantic checks require explicit metadata.")
+            if (missingIdentity.isEmpty()) {
+                appendLine("Missing declarations: <none>")
+            } else {
+                appendLine("Missing declarations:")
+                appendLine(violationDetails)
+            }
+            append("[LAW: \${Law.LAW_041.id} | RISK: \${Law.LAW_041.risk.name} | CONFIDENCE: \${Law.LAW_041.confidence.name}]")
+        }
+
+        org.junit.Assert.assertTrue(failureMessage, missingIdentity.isEmpty())
     }
 
     @Test

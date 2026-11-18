@@ -1,5 +1,7 @@
 package com.estatia.realestate.apps.core.network.sources.aws
 
+import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
+
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * Pinpoint is deliberately excluded: AWS ended support for its engagement and
  * analytics capabilities on October 30, 2026.
  */
+@Utility
 internal data class AwsAmplifyPluginPlan(
     val authentication: Boolean,
     val api: Boolean,
