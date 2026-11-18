@@ -77,8 +77,8 @@ internal class AwsBackendInitializer @Inject constructor(
 
             logger.i(
                 "AwsBackend",
-                "Amplify initialized (Cognito=\${plan.authentication}, AppSync=\${plan.api}, " +
-                    "S3=\${plan.storage}, CloudWatch=\${plan.cloudWatchLogging})"
+                "Amplify initialized (Cognito=" + plan.authentication + ", AppSync=" + plan.api +
+                    ", S3=" + plan.storage + ", CloudWatch=" + plan.cloudWatchLogging + ")"
             )
             logger.w(
                 "AwsBackend",
