@@ -301,9 +301,65 @@ jobs:
         shell: bash
         timeout-minutes: 22
         run: |
-          set -o pipefail
+          set -euo pipefail
+
+          # Keep device-side runner output so discovery and instrumentation errors are diagnosable.
+          adb logcat -c
           ./gradlew :app:connectedProdDebugAndroidTest \
             --no-configuration-cache --stacktrace --info --console=plain
+
+          # A successful Gradle task is not sufficient: AGP can report success with zero tests.
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          import xml.etree.ElementTree as ET
+
+          reports_root = Path("app/build/outputs/androidTest-results/connected")
+          reports = sorted(reports_root.rglob("TEST-*.xml")) if reports_root.exists() else []
+          if not reports:
+              print("::error::No Android instrumentation XML reports were produced.")
+              sys.exit(1)
+
+          total = failures = errors = skipped = 0
+          discovered = set()
+          for report in reports:
+              try:
+                  root = ET.parse(report).getroot()
+              except ET.ParseError as exc:
+                  print(f"::error::Invalid instrumentation XML {report}: {exc}")
+                  sys.exit(1)
+
+              suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+              if not suites and root.tag == "testsuites":
+                  total += int(root.attrib.get("tests", "0"))
+                  failures += int(root.attrib.get("failures", "0"))
+                  errors += int(root.attrib.get("errors", "0"))
+                  skipped += int(root.attrib.get("skipped", "0"))
+              for suite in suites:
+                  cases = list(suite.iter("testcase"))
+                  total += int(suite.attrib.get("tests", str(len(cases))))
+                  failures += int(suite.attrib.get("failures", "0"))
+                  errors += int(suite.attrib.get("errors", "0"))
+                  skipped += int(suite.attrib.get("skipped", "0"))
+                  discovered.update(case.attrib.get("name", "") for case in cases)
+
+              print(f"Instrumentation report: {report}")
+              print(f"  tests={root.attrib.get('tests', 'n/a')} failures={root.attrib.get('failures', 'n/a')} errors={root.attrib.get('errors', 'n/a')} skipped={root.attrib.get('skipped', 'n/a')}")
+
+          expected = {"fastFlickThroughFeed", "rapidReversalScroll"}
+          missing = sorted(expected - discovered)
+          print(f"Total executed tests: {total}")
+          print(f"Discovered test methods: {', '.join(sorted(discovered)) or '(none)'}")
+          if total < len(expected) or missing:
+              print("::error::Instrumentation did not execute both expected FeedGestureChaosTest methods.")
+              if missing:
+                  print(f"Missing test methods: {', '.join(missing)}")
+              sys.exit(1)
+          if failures or errors:
+              print(f"::error::Instrumentation reported failures={failures}, errors={errors}.")
+              sys.exit(1)
+          print("Both FeedGestureChaosTest methods executed without failures.")
+          PY
 
       - name: Collect emulator and test diagnostics
         if: always()
@@ -336,6 +392,13 @@ jobs:
 
           if [[ -f "$RUNNER_TEMP/estatia-emulator.log" ]]; then
             tail -n 500 "$RUNNER_TEMP/estatia-emulator.log" > "$output/emulator.log"
+          fi
+
+          # Preserve device-side AndroidJUnitRunner/UTP messages, including test discovery counts.
+          if command -v adb >/dev/null 2>&1 && timeout 10s adb get-state >/dev/null 2>&1; then
+            timeout 20s adb logcat -d -v threadtime -t 12000 > "$output/instrumentation-logcat.txt" 2>&1 || true
+            grep -E 'AndroidJUnitRunner|TestRunner|Instrumentation|HiltTestApplication|INSTRUMENTATION_' \
+              "$output/instrumentation-logcat.txt" > "$output/instrumentation-runner.log" || true
           fi
 
           for result_dir in \

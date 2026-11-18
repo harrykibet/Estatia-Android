@@ -3,6 +3,7 @@ package com.estatia.realestate.apps.chaos
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.media3.common.util.UnstableApi
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.uiautomator.UiDevice
 import com.estatia.realestate.apps.MainActivity
 import com.estatia.realestate.apps.core.player_engine.core.PlayerPool
@@ -13,12 +14,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
+import org.junit.runner.RunWith
 import org.junit.Test
 import javax.inject.Inject
 
 import kotlin.random.Random
 
 @UnstableApi
+@RunWith(AndroidJUnit4::class)
 @HiltAndroidTest
 class FeedGestureChaosTest {
 
