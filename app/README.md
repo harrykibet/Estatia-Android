@@ -19,7 +19,7 @@ The `app` module requires two critical configuration files to enable remote back
 ### AWS Amplify (`amplifyconfiguration.json`)
 - **Location**: `app/src/main/res/raw/amplifyconfiguration.json`
 - **Purpose**: This file contains the endpoint information, regions, and client IDs for AWS services managed via the Amplify SDK.
-- **Note**: The version committed to source control is a **stub/placeholder** configuration. It is included explicitly (and not gitignored like `google-services.json`) to demonstrate that the application is fully "AWS Ready" and to show the expected structure for reviewers. In a production environment, this file should be excluded from the repository.
+- **Note**: The version committed to source control is a **stub/placeholder** for local builds and review. It does not establish live AWS connectivity; replace it with environment-specific configuration generated from deployed resources before enabling production AWS operations.
 - **Configured Services in the checked-in stub**:
     - **Auth**: Cognito User Pool and Identity Pool settings (replace placeholder IDs with deployed resources before production use).
     - **Storage**: S3 bucket information for property media uploads.
