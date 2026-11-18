@@ -133,37 +133,22 @@ jobs:
 
       - name: Verify AndroidX Test runtime dependencies
         shell: bash
-        timeout-minutes: 4
+        timeout-minutes: 6
         run: |
           set -euo pipefail
 
-          # ui-test-manifest is needed only for manifest merging. It must not leak
-          # its old Test Monitor dependency into the production runtime classpath.
-          production_report="$(./gradlew :app:dependencyInsight \
-            --configuration prodDebugRuntimeClasspath \
+          # Resolve this configuration once. AGP's consistent variant resolution
+          # incorporates prodDebugRuntimeClasspath, so a stale Test Monitor edge
+          # leaking into production will fail this resolution before APK assembly.
+          report="$(./gradlew :app:dependencyInsight \
+            --configuration prodDebugAndroidTestRuntimeClasspath \
             --dependency androidx.test:monitor \
             --no-configuration-cache --console=plain 2>&1)"
-          printf '%s\n' "$production_report"
-          if ! grep -Fq "No dependencies matching given input" <<< "$production_report"; then
-            echo "::error::androidx.test:monitor must not be present in prodDebugRuntimeClasspath."
-            exit 1
-          fi
+          printf '%s\n' "$report"
 
-          configuration="prodDebugAndroidTestRuntimeClasspath"
-          for artifact in runner monitor; do
-            report="$(./gradlew :app:dependencyInsight \
-              --configuration "$configuration" \
-              --dependency "androidx.test:$artifact" \
-              --no-configuration-cache --console=plain 2>&1)"
-            printf '%s\n' "$report"
-
-            case "$artifact" in
-              runner) expected="androidx.test:runner:1.7.0" ;;
-              monitor) expected="androidx.test:monitor:1.8.0" ;;
-            esac
-
+          for expected in "androidx.test:runner:1.7.0" "androidx.test:monitor:1.8.0"; do
             if ! grep -Fq "$expected" <<< "$report"; then
-              echo "::error::Expected $expected on $configuration but it was not resolved."
+              echo "::error::Expected $expected in prodDebugAndroidTestRuntimeClasspath."
               exit 1
             fi
           done

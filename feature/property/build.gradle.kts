@@ -17,7 +17,6 @@ dependencies {
 
     implementation(libs.navigation.fragment.ktx)
 
-    debugImplementation(testFixtures(projects.core.testing))
     testImplementation(testFixtures(projects.core.testingNetwork))
     testImplementation(projects.core.data)
     androidTestImplementation(testFixtures(projects.core.testingNetwork))

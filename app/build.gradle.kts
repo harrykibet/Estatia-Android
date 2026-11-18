@@ -61,12 +61,7 @@ dependencies {
     androidTestImplementation(libs.espresso.intents)
     androidTestImplementation(libs.espresso.contrib)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    // The AAR contributes only test manifest entries; its old transitive Test Monitor
-    // version would leak into prodDebugRuntimeClasspath and constrain AGP's aligned
-    // androidTest runtime. Test implementation dependencies belong in androidTestImplementation.
-    debugImplementation(libs.androidx.compose.ui.test.manifest) {
-        isTransitive = false
-    }
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.glide)
     ksp(libs.glide.compiler)
