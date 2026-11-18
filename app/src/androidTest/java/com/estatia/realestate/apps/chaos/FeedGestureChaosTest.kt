@@ -8,10 +8,8 @@ import androidx.test.uiautomator.UiDevice
 import com.estatia.realestate.apps.MainActivity
 import com.estatia.realestate.apps.core.player_engine.core.PlayerManager
 import com.estatia.realestate.apps.core.player_engine.core.PlayerPool
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
+import com.estatia.realestate.apps.di.FeedGestureChaosEntryPoint
 import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -19,19 +17,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.random.Random
-
-/**
- * Exposes production singletons to instrumentation without installing Hilt's test application.
- *
- * These diagnostics deliberately run against EstatiaApplication, so they use the application's
- * real SingletonComponent rather than @HiltAndroidTest / HiltTestApplication.
- */
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-internal interface FeedGestureChaosEntryPoint {
-    fun playerPool(): PlayerPool
-    fun playerManager(): PlayerManager
-}
 
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
