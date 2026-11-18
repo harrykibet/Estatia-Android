@@ -1,5 +1,6 @@
 package com.estatia.realestate.apps.di
 
+import androidx.media3.common.util.UnstableApi
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.Contract
 import com.estatia.realestate.apps.core.player_engine.core.PlayerManager
 import com.estatia.realestate.apps.core.player_engine.core.PlayerPool
@@ -17,6 +18,7 @@ import dagger.hilt.components.SingletonComponent
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface FeedGestureChaosEntryPoint {
+    @UnstableApi
     fun playerPool(): PlayerPool
     fun playerManager(): PlayerManager
 }
