@@ -52,7 +52,7 @@ class ConfigRepositoryImplTest {
     }
 
     @Test
-    fun `initialize loads from assets and refreshes from remote successfully`() = runTest(testDispatcher) {
+    fun `initialize publishes local config before remote refresh completes`() = runTest(testDispatcher) {
         val json = "{}"
         coEvery { assetSource.loadNetworkConfig() } returns json
         coEvery { assetSource.loadSecurityConfig() } returns json
@@ -66,6 +66,11 @@ class ConfigRepositoryImplTest {
         every { parser.parse(any()) } returns mockConfig
 
         repository.initialize()
+
+        // Local asset config is ready as soon as initialize returns; remote refresh is separate.
+        assertTrue(repository.isInitialized)
+        assertTrue(repository.isReady.value)
+
         runCurrent() // Drain the asynchronously launched remote refresh before asserting its effects.
 
         assertTrue(repository.isInitialized)
