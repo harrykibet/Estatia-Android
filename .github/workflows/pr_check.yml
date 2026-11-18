@@ -244,5 +244,19 @@ jobs:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
 
+      - name: Compile all module instrumented test source sets
+        run: |
+          ./gradlew \
+            :app:assembleProdDebugAndroidTest \
+            :core:common:assembleDemoDebugAndroidTest \
+            :core:common:assembleProdDebugAndroidTest \
+            :core:database:assembleDemoDebugAndroidTest \
+            :core:database:assembleProdDebugAndroidTest \
+            :core:datastore:assembleDemoDebugAndroidTest \
+            :core:datastore:assembleProdDebugAndroidTest \
+            :core:player-ui:assembleDemoDebugAndroidTest \
+            :core:player-ui:assembleProdDebugAndroidTest \
+            --no-configuration-cache --stacktrace --console=plain
+
       - name: Run Smoke UI Tests
         run: ./gradlew :app:pixel2Api34ProdDebugAndroidTest --no-configuration-cache --stacktrace --console=plain

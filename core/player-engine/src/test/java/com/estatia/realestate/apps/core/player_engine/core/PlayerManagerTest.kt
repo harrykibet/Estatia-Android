@@ -11,12 +11,15 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.Executors
@@ -76,6 +79,14 @@ class PlayerManagerTest {
             testScope,
             playerDispatcher
         )
+    }
+
+    @After
+    fun tearDown() {
+        testScope.cancel()
+        playerDispatcher.close()
+        unmockkStatic(Uri::class)
+        unmockkStatic(Looper::class)
     }
 
     @Test

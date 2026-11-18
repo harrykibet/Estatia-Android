@@ -9,10 +9,12 @@ import com.estatia.realestate.apps.core.testing.chaos.filesystem.FileSystemBehav
 import com.estatia.realestate.apps.core.testing.fake.filesystem.FakeFileSystem
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import io.mockk.unmockkObject
 
 class MediaCompressorChaosTest {
 
@@ -31,6 +33,12 @@ class MediaCompressorChaosTest {
         
         mockkObject(MediaFileUtils)
         mockkObject(FileUtils)
+    }
+
+    @After
+    fun tearDown() {
+        unmockkObject(FileUtils)
+        unmockkObject(MediaFileUtils)
     }
 
     @Test
