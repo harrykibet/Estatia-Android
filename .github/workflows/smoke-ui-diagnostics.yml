@@ -131,20 +131,23 @@ jobs:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
 
-      - name: Build app and instrumentation APKs
-        shell: bash
-        timeout-minutes: 20
-        run: |
-          ./gradlew \
-            :app:assembleProdDebug \
-            :app:assembleProdDebugAndroidTest \
-            --no-configuration-cache --stacktrace --console=plain
-
       - name: Verify AndroidX Test runtime dependencies
         shell: bash
-        timeout-minutes: 3
+        timeout-minutes: 4
         run: |
           set -euo pipefail
+
+          # ui-test-manifest is needed only for manifest merging. It must not leak
+          # its old Test Monitor dependency into the production runtime classpath.
+          production_report="$(./gradlew :app:dependencyInsight \
+            --configuration prodDebugRuntimeClasspath \
+            --dependency androidx.test:monitor \
+            --no-configuration-cache --console=plain 2>&1)"
+          printf '%s\n' "$production_report"
+          if ! grep -Fq "No dependencies matching given input" <<< "$production_report"; then
+            echo "::error::androidx.test:monitor must not be present in prodDebugRuntimeClasspath."
+            exit 1
+          fi
 
           configuration="prodDebugAndroidTestRuntimeClasspath"
           for artifact in runner monitor; do
@@ -164,6 +167,15 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Build app and instrumentation APKs
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          ./gradlew \
+            :app:assembleProdDebug \
+            :app:assembleProdDebugAndroidTest \
+            --no-configuration-cache --stacktrace --console=plain
 
       - name: Create and verify Pixel 2 API 34 AVD
         shell: bash
