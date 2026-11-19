@@ -45,7 +45,7 @@ jobs:
           echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -145,7 +145,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -262,7 +262,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
