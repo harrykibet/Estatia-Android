@@ -488,7 +488,8 @@ class BaselineProfileGenerator {
                 Description: $description
                 Resource ID: $tag
                 Timeout: ${timeoutMs / 1_000}s
-                UI hierarchy: $hierarchyPath
+                UI hierarchy captured before benchmark cleanup:
+                $hierarchyDump
                 """.trimIndent(),
                 object2,
             )
