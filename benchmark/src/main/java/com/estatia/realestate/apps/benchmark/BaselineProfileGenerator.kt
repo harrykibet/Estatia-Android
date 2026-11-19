@@ -8,6 +8,7 @@ import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import java.io.File
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
@@ -55,7 +56,7 @@ class BaselineProfileGenerator {
          *
          * We deliberately do not attempt to log in here.
          */
-        waitForAuthenticatedApplication(device)
+        waitForAuthenticatedNavigationUi(device)
 
         // ---------------------------------------------------------------------
         // Critical User Journeys
@@ -95,7 +96,7 @@ class BaselineProfileGenerator {
      *
      * Credentials must never be embedded in BaselineProfileGenerator.
      */
-    private fun waitForAuthenticatedApplication(
+    private fun waitForAuthenticatedNavigationUi(
         device: UiDevice,
     ) {
         val homeNavigationItem = device.wait(
@@ -105,21 +106,42 @@ class BaselineProfileGenerator {
             AUTHENTICATION_TIMEOUT_MS,
         )
 
-        assertNotNull(
-            """
-            Baseline Profile generation requires an authenticated Estatia session.
+        if (homeNavigationItem == null) {
+            val hierarchyPath = captureWindowHierarchy(device)
+            assertNotNull(
+                """
+                The authenticated Home navigation item was not exposed to UI Automator within
+                ${AUTHENTICATION_TIMEOUT_MS / 1_000} seconds.
 
-            The authenticated navigation UI was not detected within
-            ${AUTHENTICATION_TIMEOUT_MS / 1_000} seconds.
+                This check verifies the navigation UI; it does not independently prove that
+                authentication failed. Inspect the captured hierarchy before changing auth
+                behavior or adding credentials to this benchmark.
 
-            Authenticate the benchmark application before running the
-            Baseline Profile generator.
+                UI hierarchy: $hierarchyPath
+                """.trimIndent(),
+                homeNavigationItem,
+            )
+        }
+    }
 
-            BaselineProfileGenerator intentionally does not contain credentials
-            or perform authentication.
-            """.trimIndent(),
-            homeNavigationItem,
-        )
+    /**
+     * Writes the current accessibility hierarchy to the test APK's external files
+     * directory so the CI workflow can pull it after a readiness failure.
+     */
+    private fun captureWindowHierarchy(device: UiDevice): String = try {
+        val testContext = InstrumentationRegistry.getInstrumentation().context
+        val outputDirectory = checkNotNull(testContext.getExternalFilesDir(null)) {
+            "External app-specific storage is unavailable for the UI hierarchy dump."
+        }
+        check(outputDirectory.exists() || outputDirectory.mkdirs()) {
+            "Could not create the UI hierarchy output directory: $outputDirectory"
+        }
+
+        val outputFile = File(outputDirectory, "baseline-profile-window-hierarchy.xml")
+        device.dumpWindowHierarchy(outputFile)
+        outputFile.absolutePath
+    } catch (exception: Exception) {
+        "UI hierarchy capture failed: ${exception.javaClass.simpleName}: ${exception.message}"
     }
 
     // =========================================================================
