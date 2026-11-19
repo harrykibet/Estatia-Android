@@ -4,7 +4,6 @@ import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.Until
@@ -26,7 +25,7 @@ class ScrollBenchmark {
 
     @Test
     fun scrollFeed() = benchmarkRule.measureRepeated(
-        packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName,
+        packageName = BenchmarkTargetPackage.requirePackageName(),
         metrics = listOf(FrameTimingMetric()),
         iterations = 5,
         startupMode = StartupMode.COLD,
@@ -35,18 +34,26 @@ class ScrollBenchmark {
             startActivityAndWait()
         }
     ) {
-        // Wait for the feed to load. 
-        // We look for a common UI element that indicates the feed is present.
-        device.wait(Until.hasObject(By.scrollable(true)), 5000)
-
-        val feedList = device.findObject(By.scrollable(true))
-        
-        // If a scrollable list is found, perform scrolls to measure frame timing
-        if (feedList != null) {
-            feedList.setGestureMargin(device.displayWidth / 5)
-            feedList.fling(Direction.DOWN)
-            device.waitForIdle()
-            feedList.fling(Direction.UP)
+        // Require Estatia's actual property feed before collecting frame timings.
+        // A different scrollable surface (or no loaded feed) must not produce a
+        // misleadingly successful benchmark.
+        val feedList = requireNotNull(
+            device.wait(
+                Until.findObject(By.res(PROPERTY_FEED_RESOURCE_ID)),
+                FEED_TIMEOUT_MS,
+            ),
+        ) {
+            "Estatia's PropertyFeed did not appear within ${FEED_TIMEOUT_MS / 1_000}s after cold startup."
         }
+
+        feedList.setGestureMargin(device.displayWidth / 5)
+        feedList.fling(Direction.DOWN)
+        device.waitForIdle()
+        feedList.fling(Direction.UP)
     }
+    private companion object {
+        const val PROPERTY_FEED_RESOURCE_ID = "PropertyFeed"
+        const val FEED_TIMEOUT_MS = 15_000L
+    }
+}
 }
