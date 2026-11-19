@@ -264,11 +264,17 @@ class BaselineProfileGenerator {
          * UI test.
          */
         feed.swipe(
-            Direction.LEFT,
+            Direction.RIGHT,
             PROPERTY_SWIPE_PERCENT,
         )
 
         device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_DETAILS,
+            description = "Property details after swiping from the property feed",
+        )
 
         device.pressBack()
 
@@ -465,18 +471,22 @@ class BaselineProfileGenerator {
             timeoutMs,
         )
 
-        assertNotNull(
-            """
-            Required benchmark UI was not found.
+        if (object2 == null) {
+            val hierarchyPath = captureWindowHierarchy(device)
+            assertNotNull(
+                """
+                Required benchmark UI was not found.
 
-            Description: $description
-            Resource ID: $tag
-            Timeout: ${timeoutMs / 1_000}s
-            """.trimIndent(),
-            object2,
-        )
+                Description: $description
+                Resource ID: $tag
+                Timeout: ${timeoutMs / 1_000}s
+                UI hierarchy: $hierarchyPath
+                """.trimIndent(),
+                object2,
+            )
+        }
 
-        return object2
+        return checkNotNull(object2)
     }
 
     private companion object {
@@ -523,6 +533,8 @@ private object NavigationTestTags {
 private object ScreenTestTags {
 
     const val PROPERTY_FEED = "PropertyFeed"
+
+    const val PROPERTY_DETAILS = "PropertyDetailsScreen"
 
     const val SEARCH_FIELD = "SearchTextField"
 
