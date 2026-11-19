@@ -14,11 +14,14 @@ The `benchmark` module is responsible for performance measurement and optimizati
 - `BaselineProfileGenerator.kt`: Triggers critical paths to record necessary classes and methods for AOT compilation.
 
 ## How to Run
-Run the benchmarks using a physical device (ideally unrooted and non-emulator for accuracy):
+Run the production macrobenchmarks against a connected Android device or emulator:
 ```bash
-./gradlew :benchmark:connectedDemoDebugAndroidTest
+./gradlew :benchmark:connectedProdBenchmarkAndroidTest
 ```
+
+The benchmark module targets the app's `prodBenchmark` build variant. The device must be connected through ADB and support AndroidX Macrobenchmark (API 29 or newer). The Nightly workflow provisions a Pixel 6 API 31 emulator, waits for Android boot completion, runs the connected-device tasks, and stops the emulator even if a task fails.
+
 To generate baseline profiles:
 ```bash
-./gradlew :app:generateDemoDebugBaselineProfile
+./gradlew :app:generateBaselineProfile
 ```
