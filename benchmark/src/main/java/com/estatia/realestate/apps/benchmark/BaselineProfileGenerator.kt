@@ -35,10 +35,7 @@ class BaselineProfileGenerator {
 
     @Test
     fun generate() = baselineProfileRule.collect(
-        packageName = InstrumentationRegistry
-            .getInstrumentation()
-            .targetContext
-            .packageName,
+        packageName = BenchmarkTargetPackage.requirePackageName(),
         includeInStartupProfile = true,
     ) {
         val device = UiDevice.getInstance(
