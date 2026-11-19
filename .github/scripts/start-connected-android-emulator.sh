@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -z "\${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME" ]]; then
+if [[ -z "${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME" ]]; then
   echo "::error::ANDROID_HOME is missing or does not point to an Android SDK directory."
   exit 1
 fi
@@ -18,18 +18,18 @@ for tool in "$SDKMANAGER" "$AVDMANAGER" "$ADB" "$EMULATOR"; do
   fi
 done
 
-API_LEVEL="\${ANDROID_EMULATOR_API_LEVEL:-31}"
-AVD_NAME="\${ANDROID_EMULATOR_AVD_NAME:-estatia-pixel6-api31}"
-AVD_DEVICE="\${ANDROID_EMULATOR_DEVICE:-pixel_6}"
-EMULATOR_PORT="\${ANDROID_EMULATOR_PORT:-5554}"
+API_LEVEL="${ANDROID_EMULATOR_API_LEVEL:-31}"
+AVD_NAME="${ANDROID_EMULATOR_AVD_NAME:-estatia-pixel6-api31}"
+AVD_DEVICE="${ANDROID_EMULATOR_DEVICE:-pixel_6}"
+EMULATOR_PORT="${ANDROID_EMULATOR_PORT:-5554}"
 SYSTEM_IMAGE="system-images;android-$API_LEVEL;google_apis;x86_64"
 SERIAL="emulator-$EMULATOR_PORT"
-STATE_DIR="\${RUNNER_TEMP:-\${TMPDIR:-/tmp}}"
+STATE_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 AVD_LOG="$STATE_DIR/$AVD_NAME.log"
 PID_FILE="$STATE_DIR/$AVD_NAME.pid"
 
-mkdir -p "$STATE_DIR" "\${ANDROID_AVD_HOME:-$HOME/.android/avd}"
-export ANDROID_AVD_HOME="\${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+mkdir -p "$STATE_DIR" "${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 
 # Accept SDK package licenses before installing the API 31 Google APIs image.
 set +o pipefail
@@ -102,7 +102,7 @@ if [[ "$BOOTED" != "true" ]]; then
   exit 1
 fi
 
-if [[ -n "\${GITHUB_ENV:-}" ]]; then
+if [[ -n "${GITHUB_ENV:-}" ]]; then
   printf 'ANDROID_SERIAL=%s\n' "$SERIAL" >> "$GITHUB_ENV"
 fi
 
