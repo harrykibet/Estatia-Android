@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API_LEVEL="\${ANDROID_EMULATOR_API_LEVEL:-31}"
-AVD_NAME="\${ANDROID_EMULATOR_AVD_NAME:-estatia-pixel6-api31}"
-EMULATOR_PORT="\${ANDROID_EMULATOR_PORT:-5554}"
+API_LEVEL="${ANDROID_EMULATOR_API_LEVEL:-31}"
+AVD_NAME="${ANDROID_EMULATOR_AVD_NAME:-estatia-pixel6-api31}"
+EMULATOR_PORT="${ANDROID_EMULATOR_PORT:-5554}"
 SERIAL="emulator-$EMULATOR_PORT"
-STATE_DIR="\${RUNNER_TEMP:-\${TMPDIR:-/tmp}}"
+STATE_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 PID_FILE="$STATE_DIR/$AVD_NAME.pid"
 
-ADB="\${ANDROID_HOME:-}/platform-tools/adb"
+ADB="${ANDROID_HOME:-}/platform-tools/adb"
 
 if [[ -x "$ADB" ]]; then
   "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
