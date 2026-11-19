@@ -56,4 +56,3 @@ class ScrollBenchmark {
         const val FEED_TIMEOUT_MS = 15_000L
     }
 }
-}
