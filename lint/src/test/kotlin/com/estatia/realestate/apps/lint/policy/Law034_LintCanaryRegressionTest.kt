@@ -37,7 +37,7 @@ class Law034_LintCanaryRegressionTest {
     @Test
     fun `canary module must satisfy the High-Fidelity Enforcement Oracle`() {
         val reportPath = System.getProperty("CANARY_LINT_XML_REPORT")
-            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results.xml").absolutePath
+            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results-demoDebug.xml").absolutePath
         
         val reportFile = File(reportPath)
         assertTrue("Canary lint report not found at $reportPath", reportFile.exists())
