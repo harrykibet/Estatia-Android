@@ -12,15 +12,22 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.estatia.realestate.apps.core.model.property.ListingUiModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @UiScreen
@@ -88,13 +95,40 @@ fun PropertyFeedScreen(
                 pageCount = { 2 }
             )
 
-            LaunchedEffect(horizontalPagerState) {
+            val lifecycleOwner = LocalLifecycleOwner.current
+            val coroutineScope = rememberCoroutineScope()
+
+            // Keep the pending transition across Navigation Compose's save/restore of
+            // the feed while Property Details is on top. Clear it only after this
+            // destination becomes active again and the pager has returned to its video.
+            var isDetailsNavigationPending by rememberSaveable(listing.id) {
+                mutableStateOf(false)
+            }
+
+            DisposableEffect(lifecycleOwner, horizontalPagerState, listing.id) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME && isDetailsNavigationPending) {
+                        coroutineScope.launch {
+                            horizontalPagerState.scrollToPage(1)
+                            isDetailsNavigationPending = false
+                        }
+                    }
+                }
+
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+
+            LaunchedEffect(horizontalPagerState, listing.id) {
                 snapshotFlow { horizontalPagerState.currentPage }
                     .collect { horizontalPage ->
-                        if (horizontalPage == 0) {
+                        if (horizontalPage == 0 && !isDetailsNavigationPending) {
+                            // Navigate immediately. The pager reset is deferred until
+                            // this feed destination resumes after Details is popped.
+                            isDetailsNavigationPending = true
                             onNavigateToDetails(listing.id)
-                            // Snap back to 1 so when we come back, we're on the video
-                            horizontalPagerState.scrollToPage(1)
                         }
                     }
             }

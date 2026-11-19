@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/baseline-profile-diagnostics"
-          bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile-demo-instrumentation ./gradlew :benchmark:connectedDemoNonMinifiedReleaseAndroidTest --no-configuration-cache --stacktrace --info --console=plain 2>&1 | tee "$RUNNER_TEMP/baseline-profile-diagnostics/gradle-task.log"
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile-demo-instrumentation ./gradlew :benchmark:connectedDemoNonMinifiedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.benchmark.BaselineProfileGenerator --no-configuration-cache --stacktrace --info --console=plain 2>&1 | tee "$RUNNER_TEMP/baseline-profile-diagnostics/gradle-task.log"
 
       - name: Capture emulator diagnostics
         if: always()
@@ -105,6 +105,10 @@ jobs:
               "$adb" -s "$ANDROID_SERIAL" logcat -d -v threadtime > "$diagnostics_dir/logcat.txt" 2>&1
               "$adb" -s "$ANDROID_SERIAL" shell dumpsys activity activities > "$diagnostics_dir/activity.txt" 2>&1
               "$adb" -s "$ANDROID_SERIAL" shell dumpsys window windows > "$diagnostics_dir/windows.txt" 2>&1
+              hierarchy_path="/sdcard/Android/data/com.estatia.realestate.apps.benchmark/files/baseline-profile-window-hierarchy.xml"
+              if "$adb" -s "$ANDROID_SERIAL" shell test -f "$hierarchy_path"; then
+                "$adb" -s "$ANDROID_SERIAL" pull "$hierarchy_path" "$diagnostics_dir/window-hierarchy.xml" >/dev/null 2>&1
+              fi
               "$adb" -s "$ANDROID_SERIAL" exec-out screencap -p > "$diagnostics_dir/screen.png" 2>/dev/null
             fi
           fi

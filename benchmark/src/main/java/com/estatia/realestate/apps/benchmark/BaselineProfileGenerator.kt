@@ -8,6 +8,7 @@ import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import java.io.File
 import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
@@ -35,10 +36,7 @@ class BaselineProfileGenerator {
 
     @Test
     fun generate() = baselineProfileRule.collect(
-        packageName = InstrumentationRegistry
-            .getInstrumentation()
-            .targetContext
-            .packageName,
+        packageName = BenchmarkTargetPackage.requirePackageName(),
         includeInStartupProfile = true,
     ) {
         val device = UiDevice.getInstance(
@@ -58,7 +56,7 @@ class BaselineProfileGenerator {
          *
          * We deliberately do not attempt to log in here.
          */
-        waitForAuthenticatedApplication(device)
+        waitForAuthenticatedNavigationUi(device)
 
         // ---------------------------------------------------------------------
         // Critical User Journeys
@@ -98,7 +96,7 @@ class BaselineProfileGenerator {
      *
      * Credentials must never be embedded in BaselineProfileGenerator.
      */
-    private fun waitForAuthenticatedApplication(
+    private fun waitForAuthenticatedNavigationUi(
         device: UiDevice,
     ) {
         val homeNavigationItem = device.wait(
@@ -108,21 +106,50 @@ class BaselineProfileGenerator {
             AUTHENTICATION_TIMEOUT_MS,
         )
 
-        assertNotNull(
-            """
-            Baseline Profile generation requires an authenticated Estatia session.
+        if (homeNavigationItem == null) {
+            val hierarchyDump = captureWindowHierarchy(device)
+            assertNotNull(
+                """
+                The authenticated Home navigation item was not exposed to UI Automator within
+                ${AUTHENTICATION_TIMEOUT_MS / 1_000} seconds.
 
-            The authenticated navigation UI was not detected within
-            ${AUTHENTICATION_TIMEOUT_MS / 1_000} seconds.
+                This check verifies the navigation UI; it does not independently prove that
+                authentication failed. Inspect the captured hierarchy before changing auth
+                behavior or adding credentials to this benchmark.
 
-            Authenticate the benchmark application before running the
-            Baseline Profile generator.
+                UI hierarchy captured before benchmark cleanup:
+                $hierarchyDump
+                """.trimIndent(),
+                homeNavigationItem,
+            )
+        }
+    }
 
-            BaselineProfileGenerator intentionally does not contain credentials
-            or perform authentication.
-            """.trimIndent(),
-            homeNavigationItem,
-        )
+    /**
+     * Captures the current accessibility hierarchy and returns its contents.
+     *
+     * Macrobenchmark can uninstall the target and instrumentation APKs during
+     * teardown, before the CI workflow can pull files from app-specific storage.
+     * Including the XML in the assertion message preserves the evidence in the
+     * instrumentation report even when those packages have already been removed.
+     */
+    private fun captureWindowHierarchy(device: UiDevice): String = try {
+        val testContext = InstrumentationRegistry.getInstrumentation().context
+        val outputDirectory = checkNotNull(testContext.getExternalFilesDir(null)) {
+            "External app-specific storage is unavailable for the UI hierarchy dump."
+        }
+        check(outputDirectory.exists() || outputDirectory.mkdirs()) {
+            "Could not create the UI hierarchy output directory: $outputDirectory"
+        }
+
+        val outputFile = File(outputDirectory, "baseline-profile-window-hierarchy.xml")
+        device.dumpWindowHierarchy(outputFile)
+        """
+        File: ${outputFile.absolutePath}
+        ${outputFile.readText()}
+        """.trimIndent()
+    } catch (exception: Exception) {
+        "UI hierarchy capture failed: ${exception.javaClass.simpleName}: ${exception.message}"
     }
 
     // =========================================================================
@@ -245,11 +272,17 @@ class BaselineProfileGenerator {
          * UI test.
          */
         feed.swipe(
-            Direction.LEFT,
+            Direction.RIGHT,
             PROPERTY_SWIPE_PERCENT,
         )
 
         device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_DETAILS,
+            description = "Property details after swiping from the property feed",
+        )
 
         device.pressBack()
 
@@ -446,18 +479,23 @@ class BaselineProfileGenerator {
             timeoutMs,
         )
 
-        assertNotNull(
-            """
-            Required benchmark UI was not found.
+        if (object2 == null) {
+            val hierarchyDump = captureWindowHierarchy(device)
+            assertNotNull(
+                """
+                Required benchmark UI was not found.
 
-            Description: $description
-            Resource ID: $tag
-            Timeout: ${timeoutMs / 1_000}s
-            """.trimIndent(),
-            object2,
-        )
+                Description: $description
+                Resource ID: $tag
+                Timeout: ${timeoutMs / 1_000}s
+                UI hierarchy captured before benchmark cleanup:
+                $hierarchyDump
+                """.trimIndent(),
+                object2,
+            )
+        }
 
-        return object2
+        return checkNotNull(object2)
     }
 
     private companion object {
@@ -504,6 +542,8 @@ private object NavigationTestTags {
 private object ScreenTestTags {
 
     const val PROPERTY_FEED = "PropertyFeed"
+
+    const val PROPERTY_DETAILS = "PropertyDetailsScreen"
 
     const val SEARCH_FIELD = "SearchTextField"
 

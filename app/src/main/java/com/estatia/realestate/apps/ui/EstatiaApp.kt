@@ -166,6 +166,9 @@ internal fun EstatiaAppContent(
                     }
                 },
                 windowAdaptiveInfo = windowAdaptiveInfo,
+                modifier = Modifier.semantics {
+                    testTagsAsResourceId = true
+                },
                 layoutType = if (isUserAuthenticated && !isInPiPMode) {
                     NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(windowAdaptiveInfo)
                 } else {
@@ -173,9 +176,6 @@ internal fun EstatiaAppContent(
                 },
             ) {
                 Scaffold(
-                    modifier = Modifier.semantics {
-                        testTagsAsResourceId = true
-                    },
                     containerColor = Color.Transparent,
                     contentColor = MaterialTheme.colorScheme.onBackground,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),

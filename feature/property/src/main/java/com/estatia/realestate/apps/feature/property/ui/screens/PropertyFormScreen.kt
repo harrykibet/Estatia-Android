@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.estatia.realestate.apps.core.designsystem.component.EstatiaSectionCard
@@ -56,6 +57,7 @@ fun PropertyFormScreen(isPreview: Boolean = false) {
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
+            .testTag("AddPropertyScreen")
     ) {
         EstatiaText("Add Property", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(16.dp))
