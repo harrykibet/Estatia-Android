@@ -36,7 +36,7 @@ tasks.withType<Test>().configureEach {
     systemProperty("PROJECT_ROOT", "${project.rootDir}")
 
     // Ensure canary report is generated before running tests that depend on it
-    dependsOn(":core:canary-violations:lintDemoDebug")
+    dependsOn(":core:canary-violations:copyDemoDebugLintReports")
 }
 
 tasks.withType<org.gradle.jvm.tasks.Jar> {

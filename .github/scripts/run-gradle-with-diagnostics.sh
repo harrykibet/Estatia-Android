@@ -18,7 +18,7 @@ if [[ "$(basename "$gradle_executable")" != "gradlew" ]]; then
   exit 64
 fi
 
-max_workers="${GRADLE_CI_MAX_WORKERS:-3}"
+max_workers="${GRADLE_CI_MAX_WORKERS:-2}"
 if [[ ! "$max_workers" =~ ^[1-9][0-9]*$ ]]; then
   echo "::error::GRADLE_CI_MAX_WORKERS must be a positive integer (received: $max_workers)." >&2
   exit 64
@@ -29,6 +29,17 @@ if [[ "$cpu_count" =~ ^[1-9][0-9]*$ ]] && (( max_workers > cpu_count )); then
   max_workers="$cpu_count"
 fi
 
+gradle_xmx="${GRADLE_CI_GRADLE_XMX:-5g}"
+kotlin_xmx="${GRADLE_CI_KOTLIN_XMX:-2g}"
+gradle_metaspace="${GRADLE_CI_GRADLE_METASPACE:-1g}"
+kotlin_metaspace="${GRADLE_CI_KOTLIN_METASPACE:-768m}"
+for setting in gradle_xmx kotlin_xmx gradle_metaspace kotlin_metaspace; do
+  value="${!setting}"
+  if [[ ! "$value" =~ ^[1-9][0-9]*[mMgG]$ ]]; then
+    echo "::error::$setting must be a positive JVM memory size such as 2g or 768m (received: $value)." >&2
+    exit 64
+  fi
+done
 sample_seconds="${GRADLE_CI_SAMPLE_SECONDS:-15}"
 if [[ ! "$sample_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo "::error::GRADLE_CI_SAMPLE_SECONDS must be a positive integer (received: $sample_seconds)." >&2
@@ -54,7 +65,7 @@ snapshot() {
   {
     printf '\n===== RESOURCE SNAPSHOT: %s =====\n' "$1"
     printf 'UTC: %s\n' "$(date -u --iso-8601=seconds 2>/dev/null || date -u)"
-    printf 'Runner CPU count: %s | Gradle max workers: %s\n' "$cpu_count" "$max_workers"
+    printf 'Runner CPU count: %s | Gradle max workers: %s | Gradle heap: %s | Kotlin daemon heap: %s\n' "$cpu_count" "$max_workers" "$gradle_xmx" "$kotlin_xmx"
 
     echo "--- Memory ---"
     free -h 2>&1 || true
@@ -106,11 +117,33 @@ snapshot() {
 
     echo "--- Highest-RSS processes ---"
     ps -eo pid,ppid,rss,vsz,%mem,%cpu,etime,comm --sort=-rss 2>&1 | head -n 18 || true
+    now_seconds="$SECONDS"
+    if (( now_seconds - last_jvm_snapshot >= 60 )) || [[ "$1" == "initial" || "$1" == final-* || "$1" == terminated-* ]]; then
+      echo "--- JVM heap snapshots (Gradle/Kotlin daemons and workers) ---"
+      jcmd_bin=""
+      if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/jcmd" ]]; then jcmd_bin="$JAVA_HOME/bin/jcmd"; else jcmd_bin="$(command -v jcmd || true)"; fi
+      if [[ -n "$jcmd_bin" ]]; then
+        while read -r java_pid main_class; do
+          [[ -n "$java_pid" && -n "$main_class" ]] || continue
+          case "$main_class" in
+            *GradleDaemon*|*KotlinCompileDaemon*|*GradleWorkerMain*|*com.android.tools.r8*)
+              printf 'JVM PID=%s MAIN=%s\n' "$java_pid" "$main_class"
+              timeout 8s "$jcmd_bin" "$java_pid" VM.flags 2>&1 || true
+              timeout 8s "$jcmd_bin" "$java_pid" GC.heap_info 2>&1 || true
+              ;;
+          esac
+        done < <("$jcmd_bin" -l 2>/dev/null | head -n 16)
+      else
+        echo "jcmd unavailable; JVM heap details were not sampled."
+      fi
+      last_jvm_snapshot="$now_seconds"
+    fi
   } >> "$resource_log" 2>&1
 }
 
 monitor_pid=""
 gradle_pid=""
+last_jvm_snapshot=0
 
 stop_monitor() {
   if [[ -n "$monitor_pid" ]]; then
@@ -150,8 +183,16 @@ trap 'handle_signal TERM 143' TERM
 ) >/dev/null 2>&1 &
 monitor_pid=$!
 
-# Add a CI-only worker cap while retaining the repository's configured parallel scheduling.
-set -- "$gradle_executable" "--max-workers=$max_workers" "$@"
+# Override the large developer-machine heap only for this CI invocation. The Kotlin
+# daemon is capped separately because it has an independent JVM and memory space.
+gradle_jvmargs="-Xmx$gradle_xmx -XX:MaxMetaspaceSize=$gradle_metaspace -Dfile.encoding=UTF-8 -XX:+UseG1GC"
+kotlin_jvmargs="-Xmx$kotlin_xmx -XX:MaxMetaspaceSize=$kotlin_metaspace"
+# Retain parallel project execution while limiting workers and compiler JVMs.
+set -- "$gradle_executable" \
+  "--max-workers=$max_workers" \
+  "-Dorg.gradle.jvmargs=$gradle_jvmargs" \
+  "-Pkotlin.daemon.jvmargs=$kotlin_jvmargs" \
+  "$@"
 
 "$@" &
 gradle_pid=$!

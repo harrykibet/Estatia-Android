@@ -14,12 +14,15 @@ permissions:
 
 env:
   CI: true
+  GRADLE_CI_MAX_WORKERS: 2
+  GRADLE_CI_GRADLE_XMX: 5g
+  GRADLE_CI_KOTLIN_XMX: 2g
 
 jobs:
   lint:
     name: Lint Check
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -48,7 +51,7 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Run Full Lint
-        run: ./gradlew lint --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh main-lint ./gradlew lint --no-configuration-cache --stacktrace --console=plain
 
       - name: Upload Lint Diagnostic Reports
         if: always()
@@ -60,10 +63,19 @@ jobs:
             **/build/reports/lint-results-*.sarif
           if-no-files-found: warn
 
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-lint
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
   unit-tests:
     name: Full Unit Test Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -92,10 +104,93 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Run All Unit Tests
-        run: ./gradlew test --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh main-unit-tests ./gradlew test --no-configuration-cache --stacktrace --console=plain
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-unit-tests
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   instrumented-tests:
     name: Full Instrumented Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Enable KVM for Android emulators
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::GitHub runner does not expose the KVM device required by x86_64 Android emulators."
+            exit 1
+          fi
+          sudo chmod 0666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Install Android Emulator SDK package once
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          if [[ ! -x "$SDKMANAGER" ]]; then
+            echo "::error::Android SDK manager was not found under ANDROID_HOME."
+            exit 1
+          fi
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "emulator"
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+
+      - name: Set Executable Permission for Gradlew
+        run: chmod +x ./gradlew
+
+      - name: Prepare Firebase configuration (Demo + Prod)
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
+      - name: Run All Instrumented Tests
+        run: |
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh main-instrumented-tests ./gradlew \
+            :app:pixel2Api34ProdDebugAndroidTest \
+            :app:pixel6Api31ProdDebugAndroidTest \
+            :app:mediumPhoneApi33ProdDebugAndroidTest \
+            :app:pixelTabletApi34ProdDebugAndroidTest \
+            --no-configuration-cache --stacktrace --console=plain
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-instrumented-tests
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  build-release:
+    name: Release Build
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -125,60 +220,34 @@ jobs:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
-      - name: Run All Instrumented Tests
-        run: |
-          ./gradlew \
-            :app:pixel2Api34ProdDebugAndroidTest \
-            :app:pixel6Api31ProdDebugAndroidTest \
-            :app:mediumPhoneApi33ProdDebugAndroidTest \
-            :app:pixelTabletApi34ProdDebugAndroidTest \
-            --no-configuration-cache --stacktrace --console=plain
-
-  build-release:
-    name: Release Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set Up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: temurin
-
-      - name: Set Up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-provider: basic
-
-      - name: Prepare Android local.properties
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
-      - name: Set Executable Permission for Gradlew
-        run: chmod +x ./gradlew
-
-      - name: Prepare Firebase configuration (Demo + Prod)
+      - name: Prepare and validate release signing keystore
         env:
-          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
-          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
-        run: bash ./.github/scripts/prepare-google-services.sh demo prod
-
-      - name: Decode and Store Keystore
-        env:
-          KEYSTORE_BASE64: ${{  secrets.KEYSTORE_BASE64  }}
-        run: |
-          test -n "$KEYSTORE_BASE64"
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > local_keystore.jks
-          test -s local_keystore.jks
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash ./.github/scripts/prepare-release-keystore.sh
 
       - name: Build Demo and Production APKs with Gradle (Release)
         env:
-          RELEASE_STORE_PASSWORD: ${{  secrets.KEYSTORE_PASSWORD  }}
-          RELEASE_KEY_ALIAS: ${{  secrets.KEY_ALIAS  }}
-          RELEASE_KEY_PASSWORD: ${{  secrets.KEY_PASSWORD  }}
-        run: ./gradlew assembleDemoRelease assembleProdRelease -PsigningStoreFile=local_keystore.jks --stacktrace --console=plain
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh signed-dual-flavor-release ./gradlew assembleDemoRelease assembleProdRelease --no-configuration-cache --stacktrace --console=plain
+
+      - name: Verify both APK signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -print | sort -V | tail -n 1)"
+          apksigner="$build_tools/apksigner"
+          test -x "$apksigner"
+          for flavor in demo prod; do
+            apk="app/build/outputs/apk/$flavor/release/app-$flavor-release.apk"
+            test -s "$apk"
+            "$apksigner" verify "$apk"
+            echo "Verified signed $flavor release APK."
+          done
 
       - name: Upload Release Artifacts
         uses: actions/upload-artifact@v4
@@ -188,3 +257,12 @@ jobs:
             app/build/outputs/apk/demo/release/app-demo-release.apk
             app/build/outputs/apk/prod/release/app-prod-release.apk
           if-no-files-found: error
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-resource-${{ github.run_number }}-build-release
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5

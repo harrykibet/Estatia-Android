@@ -18,7 +18,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class GovernanceQualityOracle {
 
-    private val projectRoot = System.getProperty("PROJECT_ROOT") ?: "C:/Users/Administrator/StudioProjects/RealEstateApp-Android"
+    private val projectRoot: File by lazy {
+        File(System.getProperty("PROJECT_ROOT") ?: System.getProperty("user.dir")).canonicalFile
+    }
     private val canaryModulePath = "core/canary-violations"
 
     data class LawMetrics(
@@ -43,7 +45,8 @@ class GovernanceQualityOracle {
 
     @Test
     fun `verify governance quality metrics`() {
-        val reportPath = "$projectRoot/$canaryModulePath/build/reports/lint-results.xml"
+        val reportPath = System.getProperty("CANARY_LINT_XML_REPORT")
+            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results.xml").absolutePath
         val reportFile = File(reportPath)
         assertTrue("Governance Quality Error: Canary lint report not found at $reportPath. Run :core:canary-violations:lintAnalyzeDemoDebug first.", reportFile.exists())
 
@@ -119,8 +122,8 @@ class GovernanceQualityOracle {
     }
     
     private fun toRelative(file: File): String {
-        val path = file.absolutePath.replace("\\", "/")
-        val root = projectRoot.replace("\\", "/")
+        val path = file.canonicalPath.replace("\\", "/")
+        val root = projectRoot.canonicalPath.replace("\\", "/")
         return if (path.startsWith(root, ignoreCase = true)) {
             path.substring(root.length).trimStart('/')
         } else {
@@ -155,7 +158,7 @@ class GovernanceQualityOracle {
 
     private fun collectExpectations(): List<CanaryExpectation> {
         val results = mutableListOf<CanaryExpectation>()
-        val srcMain = File("$projectRoot/$canaryModulePath/src/main/kotlin")
+        val srcMain = File(projectRoot, "$canaryModulePath/src/main/kotlin")
         
         srcMain.walkTopDown().filter { it.extension == "kt" }.forEach { file ->
             val tier = when {
@@ -229,13 +232,13 @@ class GovernanceQualityOracle {
         report.append("\n---\n*Report generated automatically by `GovernanceQualityOracle`*")
 
         // Authoritative Doc Output
-        val docsDir = File("$projectRoot/docs")
+        val docsDir = File(projectRoot, "docs")
         if (docsDir.exists()) {
             File(docsDir, "GOVERNANCE_INTEGRITY_REPORT.md").writeText(report.toString())
         }
 
         // IDE Artifact Output
-        val artifactDir = File("$projectRoot/.artifacts/b2fbff85-3b1f-49b1-9c69-a8b322c659ee")
+        val artifactDir = File(projectRoot, ".artifacts/b2fbff85-3b1f-49b1-9c69-a8b322c659ee")
         if (artifactDir.exists()) {
             File(artifactDir, "governance_quality_report.artifact.md").writeText(report.toString())
         }

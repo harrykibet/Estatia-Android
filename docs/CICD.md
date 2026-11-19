@@ -35,6 +35,7 @@ We use a "funnel" approach where expensive operations are deferred to later stag
 *   **Key Operations**:
     *   **Exhaustive Analysis**: Full `./gradlew lint` and `./gradlew test` across all modules.
     *   **Fleet Testing**: Runs instrumented tests across four distinct device shapes (Small Phone, Modern Pixel, Medium Phone, Tablet).
+    *   **Linux Emulator Readiness**: The Main Branch workflow grants the hosted runner KVM access and installs the Android Emulator SDK package once before Gradle Managed Device setup, avoiding concurrent SDK package installation races.
     *   **Release Build**: `assembleProdRelease` with full R8 shrinking and production signing.
     *   **Artifact Archival**: Signed APKs are archived for internal QA distribution.
 
@@ -90,9 +91,18 @@ Developers can run any CI job locally using these commands:
 ---
 
 ## 🔒 Security & Secrets
-CI platforms require the following secrets to be configured:
-- `KEYSTORE_BASE64`: The production signing key encoded in Base64.
-- `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`: Signing credentials.
-- `SONAR_TOKEN`: Token for SonarQube analysis (used in quality stages).
-- `FIREBASE_TOKEN`: Token for deploying Firestore/Storage rules.
-- `GITHUB_TOKEN` / `CI_PUSH_TOKEN`: To allow committing Baseline Profiles or Lint updates back to the repo.
+### GitHub Actions repository secrets
+
+The current GitHub Actions workflows consume these repository secrets:
+
+- `GOOGLE_SERVICES_JSON_DEMO_BASE64`: Base64-encoded Firebase configuration for the demo application ID.
+- `GOOGLE_SERVICES_JSON_PROD_BASE64`: Base64-encoded Firebase configuration for the production application ID.
+- `KEYSTORE_BASE64`: Base64-encoded production signing keystore. It is decoded at runtime to the ignored path `AppKeyStore/keystore.jks`.
+- `KEYSTORE_PASSWORD`: Plain-text keystore integrity password.
+- `KEY_ALIAS`: Plain-text private-key alias inside the keystore.
+- `KEY_PASSWORD`: Plain-text password that unlocks the aliased private key.
+- `NVD_API_KEY`: NVD API key used by the dependency vulnerability scans.
+
+The nightly Baseline Profile job uses the automatically provided `GITHUB_TOKEN` with job-scoped `contents: write`, `pull-requests: write`, and `issues: write` permissions. No separate `CI_PUSH_TOKEN` is required by that job.
+
+The current GitHub workflows do not reference `SONAR_TOKEN` or `FIREBASE_TOKEN`; retain them only if another connected CI platform or deployment process still uses them.
