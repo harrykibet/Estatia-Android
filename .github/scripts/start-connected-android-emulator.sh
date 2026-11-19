@@ -62,7 +62,7 @@ if "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
   sleep 2
 fi
 
-"$EMULATOR" \
+nohup "$EMULATOR" \
   -avd "$AVD_NAME" \
   -port "$EMULATOR_PORT" \
   -no-window \
