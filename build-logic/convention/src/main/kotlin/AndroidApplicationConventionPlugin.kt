@@ -59,7 +59,18 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
         }
         tasks.configureEach {
-            if (name.startsWith("package", ignoreCase = true) && name.contains("Debug", ignoreCase = true)) {
+            val packagesDebugVariant =
+                name.startsWith("package", ignoreCase = true) &&
+                    name.contains("Debug", ignoreCase = true)
+            // The Baseline Profile plugin creates non-minified release variants that
+            // can use the debug signing config. Their validation tasks run before
+            // package tasks, so prepare the debug keystore at validation time too.
+            val validatesDebugSignedVariant =
+                name.startsWith("validateSigning", ignoreCase = true) &&
+                    (name.contains("Debug", ignoreCase = true) ||
+                        name.contains("Benchmark", ignoreCase = true) ||
+                        name.contains("NonMinifiedRelease", ignoreCase = true))
+            if (packagesDebugVariant || validatesDebugSignedVariant) {
                 dependsOn(generateDebugKeystore)
             }
         }
