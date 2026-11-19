@@ -99,6 +99,9 @@ jobs:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
+      - name: Start Connected Android Emulator
+        run: bash ./.github/scripts/start-connected-android-emulator.sh
+
       - name: Generate Baseline Profile
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile ./gradlew :app:generateBaselineProfile --no-configuration-cache --stacktrace --console=plain
 
@@ -116,6 +119,10 @@ jobs:
           labels: |
             automation
             performance
+
+      - name: Stop Connected Android Emulator
+        if: always()
+        run: bash ./.github/scripts/stop-connected-android-emulator.sh
 
       - name: Upload Gradle resource diagnostics
         if: always()
@@ -182,8 +189,15 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-binary-purity ./gradlew auditReleaseSymbols --no-configuration-cache --stacktrace --console=plain
 
+      - name: Start Connected Android Emulator
+        run: bash ./.github/scripts/start-connected-android-emulator.sh
+
       - name: Run Startup & Scroll Benchmarks
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-benchmarks ./gradlew :benchmark:pixel6Api31ProdDebugAndroidTest --no-configuration-cache --info
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-benchmarks ./gradlew :benchmark:connectedProdBenchmarkAndroidTest --no-configuration-cache --stacktrace --console=plain
+
+      - name: Stop Connected Android Emulator
+        if: always()
+        run: bash ./.github/scripts/stop-connected-android-emulator.sh
 
       - name: Upload Benchmark Results
         uses: actions/upload-artifact@v4
