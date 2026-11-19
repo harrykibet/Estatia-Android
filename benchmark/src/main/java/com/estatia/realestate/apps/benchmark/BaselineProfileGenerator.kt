@@ -117,7 +117,8 @@ class BaselineProfileGenerator {
                 authentication failed. Inspect the captured hierarchy before changing auth
                 behavior or adding credentials to this benchmark.
 
-                UI hierarchy captured before benchmark cleanup:\n$hierarchyDump
+                UI hierarchy captured before benchmark cleanup:
+                $hierarchyDump
                 """.trimIndent(),
                 homeNavigationItem,
             )
