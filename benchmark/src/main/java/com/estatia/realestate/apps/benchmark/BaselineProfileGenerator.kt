@@ -107,7 +107,7 @@ class BaselineProfileGenerator {
         )
 
         if (homeNavigationItem == null) {
-            val hierarchyPath = captureWindowHierarchy(device)
+            val hierarchyDump = captureWindowHierarchy(device)
             assertNotNull(
                 """
                 The authenticated Home navigation item was not exposed to UI Automator within
@@ -117,7 +117,7 @@ class BaselineProfileGenerator {
                 authentication failed. Inspect the captured hierarchy before changing auth
                 behavior or adding credentials to this benchmark.
 
-                UI hierarchy: $hierarchyPath
+                UI hierarchy captured before benchmark cleanup:\n$hierarchyDump
                 """.trimIndent(),
                 homeNavigationItem,
             )
@@ -125,8 +125,12 @@ class BaselineProfileGenerator {
     }
 
     /**
-     * Writes the current accessibility hierarchy to the test APK's external files
-     * directory so the CI workflow can pull it after a readiness failure.
+     * Captures the current accessibility hierarchy and returns its contents.
+     *
+     * Macrobenchmark can uninstall the target and instrumentation APKs during
+     * teardown, before the CI workflow can pull files from app-specific storage.
+     * Including the XML in the assertion message preserves the evidence in the
+     * instrumentation report even when those packages have already been removed.
      */
     private fun captureWindowHierarchy(device: UiDevice): String = try {
         val testContext = InstrumentationRegistry.getInstrumentation().context
@@ -139,7 +143,10 @@ class BaselineProfileGenerator {
 
         val outputFile = File(outputDirectory, "baseline-profile-window-hierarchy.xml")
         device.dumpWindowHierarchy(outputFile)
-        outputFile.absolutePath
+        """
+        File: ${outputFile.absolutePath}
+        ${outputFile.readText()}
+        """.trimIndent()
     } catch (exception: Exception) {
         "UI hierarchy capture failed: ${exception.javaClass.simpleName}: ${exception.message}"
     }
@@ -472,7 +479,7 @@ class BaselineProfileGenerator {
         )
 
         if (object2 == null) {
-            val hierarchyPath = captureWindowHierarchy(device)
+            val hierarchyDump = captureWindowHierarchy(device)
             assertNotNull(
                 """
                 Required benchmark UI was not found.
