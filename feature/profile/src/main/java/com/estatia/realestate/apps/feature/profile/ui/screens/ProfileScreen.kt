@@ -105,7 +105,8 @@ fun ProfileScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .testTag("ProfileScreen"),
     ) {
         Column(
             modifier = Modifier
