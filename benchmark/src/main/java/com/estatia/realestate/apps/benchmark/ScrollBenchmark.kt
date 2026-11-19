@@ -51,6 +51,7 @@ class ScrollBenchmark {
         device.waitForIdle()
         feedList.fling(Direction.UP)
     }
+
     private companion object {
         const val PROPERTY_FEED_RESOURCE_ID = "PropertyFeed"
         const val FEED_TIMEOUT_MS = 15_000L
