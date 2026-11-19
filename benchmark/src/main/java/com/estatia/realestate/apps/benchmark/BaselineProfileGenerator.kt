@@ -15,7 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Generates the Baseline Profile for Estatia's critical user journeys.
+ * Generates separate Startup Profile and Baseline Profile rules for Estatia.
  *
  * Authentication is intentionally NOT performed by this benchmark.
  *
@@ -34,10 +34,45 @@ class BaselineProfileGenerator {
     @get:Rule
     val baselineProfileRule = BaselineProfileRule()
 
+    /**
+     * Captures only the authenticated launch path for DEX startup layout optimization.
+     *
+     * The Startup Profile must remain limited to work required to display the initial
+     * authenticated Home experience. Other destinations and post-startup interactions
+     * belong in [generateCriticalUserJourneys].
+     */
     @Test
-    fun generate() = baselineProfileRule.collect(
+    fun generateStartup() = baselineProfileRule.collect(
         packageName = BenchmarkTargetPackage.requirePackageName(),
         includeInStartupProfile = true,
+    ) {
+        val device = UiDevice.getInstance(
+            InstrumentationRegistry.getInstrumentation(),
+        )
+
+        pressHome()
+        startActivityAndWait()
+        waitForAuthenticatedNavigationUi(device)
+
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED,
+            description = "Initial authenticated Home property feed",
+        )
+
+        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+    }
+
+    /**
+     * Captures the broader critical user journeys for the Baseline Profile only.
+     *
+     * These journeys remain part of the Baseline Profile, but must not expand the
+     * Startup Profile beyond the initial authenticated Home experience.
+     */
+    @Test
+    fun generateCriticalUserJourneys() = baselineProfileRule.collect(
+        packageName = BenchmarkTargetPackage.requirePackageName(),
+        includeInStartupProfile = false,
     ) {
         val device = UiDevice.getInstance(
             InstrumentationRegistry.getInstrumentation(),
