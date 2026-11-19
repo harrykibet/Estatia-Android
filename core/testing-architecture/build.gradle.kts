@@ -9,11 +9,10 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
-    // 🛡️ Bootstrapping Guarantee: The architecture tests MUST have access to the canary report.
-    // Declare explicit dependency to ensure it runs before this module's tests.
-    dependsOn(":core:canary-violations:copyDemoDebugLintReports")
+    // 🛡️ Bootstrapping Guarantee: generate the actual canary analysis report before these tests.
+    dependsOn(":core:canary-violations:lintDemoDebug")
 
-    // Pass the absolute checkout root and structured canary XML report to policy tests.
+    // Pass the absolute checkout root and variant-scoped canary XML report to policy tests.
     systemProperty("PROJECT_ROOT", project.rootDir.absolutePath)
-    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.xml")
+    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results-demoDebug.xml")
 }
