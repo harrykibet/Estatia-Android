@@ -104,7 +104,7 @@ nightly-optimization:
     - name: Binary Purity Audit (R8)
       script: |
         ./gradlew :app:assembleProdRelease --no-daemon
-        ./gradlew auditBinaryPurity --no-daemon
+        ./gradlew auditReleaseSymbols --no-daemon
 
     - name: Chaos Tests
       script: ./gradlew :app:pixel6Api31ProdDebugAndroidTest \
