@@ -35,7 +35,7 @@ We use a "funnel" approach where expensive operations are deferred to later stag
 *   **Key Operations**:
     *   **Exhaustive Analysis**: Full `./gradlew lint` and `./gradlew test` across all modules.
     *   **Fleet Testing**: Runs instrumented tests across four distinct device shapes (Small Phone, Modern Pixel, Medium Phone, Tablet).
-    *   **Linux Emulator Readiness**: The Main Branch workflow grants the hosted runner KVM access and installs the Android Emulator SDK package once before Gradle Managed Device setup, avoiding concurrent SDK package installation races.
+    *   **Linux Emulator Readiness**: Main Branch and each Nightly managed-device job prepare KVM and install the Android Emulator SDK package once on their own hosted runner before Gradle Managed Device setup. Runner isolation means this setup is repeated in the Chaos, Baseline Profile, and Macrobenchmark jobs.
     *   **Release Build**: `assembleProdRelease` with full R8 shrinking and production signing.
     *   **Artifact Archival**: Signed APKs are archived for internal QA distribution.
 
@@ -46,7 +46,7 @@ We use a "funnel" approach where expensive operations are deferred to later stag
     *   **Deterministic Chaos**: Runs `FeedGestureChaosTest` on `pixel6Api31` to find rare race conditions.
     *   **Baseline Profile Generation**: Captures AOT profiles and automatically creates a PR to update them in the repo.
     *   **Performance Benchmarks**: Measures Startup and Scrolling performance via Macrobenchmarks.
-    *   **Security & Purity**: Runs OWASP Dependency Check and `auditBinaryPurity` (R8 mapping audit).
+    *   **Security & Purity**: Runs OWASP Dependency Check and `auditReleaseSymbols` (LAW-038 R8 mapping audit across Demo and Prod release variants).
     *   **Full Quality Audit**: Generates exhaustive JaCoCo coverage reports and runs architecture audits on all variants.
 
 ---
@@ -85,7 +85,7 @@ Developers can run any CI job locally using these commands:
 ./gradlew :benchmark:pixel6Api31ProdDebugAndroidTest
 
 # Run Binary Purity Audit
-./gradlew auditBinaryPurity
+./gradlew auditReleaseSymbols
 ```
 
 ---

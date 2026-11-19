@@ -46,7 +46,7 @@ class GovernanceQualityOracle {
     @Test
     fun `verify governance quality metrics`() {
         val reportPath = System.getProperty("CANARY_LINT_XML_REPORT")
-            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results.xml").absolutePath
+            ?: File(projectRoot, "$canaryModulePath/build/reports/lint-results-demoDebug.xml").absolutePath
         val reportFile = File(reportPath)
         assertTrue("Governance Quality Error: Canary lint report not found at $reportPath. Run :core:canary-violations:lintAnalyzeDemoDebug first.", reportFile.exists())
 
