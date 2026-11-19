@@ -92,9 +92,11 @@ fun PropertyFeedScreen(
                 snapshotFlow { horizontalPagerState.currentPage }
                     .collect { horizontalPage ->
                         if (horizontalPage == 0) {
-                            onNavigateToDetails(listing.id)
-                            // Snap back to 1 so when we come back, we're on the video
+                            // Reset before navigating. Otherwise navigation can dispose
+                            // Home before the pager reaches page 1, causing this observer
+                            // to navigate to Property Details again when Home is restored.
                             horizontalPagerState.scrollToPage(1)
+                            onNavigateToDetails(listing.id)
                         }
                     }
             }
