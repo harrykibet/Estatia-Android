@@ -112,7 +112,7 @@ nightly-audit:
     # Exhaustive variant audit
     - ./gradlew verifyArchitecture lint --stacktrace --info
     - ./gradlew :app:assembleProdRelease
-    - ./gradlew auditBinaryPurity
+    - ./gradlew auditReleaseSymbols
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
 
