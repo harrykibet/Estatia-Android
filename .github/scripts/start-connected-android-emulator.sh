@@ -6,8 +6,14 @@ if [[ -z "${ANDROID_HOME:-}" || ! -d "$ANDROID_HOME" ]]; then
   exit 1
 fi
 
-SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+SDKMANAGER="$(command -v sdkmanager || true)"
+if [[ -z "$SDKMANAGER" ]]; then
+  SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+fi
+AVDMANAGER="$(command -v avdmanager || true)"
+if [[ -z "$AVDMANAGER" ]]; then
+  AVDMANAGER="$(dirname "$SDKMANAGER")/avdmanager"
+fi
 ADB="$ANDROID_HOME/platform-tools/adb"
 EMULATOR="$ANDROID_HOME/emulator/emulator"
 
@@ -31,7 +37,7 @@ PID_FILE="$STATE_DIR/$AVD_NAME.pid"
 mkdir -p "$STATE_DIR" "${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 
-# Accept SDK package licenses before installing the API 31 Google APIs image.
+# Accept SDK package licenses before installing the configured Google APIs image.
 set +o pipefail
 yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
 set -o pipefail
@@ -67,7 +73,7 @@ fi
   -gpu swiftshader_indirect \
   -accel on \
   -cores 2 \
-  -memory 4096 \
+  -memory 2048 \
   >"$AVD_LOG" 2>&1 &
 EMULATOR_PID=$!
 printf '%s\n' "$EMULATOR_PID" > "$PID_FILE"
