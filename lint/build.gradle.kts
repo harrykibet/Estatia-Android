@@ -27,16 +27,16 @@ tasks.withType<Test>().configureEach {
     // Pass the path to README.md for DocParityTest
     systemProperty("LINT_README_PATH", "${project.projectDir}/README.md")
     
-    // Pass the structured XML report consumed by Law034's regression oracle.
-    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results.xml")
+    // Pass the variant-scoped XML report consumed by the governance and LAW-034 oracles.
+    systemProperty("CANARY_LINT_XML_REPORT", "${project.rootDir}/core/canary-violations/build/reports/lint-results-demoDebug.xml")
     
     // Pass module paths for MetaArchitectureSyncTest
     systemProperty("KSP_SERVICES_PATH", "${project.rootDir}/core/ksp-architecture/src/main/resources/META-INF/services/com.google.devtools.ksp.processing.SymbolProcessorProvider")
     systemProperty("KONSIST_TESTS_PATH", "${project.rootDir}/core/testing-architecture/src/test/kotlin/com/estatia/realestate/apps/core/testing_architecture")
     systemProperty("PROJECT_ROOT", "${project.rootDir}")
 
-    // Ensure canary report is generated before running tests that depend on it
-    dependsOn(":core:canary-violations:copyDemoDebugLintReports")
+    // Run canary lint analysis and generate its XML report before policy tests consume it.
+    dependsOn(":core:canary-violations:lintDemoDebug")
 }
 
 tasks.withType<org.gradle.jvm.tasks.Jar> {
