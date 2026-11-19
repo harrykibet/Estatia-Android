@@ -21,7 +21,18 @@ Run the production macrobenchmarks against a connected Android device or emulato
 
 The benchmark module targets the app's `prodBenchmark` build variant. The device must be connected through ADB and support AndroidX Macrobenchmark (API 29 or newer). The Nightly workflow provisions a Pixel 6 API 31 emulator, waits for Android boot completion, runs the connected-device tasks, and stops the emulator even if a task fails.
 
-To generate baseline profiles:
+To generate variant-specific Baseline and Startup Profiles for both app environments:
 ```bash
-./gradlew :app:generateBaselineProfile
+./gradlew :app:generateDemoReleaseBaselineProfile :app:generateProdReleaseBaselineProfile
 ```
+
+The app consumer configuration keeps profile output separate by variant and saves generated
+rules under the corresponding app source set:
+
+- `app/src/demoRelease/generated/baselineProfiles/`
+- `app/src/prodRelease/generated/baselineProfiles/`
+
+`BaselineProfileGenerator.generateStartup` contributes only the authenticated launch-to-Home
+path to the Startup Profile. `generateCriticalUserJourneys` captures Home feed scrolling,
+Search, Property Details, Market, Chats, Add Property, and Profile for the Baseline Profile
+without expanding the Startup Profile. Startup rules are also included in the Baseline Profile.
