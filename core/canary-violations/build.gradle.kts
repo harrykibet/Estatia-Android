@@ -31,9 +31,9 @@ android {
         
         // 🧪 Regression Enforcement: Structured reports for high-fidelity verification (Law034).
         textReport = true
-        textOutput = file("build/reports/lint-results.txt")
+        textOutput = file("build/reports/lint-results-demoDebug.txt")
         xmlReport = true
-        xmlOutput = file("build/reports/lint-results.xml")
+        xmlOutput = file("build/reports/lint-results-demoDebug.xml")
         
         checkDependencies = false
         checkTestSources = true
