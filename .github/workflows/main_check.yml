@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+permissions:
+  contents: read
+
 env:
   CI: true
   GRADLE_CI_MAX_WORKERS: 2
