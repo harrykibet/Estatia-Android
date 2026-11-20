@@ -2,8 +2,19 @@ plugins {
     alias(libs.plugins.estatia.android.application)
 }
 
+val firebaseEmulatorIntegration =
+    providers.gradleProperty("firebaseEmulatorIntegration").orNull?.toBoolean() ?: false
+
 android {
     namespace = "com.estatia.realestate.apps"
+
+    defaultConfig {
+        buildConfigField(
+            "boolean",
+            "FIREBASE_EMULATOR_INTEGRATION",
+            firebaseEmulatorIntegration.toString(),
+        )
+    }
 }
 
  dokka {

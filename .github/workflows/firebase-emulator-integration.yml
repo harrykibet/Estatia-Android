@@ -47,18 +47,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 21 (Firebase Emulator Suite requirement)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
+          package-manager-cache: false
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -139,7 +140,7 @@ jobs:
             --only auth,firestore,storage \
             --project "$FIREBASE_PROJECT_ID" \
             --config firebase.emulators.json \
-            "bash ./.github/scripts/run-gradle-with-diagnostics.sh firebase-emulator-integration ./gradlew :app:connectedProdDebugAndroidTest --no-configuration-cache --stacktrace --console=plain"
+            "bash ./.github/scripts/run-gradle-with-diagnostics.sh firebase-emulator-integration ./gradlew :app:connectedProdDebugAndroidTest -PfirebaseEmulatorIntegration=true -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.FirebaseEmulatorIntegrationTest --no-configuration-cache --stacktrace --console=plain"
 
       - name: Capture Android emulator diagnostics
         if: always()
@@ -160,7 +161,7 @@ jobs:
 
       - name: Upload Firebase emulator integration reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firebase-emulator-integration-${{ github.run_id }}
           path: |

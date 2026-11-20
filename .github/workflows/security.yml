@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Restore Dependency-Check database cache
         uses: actions/cache@v4
@@ -97,7 +97,7 @@ jobs:
             "${nvd_api_args[@]}"
 
       - name: Upload report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-report
           path: reports
