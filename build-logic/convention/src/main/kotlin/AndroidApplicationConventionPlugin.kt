@@ -21,7 +21,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         // Keep Demo and Prod release profiles separate and versioned with source.
         // Startup and full journey rules are generated into each variant's source set.
-        extensions.configure<BaselineProfileConsumerExtension> {
+        extensions.configure<BaselineProfileConsumerExtension>("baselineProfile") {
             mergeIntoMain = false
             saveInSrc = true
         }
