@@ -200,10 +200,11 @@ internal class FirestoreProperties @Inject constructor(
             }
 
 
-            val property = snapshot.toObject(PropertyEntityModel::class.java)
-                ?: throw DatabaseException.InvalidData(
-                    "Unable to parse property"
-                )
+            val property = snapshot.data?.let { fields ->
+                FirestorePropertyMapper.toEntity(snapshot.id, fields)
+            } ?: throw DatabaseException.InvalidData(
+                "Unable to parse property"
+            )
 
             // Try to fetch contact info if available (gated by rules)
             val contactSnapshot = database.collection(PROPERTIES)
@@ -240,7 +241,11 @@ internal class FirestoreProperties @Inject constructor(
                         .whereIn(FieldPath.documentId(), chunk)
                         .get()
                         .await()
-                        .documents.mapNotNull { it.toObject(PropertyEntityModel::class.java) }
+                        .documents.mapNotNull { document ->
+                            document.data?.let { fields ->
+                                FirestorePropertyMapper.toEntity(document.id, fields)
+                            }
+                        }
                 }
             } else {
                 emptyList()
@@ -378,7 +383,7 @@ internal class FirestoreProperties @Inject constructor(
 
                         if(cursor != null)
                             it.startAfter(
-                                cursor.createdAt,
+                                FirestorePropertyMapper.toFirestoreCursorValue(cursor),
                                 cursor.documentId
                             )
                         else
@@ -393,10 +398,10 @@ internal class FirestoreProperties @Inject constructor(
 
 
             val properties =
-                snapshot.documents.mapNotNull {
-                    it.toObject(
-                        PropertyEntityModel::class.java
-                    )
+                snapshot.documents.mapNotNull { document ->
+                    document.data?.let { fields ->
+                        FirestorePropertyMapper.toEntity(document.id, fields)
+                    }
                 }
 
 
@@ -408,13 +413,9 @@ internal class FirestoreProperties @Inject constructor(
                 properties = properties,
                 cursor =
                     last?.let {
-                        PropertyCursor(
-                            createdAt =
-                                it.getLong(
-                                    FirestoreFields.CREATED_AT
-                                ) ?: 0L,
-                            documentId =
-                                it.id
+                        FirestorePropertyMapper.toCursor(
+                            documentId = it.id,
+                            rawCreatedAt = it.get(FirestoreFields.CREATED_AT),
                         )
                     }
             )
