@@ -1,6 +1,6 @@
-name: Baseline Profile Instrumentation Diagnostics
+name: Baseline Profile Generation Diagnostics
 
-run-name: "Baseline Profile diagnostics - ${{ github.ref_name }} #${{ github.run_number }}"
+run-name: "Baseline Profile generation - ${{ github.ref_name }} #${{ github.run_number }}"
 
 on:
   pull_request:
@@ -39,10 +39,18 @@ env:
   GRADLE_CI_KOTLIN_XMX: 2g
 
 jobs:
-  demo-baseline-profile:
-    name: Demo NonMinifiedRelease instrumentation
+  variant-baseline-profile:
+    name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: demo
+            variant: Demo
+          - flavor: prod
+            variant: Prod
 
     steps:
       - name: Checkout code
@@ -65,10 +73,11 @@ jobs:
       - name: Set executable permission for Gradle wrapper
         run: chmod +x ./gradlew
 
-      - name: Prepare Demo Firebase configuration
+      - name: Prepare Firebase configuration
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
-        run: bash ./.github/scripts/prepare-google-services.sh demo
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh "${{ matrix.flavor }}"
 
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
@@ -76,26 +85,29 @@ jobs:
       - name: Start connected Android Emulator
         run: bash ./.github/scripts/start-connected-android-emulator.sh
 
-      - name: Clear emulator logcat before instrumentation
+      - name: Clear emulator logcat before profile generation
         shell: bash
         run: |
           set -euo pipefail
           "$ANDROID_HOME/platform-tools/adb" -s "$ANDROID_SERIAL" logcat -c
 
-      - name: Run only the failing Demo baseline-profile instrumentation task
+      - name: Generate and save variant Baseline and Startup Profiles
         shell: bash
-        timeout-minutes: 40
+        timeout-minutes: 90
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/baseline-profile-diagnostics"
-          bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile-demo-instrumentation ./gradlew :benchmark:connectedDemoNonMinifiedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.benchmark.BaselineProfileGenerator --no-configuration-cache --stacktrace --info --console=plain 2>&1 | tee "$RUNNER_TEMP/baseline-profile-diagnostics/gradle-task.log"
+          task=":app:generate${{ matrix.variant }}ReleaseBaselineProfile"
+          mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
+            ./gradlew "$task" --no-configuration-cache --stacktrace --info --console=plain \
+            2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
         if: always()
         shell: bash
         run: |
           set +e
-          diagnostics_dir="$RUNNER_TEMP/baseline-profile-diagnostics"
+          diagnostics_dir="$RUNNER_TEMP/baseline-profile-validation"
           mkdir -p "$diagnostics_dir"
           adb="$ANDROID_HOME/platform-tools/adb"
 
@@ -105,32 +117,134 @@ jobs:
               "$adb" -s "$ANDROID_SERIAL" logcat -d -v threadtime > "$diagnostics_dir/logcat.txt" 2>&1
               "$adb" -s "$ANDROID_SERIAL" shell dumpsys activity activities > "$diagnostics_dir/activity.txt" 2>&1
               "$adb" -s "$ANDROID_SERIAL" shell dumpsys window windows > "$diagnostics_dir/windows.txt" 2>&1
-              hierarchy_path="/sdcard/Android/data/com.estatia.realestate.apps.benchmark/files/baseline-profile-window-hierarchy.xml"
-              if "$adb" -s "$ANDROID_SERIAL" shell test -f "$hierarchy_path"; then
-                "$adb" -s "$ANDROID_SERIAL" pull "$hierarchy_path" "$diagnostics_dir/window-hierarchy.xml" >/dev/null 2>&1
-              fi
               "$adb" -s "$ANDROID_SERIAL" exec-out screencap -p > "$diagnostics_dir/screen.png" 2>/dev/null
             fi
           fi
-
           exit 0
 
       - name: Stop connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
 
-      - name: Upload instrumentation and environment reports
+      - name: Verify generated variant source profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          profile_dir="app/src/${{ matrix.flavor }}Release/generated/baselineProfiles"
+          report="$RUNNER_TEMP/baseline-profile-validation/source-${{ matrix.flavor }}.txt"
+          python3 - "$profile_dir" "$report" "${{ matrix.variant }}" <<'PY'
+          import pathlib
+          import sys
+
+          profile_dir = pathlib.Path(sys.argv[1])
+          report = pathlib.Path(sys.argv[2])
+          variant = sys.argv[3]
+          expected = ("baseline-prof.txt", "startup-prof.txt")
+          rows = [f"Variant: {variant}Release", f"Source directory: {profile_dir}"]
+
+          for name in expected:
+              path = profile_dir / name
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f"Missing or empty generated profile: {path}")
+              text = path.read_text(encoding="utf-8")
+              rule_count = sum(1 for line in text.splitlines() if line.strip())
+              if rule_count == 0:
+                  raise SystemExit(f"Generated profile has no rules: {path}")
+              rows.append(f"{name}: {path.stat().st_size} bytes, {rule_count} non-empty rules")
+
+          report.write_text("\n".join(rows) + "\n", encoding="utf-8")
+          print("\n".join(rows))
+          PY
+
+      - name: Assemble minified variant release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          task=":app:assemble${{ matrix.variant }}Release"
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-profiled-release-assembly" \
+            ./gradlew "$task" --no-configuration-cache --stacktrace --console=plain
+
+      - name: Verify packaged Baseline Profile and binary size
+        shell: bash
+        run: |
+          set -euo pipefail
+          flavor="${{ matrix.flavor }}"
+          apk_dir="app/build/outputs/apk/$flavor/release"
+          apk=""
+          for candidate in \
+            "$apk_dir/app-$flavor-release-unsigned.apk" \
+            "$apk_dir/app-$flavor-release.apk"; do
+            if [[ -s "$candidate" ]]; then
+              apk="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$apk" ]]; then
+            echo "::error::Could not find the packaged $flavor release APK in $apk_dir."
+            find "$apk_dir" -maxdepth 2 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+
+          python3 - "$apk" "app/src/$flavor"Release/generated/baselineProfiles \
+            "$RUNNER_TEMP/baseline-profile-validation/package-$flavor.txt" <<'PY'
+          import hashlib
+          import os
+          import pathlib
+          import sys
+          import zipfile
+
+          apk = pathlib.Path(sys.argv[1])
+          source_dir = pathlib.Path(sys.argv[2])
+          report = pathlib.Path(sys.argv[3])
+          profile_entry = "assets/dexopt/baseline.prof"
+          max_profile_bytes = 1_500_000
+
+          with zipfile.ZipFile(apk) as archive:
+              bad_entry = archive.testzip()
+              if bad_entry is not None:
+                  raise SystemExit(f"APK ZIP integrity check failed at {bad_entry}")
+              names = set(archive.namelist())
+              if profile_entry not in names:
+                  candidates = sorted(name for name in names if "baseline.prof" in name)
+                  raise SystemExit(
+                      f"{profile_entry} is missing from {apk}; profile-like entries: {candidates}"
+                  )
+              profile_bytes = archive.getinfo(profile_entry).file_size
+              if profile_bytes <= 0:
+                  raise SystemExit("Packaged assets/dexopt/baseline.prof is empty")
+              if profile_bytes >= max_profile_bytes:
+                  raise SystemExit(
+                      f"Packaged binary Baseline Profile is {profile_bytes} bytes; "
+                      f"must be smaller than {max_profile_bytes} bytes (1.5 MB)"
+                  )
+
+          baseline = source_dir / "baseline-prof.txt"
+          startup = source_dir / "startup-prof.txt"
+          apk_digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          lines = [
+              f"APK: {apk}",
+              f"APK bytes: {apk.stat().st_size}",
+              f"APK SHA-256: {apk_digest}",
+              f"Packaged profile: {profile_entry}",
+              f"Packaged binary profile bytes: {profile_bytes}",
+              f"Baseline source bytes: {baseline.stat().st_size}",
+              f"Startup source bytes: {startup.stat().st_size}",
+              "Result: PASS",
+          ]
+          report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("\n".join(lines))
+          with pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as summary:
+              summary.write(f"### {source_dir.parts[2].title()} Baseline Profile validation\n\n")
+              summary.write("\n".join(f"- {line}" for line in lines[1:]) + "\n\n")
+          PY
+
+      - name: Upload generated profiles and validation reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: baseline-profile-diagnostics-${{ github.run_id }}
+          name: baseline-profile-validation-${{ matrix.flavor }}-${{ github.run_id }}
           path: |
-            benchmark/build/reports/androidTests/connected/**
-            benchmark/build/outputs/androidTest-results/connected/**
-            benchmark/build/outputs/connected_android_test_additional_output/**
-            benchmark/build/test-results/**
-            build/reports/problems/**
-            ${{ runner.temp }}/gradle-ci-diagnostics/**
-            ${{ runner.temp }}/baseline-profile-diagnostics/**
+            app/src/${{ matrix.flavor }}Release/generated/baselineProfiles/*.txt
+            ${{ runner.temp }}/baseline-profile-validation/
           if-no-files-found: warn
           retention-days: 7
