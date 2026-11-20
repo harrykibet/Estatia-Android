@@ -36,3 +36,27 @@ rules under the corresponding app source set:
 path to the Startup Profile. `generateCriticalUserJourneys` captures Home feed scrolling,
 Search, Property Details, Market, Chats, Add Property, and Profile for the Baseline Profile
 without expanding the Startup Profile. Startup rules are also included in the Baseline Profile.
+
+
+## Production Baseline Profile account
+
+The Prod generation job signs in through Estatia's real Firebase email/password login before
+profile collection. Configure these repository Actions secrets:
+
+- `BASELINE_PROFILE_TEST_EMAIL`
+- `BASELINE_PROFILE_TEST_PASSWORD`
+
+Use a dedicated Firebase account. It must have a verified email, a linked/verified phone
+number (the login state machine requires a non-empty phone number), a matching Firestore user
+document, and readable property documents for the Home feed. The credentials are passed as
+instrumentation arguments only to the Prod job; the Demo job does not receive them. Login is
+completed before `BaselineProfileRule.collect`, so it is not included in the Startup Profile.
+
+## Firebase Storage coverage
+
+The Prod Baseline Profile validates live Firebase Authentication and Firestore on the current
+startup and critical journeys. It does not require live Storage because those journeys do not
+upload media. The separate `Firebase Emulator Integration` workflow verifies authenticated
+Firestore queries and Storage upload/download using the Firebase Auth, Firestore, and Storage
+Emulators. Emulator success validates SDK integration, not live bucket billing, availability,
+or production security rules.

@@ -12,7 +12,7 @@ The `network` module manages all external data communication, providing a robust
 
 ## Multi-Backend Strategy
 
-The module is structured to support both **Firebase** and **AWS** backends. Each service is mapped as follows:
+The module retains Firebase and AWS adapters, but the active production dependency graph uses Firebase. AWS implementations remain legacy adapters and are not initialized or bound as production remote data sources while the AWS backend is unavailable. The provider coverage is:
 
 | Service | Firebase Provider | AWS Provider (Amplify/SDK) |
 | :--- | :--- | :--- |
@@ -26,15 +26,16 @@ The module is structured to support both **Firebase** and **AWS** backends. Each
 | **Secure Ops (Payments)** | Firebase Cloud Functions | AWS Lambda (via AppSync) |
 | **Remote Config** | Firebase Remote Config | AWS AppConfig |
 
-## Swapping Backends
+## Active production provider configuration
 
-Switching between backend providers is handled in the dependency injection layer.
+Production bindings in `ProdDataSourcesModule.kt` select Firebase Authentication, Firestore,
+Firebase Analytics, Crashlytics, Remote Config and the existing Firebase Functions payments
+adapter. Firebase is initialized using the production `google-services.json`.
 
-1.  **DI Configuration**: Open `ProdDataSourcesModule.kt` and update the `@Provides` bindings to point to your desired implementation (e.g., swapping `FirestoreProperties` for `AwsPropertyRemoteDataSource`).
-2.  **Provider Configuration**:
-    - **For AWS**: Ensure `amplifyconfiguration.json` is placed in `app/src/main/res/raw/`.
-    - **For Firebase**: Ensure `google-services.json` is present in the `app` module.
-3.  **Initialization**: AWS integration is managed via `AwsBackendInitializer.kt`, which registers the necessary Amplify plugins.
+AWS implementations and error mappers remain as legacy adapters for potential future migration,
+but `AwsBackendInitializer` is not registered in the production initializer set. The obsolete
+Amplify configuration resource is not packaged. Compiled legacy adapters are not evidence that
+AWS services are operational.
 
 ## Error Mapping System
 
