@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -25,6 +26,11 @@ class FirebaseEmulatorIntegrationTest {
 
     @Test(timeout = TEST_TIMEOUT_MILLIS)
     fun authenticatedFirestoreQueryAndStorageUploadDownloadRoundTrip() {
+        assumeTrue(
+            "Requires the Firebase Emulator Integration workflow",
+            BuildConfig.FIREBASE_EMULATOR_INTEGRATION,
+        )
+
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val firebaseApp = FirebaseApp.getApps(targetContext).firstOrNull()
             ?: checkNotNull(FirebaseApp.initializeApp(targetContext)) {
