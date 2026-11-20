@@ -15,6 +15,7 @@ import com.google.android.gms.tasks.Task
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.storage.FirebaseStorage
 import io.mockk.coEvery
@@ -109,6 +110,65 @@ class FirestorePropertiesTest {
             verify(exactly = 3) { likedCollection.get() }
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+
+    @Test
+    fun `Firestore Timestamp property dates normalize to epoch milliseconds without losing cursor precision`() {
+        val timestamp = Timestamp(1_700_000_000L, 123_456_789)
+
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "property-123",
+            fields = mapOf(
+                "title" to "Timestamp-backed listing",
+                "createdAt" to timestamp,
+                "price" to 125_000,
+            ),
+        )
+
+        assertEquals("property-123", property.id)
+        assertEquals("Timestamp-backed listing", property.title)
+        assertEquals(125_000.0, checkNotNull(property.price), 0.0)
+        assertEquals(1_700_000_000_123L, checkNotNull(property.createdAt))
+
+        val cursor = FirestorePropertyMapper.toCursor("property-123", timestamp)
+        assertEquals(1_700_000_000_123L, cursor.createdAt)
+        assertEquals(1_700_000_000L, checkNotNull(cursor.createdAtSeconds))
+        assertEquals(123_456_789, checkNotNull(cursor.createdAtNanoseconds))
+
+        val queryValue = FirestorePropertyMapper.toFirestoreCursorValue(cursor) as Timestamp
+        assertEquals(timestamp.seconds, queryValue.seconds)
+        assertEquals(timestamp.nanoseconds, queryValue.nanoseconds)
+    }
+
+    @Test
+    fun `legacy numeric property dates remain milliseconds and keep numeric cursor type`() {
+        val createdAt = 1_700_000_000_123L
+
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "legacy-property",
+            fields = mapOf("createdAt" to createdAt),
+        )
+        val cursor = FirestorePropertyMapper.toCursor("legacy-property", createdAt)
+
+        assertEquals(createdAt, checkNotNull(property.createdAt))
+        assertEquals(createdAt, cursor.createdAt)
+        assertEquals(null, cursor.createdAtSeconds)
+        assertEquals(null, cursor.createdAtNanoseconds)
+        assertEquals(createdAt, FirestorePropertyMapper.toFirestoreCursorValue(cursor))
+    }
+
+    @Test
+    fun `unsupported Firestore property date types fail with a field-specific error`() {
+        try {
+            FirestorePropertyMapper.toEntity(
+                documentId = "invalid-property",
+                fields = mapOf("createdAt" to "not-a-timestamp"),
+            )
+            throw AssertionError("Expected an invalid Firestore createdAt value to fail.")
+        } catch (exception: IllegalArgumentException) {
+            assertTrue(exception.message.orEmpty().contains("createdAt"))
         }
     }
 
