@@ -277,7 +277,10 @@ runs:
 
         # Keep device-side runner output so discovery and instrumentation errors are diagnosable.
         adb logcat -c
+        # Emulator integration has its own workflow; keep it out of this broad smoke suite.
+        # That workflow explicitly selects this class with the runner's class= argument.
         bash ./.github/scripts/run-gradle-with-diagnostics.sh connected-prod-debug-tests ./gradlew :app:connectedProdDebugAndroidTest \
+          -Pandroid.testInstrumentationRunnerArguments.notClass=com.estatia.realestate.apps.FirebaseEmulatorIntegrationTest \
           --no-configuration-cache --stacktrace --info --console=plain
 
         # A successful Gradle task is not sufficient: AGP can otherwise report zero tests.
