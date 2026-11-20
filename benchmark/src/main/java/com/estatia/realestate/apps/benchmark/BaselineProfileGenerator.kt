@@ -689,7 +689,7 @@ private object ScreenTestTags {
     const val LOGIN_PASSWORD_FIELD = "LoginPasswordField"
 
     const val LOGIN_BUTTON = "LoginButton"
-
+}
 
 /**
  * Stable identifiers for the actual tabs exposed by ProfileScreen.
