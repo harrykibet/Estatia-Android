@@ -22,6 +22,10 @@ on:
       - ".github/scripts/stop-connected-android-emulator.sh"
       - ".github/scripts/run-gradle-with-diagnostics.sh"
       - ".github/workflows/baseline-profile-diagnostics.yml"
+      - "firebase.json"
+      - "firestore.rules"
+      - "storage.rules"
+      - ".github/workflows/firebase-emulator-integration.yml"
   workflow_dispatch:
 
 concurrency:
@@ -79,6 +83,24 @@ jobs:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh "${{ matrix.flavor }}"
 
+      - name: Validate production benchmark account secrets
+        if: matrix.flavor == 'prod'
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_EMAIL repository secret."
+            exit 1
+          }
+          [[ -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_PASSWORD repository secret."
+            exit 1
+          }
+          echo "Production benchmark account secrets are present; values are not printed."
+
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
 
@@ -94,12 +116,24 @@ jobs:
       - name: Generate and save variant Baseline and Startup Profiles
         shell: bash
         timeout-minutes: 90
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_EMAIL || '' }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_PASSWORD || '' }}
         run: |
           set -euo pipefail
           task=":app:generate${{ matrix.variant }}ReleaseBaselineProfile"
+          gradle_test_args=()
+          if [[ "${{ matrix.flavor }}" == "prod" ]]; then
+            [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" && -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
+              echo "::error::Production benchmark credentials are required."
+              exit 1
+            }
+            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestEmail=${BASELINE_PROFILE_TEST_EMAIL}")
+            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestPassword=${BASELINE_PROFILE_TEST_PASSWORD}")
+          fi
           mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
           bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
-            ./gradlew "$task" --no-configuration-cache --stacktrace --info --console=plain \
+            ./gradlew "$task" "${gradle_test_args[@]}" --no-configuration-cache --stacktrace --console=plain \
             2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
@@ -242,6 +276,18 @@ jobs:
               summary.write(f"### {source_dir.parts[2].title()} Baseline Profile validation\n\n")
               summary.write("\n".join(f"- {line}" for line in lines[1:]) + "\n\n")
           PY
+
+      - name: Record live Storage coverage boundary
+        if: matrix.flavor == 'prod'
+        shell: bash
+        run: |
+          {
+            echo "### Firebase Storage coverage"
+            echo
+            echo "Live Firebase Storage is not exercised by Baseline Profile generation."
+            echo "The authenticated profile validates live Firebase Auth and Firestore paths."
+            echo "Storage SDK upload/download is validated separately against the Firebase Storage Emulator."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload generated profiles and validation reports
         if: always()

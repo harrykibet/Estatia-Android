@@ -6,13 +6,10 @@ import androidx.work.Configuration
 import com.estatia.realestate.apps.core.domain.config.IConfigProvider
 import com.estatia.realestate.apps.core.domain.analytics.ICrashReporter
 import com.estatia.realestate.apps.core.common.interfaces.IBackendInitializer
-import com.estatia.realestate.apps.core.common.di.ApplicationScope
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.AppEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -31,10 +28,6 @@ class EstatiaApplication : Application(), Configuration.Provider  {
 
     @Inject
     lateinit var backendInitializers: Set<@JvmSuppressWildcards IBackendInitializer>
-
-    @Inject
-    @ApplicationScope
-    lateinit var applicationScope: CoroutineScope
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -57,11 +50,10 @@ class EstatiaApplication : Application(), Configuration.Provider  {
         // Config-backed singletons are created while MainActivity is injected.
         // Load the bundled snapshot before Application.onCreate returns. ConfigProvider
         // performs asset IO on its injected IO dispatcher and starts remote refresh separately.
+        // Complete Firebase/App Check setup before the first Activity or ViewModel
+        // can observe authentication or issue Firestore requests.
         runBlocking {
             config.initialize()
-        }
-
-        applicationScope.launch {
             initializeBackends()
         }
     }
