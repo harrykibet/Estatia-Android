@@ -2,12 +2,15 @@ package com.estatia.realestate.apps
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -20,7 +23,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FirebaseEmulatorIntegrationTest {
 
-    @Test
+    @Test(timeout = TEST_TIMEOUT_MILLIS)
     fun authenticatedFirestoreQueryAndStorageUploadDownloadRoundTrip() {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
         val firebaseApp = FirebaseApp.getApps(targetContext).firstOrNull()
@@ -44,7 +47,10 @@ class FirebaseEmulatorIntegrationTest {
         val payload = "Estatia Firebase Storage emulator integration $suffix".toByteArray()
 
         val user = checkNotNull(
-            Tasks.await(auth.createUserWithEmailAndPassword(email, password)).user,
+            await(
+                auth.createUserWithEmailAndPassword(email, password),
+                "Auth emulator user creation",
+            ).user,
         ) {
             "Firebase Auth Emulator did not return the created test user."
         }
@@ -53,34 +59,56 @@ class FirebaseEmulatorIntegrationTest {
         val objectReference = storage.reference.child(objectPath)
 
         try {
-            Tasks.await(
+            await(
                 userDocument.set(
                     mapOf("uid" to user.uid, "email" to email, "probe" to suffix),
                 ),
+                "Firestore emulator document write",
             )
 
-            val query = Tasks.await(
+            val query = await(
                 firestore.collection(CI_COLLECTION)
                     .whereEqualTo("uid", user.uid)
                     .whereEqualTo("probe", suffix)
                     .get(),
+                "Authenticated Firestore emulator query",
             )
             assertEquals("Firestore should return exactly one authenticated probe document.", 1, query.size())
             assertEquals(user.uid, query.documents.single().getString("uid"))
 
-            Tasks.await(objectReference.putBytes(payload))
-            val metadata = Tasks.await(objectReference.metadata)
+            await(objectReference.putBytes(payload), "Firebase Storage emulator upload")
+            val metadata = await(objectReference.metadata, "Firebase Storage emulator metadata retrieval")
             assertEquals(payload.size.toLong(), metadata.sizeBytes)
-            assertArrayEquals(payload, Tasks.await(objectReference.getBytes(MAX_DOWNLOAD_BYTES)))
+            assertArrayEquals(
+                payload,
+                await(objectReference.getBytes(MAX_DOWNLOAD_BYTES), "Firebase Storage emulator download"),
+            )
         } finally {
-            runCatching { Tasks.await(objectReference.delete()) }
-            runCatching { Tasks.await(userDocument.delete()) }
-            runCatching { Tasks.await(user.delete()) }
+            runCatching { await(objectReference.delete(), "Firebase Storage emulator cleanup", CLEANUP_TIMEOUT_SECONDS) }
+            runCatching { await(userDocument.delete(), "Firestore emulator cleanup", CLEANUP_TIMEOUT_SECONDS) }
+            runCatching { await(user.delete(), "Auth emulator cleanup", CLEANUP_TIMEOUT_SECONDS) }
             auth.signOut()
         }
     }
 
     private companion object {
+        const val TEST_TIMEOUT_MILLIS = 360_000L
+        const val OPERATION_TIMEOUT_SECONDS = 30L
+        const val CLEANUP_TIMEOUT_SECONDS = 10L
+
+        fun <T> await(
+            task: Task<T>,
+            operation: String,
+            timeoutSeconds: Long = OPERATION_TIMEOUT_SECONDS,
+        ): T = try {
+            Tasks.await(task, timeoutSeconds, TimeUnit.SECONDS)
+        } catch (timeout: TimeoutException) {
+            throw AssertionError(
+                "Timed out after ${timeoutSeconds}s waiting for $operation.",
+                timeout,
+            )
+        }
+
         const val EMULATOR_HOST = "10.0.2.2"
         const val AUTH_EMULATOR_PORT = 9099
         const val FIRESTORE_EMULATOR_PORT = 8080
