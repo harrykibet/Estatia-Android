@@ -181,11 +181,15 @@ class BaselineProfileGenerator {
             )
             emailField.text = email
             passwordField.text = password
-            device.pressBack()
+
+            // UiObject2.setText() updates the fields through accessibility actions.
+            // Do not press Back here: when the IME is not visible, Back exits the
+            // unauthenticated root Activity and backgrounds the app before login.
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
             waitFor(
                 device = device,
                 tag = ScreenTestTags.LOGIN_BUTTON,
-                description = "Production benchmark login button",
+                description = "Production benchmark login button after entering credentials",
                 timeoutMs = LOGIN_SCREEN_TIMEOUT_MS,
             ).click()
             homeNavigation = device.wait(
