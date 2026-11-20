@@ -4,7 +4,6 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
-import org.gradle.kotlin.dsl.exclude
 import com.estatia.realestate.apps.libs
 
 class FirebaseConventionPlugin : Plugin<Project> {
@@ -17,11 +16,6 @@ class FirebaseConventionPlugin : Plugin<Project> {
                 pluginManager.apply("com.google.gms.google-services")
                 pluginManager.apply("com.google.firebase.crashlytics")
                 pluginManager.apply("com.google.firebase.firebase-perf")
-            }
-
-            // Exclude problematic dependencies
-            configurations.all {
-                exclude(group = "com.google.firebase", module = "protolite-well-known-types")
             }
 
             dependencies {

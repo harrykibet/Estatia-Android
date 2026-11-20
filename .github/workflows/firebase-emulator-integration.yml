@@ -9,6 +9,11 @@ on:
     paths:
       - "app/**"
       - "core/network/**"
+      - "core/analytics/**"
+      - "core/datastore/**"
+      - "build.gradle.kts"
+      - "build-logic/convention/**"
+      - "gradle/libs.versions.toml"
       - "firebase.emulators.json"
       - "firestore.rules"
       - "storage.rules"
@@ -81,6 +86,41 @@ jobs:
             exit 1
           }
           echo "FIREBASE_PROJECT_ID=$project_id" >> "$GITHUB_ENV"
+
+      - name: Verify Firebase protobuf Lite dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/firebase-protobuf-dependencies"
+          mkdir -p "$report_dir"
+
+          ./gradlew :app:dependencyInsight \
+            --configuration prodDebugRuntimeClasspath \
+            --dependency com.google.protobuf:protobuf-javalite \
+            --no-configuration-cache --console=plain | tee "$report_dir/protobuf-javalite.txt"
+
+          ./gradlew :app:dependencyInsight \
+            --configuration prodDebugRuntimeClasspath \
+            --dependency com.google.firebase:protolite-well-known-types \
+            --no-configuration-cache --console=plain | tee "$report_dir/protolite-well-known-types.txt"
+
+          ./gradlew :app:dependencyInsight \
+            --configuration prodDebugRuntimeClasspath \
+            --dependency com.google.protobuf:protobuf-java \
+            --no-configuration-cache --console=plain | tee "$report_dir/protobuf-java.txt"
+
+          grep -Fq "com.google.protobuf:protobuf-javalite" "$report_dir/protobuf-javalite.txt" || {
+            echo "::error::The ProdDebug runtime does not resolve protobuf-javalite."
+            exit 1
+          }
+          grep -Fq "com.google.firebase:protolite-well-known-types" "$report_dir/protolite-well-known-types.txt" || {
+            echo "::error::Firebase Lite well-known types are missing from the ProdDebug runtime."
+            exit 1
+          }
+          if grep -Fq "com.google.protobuf:protobuf-java" "$report_dir/protobuf-java.txt"; then
+            echo "::error::The full protobuf-java runtime conflicts with Firebase's Lite runtime."
+            exit 1
+          fi
 
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
