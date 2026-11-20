@@ -117,7 +117,9 @@ jobs:
             echo "::error::Firebase Lite well-known types are missing from the ProdDebug runtime."
             exit 1
           }
-          if grep -Fq "com.google.protobuf:protobuf-java" "$report_dir/protobuf-java.txt"; then
+          # Match the exact module coordinate; protobuf-javalite contains the
+# prefix "protobuf-java" but is the required Firebase-compatible runtime.
+if grep -Eq 'com\\.google\\.protobuf:protobuf-java:[0-9]' "$report_dir/protobuf-java.txt"; then
             echo "::error::The full protobuf-java runtime conflicts with Firebase's Lite runtime."
             exit 1
           fi
