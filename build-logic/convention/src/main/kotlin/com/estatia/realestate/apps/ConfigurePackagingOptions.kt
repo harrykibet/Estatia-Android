@@ -22,8 +22,8 @@ fun configurePackagingOptions(project: Project) {
             "META-INF/LICENSE-notice.md",
             "google/protobuf/*.proto",
             // GraalVM native-image metadata is not consumed by Android. Micrometer OTLP
-            // and the shared OpenTelemetry API dependency both publish this same file.
-            "META-INF/native-image/io.opentelemetry/opentelemetry-api/native-image.properties"
+            // and the shared OpenTelemetry API dependency publish overlapping descriptors.
+            "META-INF/native-image/io.opentelemetry/opentelemetry-api/**"
         )
         val pickFirsts = setOf(
             "META-INF/LICENSE.md",
