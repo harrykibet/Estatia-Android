@@ -12,7 +12,7 @@ on:
       - "core/analytics/**"
       - "core/datastore/**"
       - "build.gradle.kts"
-      - "build-logic/convention/**"
+      - "build-logic/**"
       - "gradle/libs.versions.toml"
       - "firebase.emulators.json"
       - "firestore.rules"
