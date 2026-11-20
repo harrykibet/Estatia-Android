@@ -9,9 +9,7 @@ import com.estatia.realestate.apps.core.common.interfaces.IBackendInitializer
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.AppEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
 import javax.inject.Inject
@@ -59,9 +57,10 @@ class EstatiaApplication : Application(), Configuration.Provider  {
     }
 
     private suspend fun initializeBackends() {
-        withContext(Dispatchers.Main) {
-            backendInitializers.forEach { it.initialize() }
-        }
+        // Called from Application.onCreate on the main thread. Run the local SDK
+        // initializers directly rather than dispatching back to a main loop blocked
+        // by the surrounding runBlocking call.
+        backendInitializers.forEach { it.initialize() }
     }
 
 
