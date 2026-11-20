@@ -22,7 +22,7 @@ on:
       - ".github/scripts/stop-connected-android-emulator.sh"
       - ".github/scripts/run-gradle-with-diagnostics.sh"
       - ".github/workflows/baseline-profile-diagnostics.yml"
-      - "firebase.json"
+      - "firebase.emulators.json"
       - "firestore.rules"
       - "storage.rules"
       - ".github/workflows/firebase-emulator-integration.yml"

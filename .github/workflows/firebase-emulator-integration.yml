@@ -9,7 +9,7 @@ on:
     paths:
       - "app/**"
       - "core/network/**"
-      - "firebase.json"
+      - "firebase.emulators.json"
       - "firestore.rules"
       - "storage.rules"
       - ".github/workflows/firebase-emulator-integration.yml"
@@ -96,7 +96,7 @@ jobs:
           npx --yes firebase-tools@15.37.0 emulators:exec \
             --only auth,firestore,storage \
             --project "$FIREBASE_PROJECT_ID" \
-            --config firebase.json \
+            --config firebase.emulators.json \
             "bash ./.github/scripts/run-gradle-with-diagnostics.sh firebase-emulator-integration ./gradlew :app:connectedProdDebugAndroidTest --no-configuration-cache --stacktrace --console=plain"
 
       - name: Capture Android emulator diagnostics
