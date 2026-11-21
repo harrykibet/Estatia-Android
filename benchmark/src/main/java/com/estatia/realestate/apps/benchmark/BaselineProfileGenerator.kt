@@ -316,6 +316,9 @@ class BaselineProfileGenerator {
             tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
             description = "First Home property page",
         )
+        // Match ScrollBenchmark: keep the gesture away from the embedded media
+        // player's edge controls so the parent VerticalPager receives the swipe.
+        firstPage.setGestureMargin(device.displayWidth / 5)
         firstPage.swipe(Direction.UP, FEED_PAGE_SWIPE_PERCENT)
 
         val secondPage = waitFor(
