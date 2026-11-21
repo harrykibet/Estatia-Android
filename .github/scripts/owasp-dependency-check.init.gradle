@@ -18,6 +18,35 @@ gradle.beforeProject { project ->
         extension.outputDirectory = project.rootProject.file("reports")
         extension.skipTestGroups = true
 
+        // Scan only the runtime dependency graphs used by the two distributable
+        // Android flavors. Gradle/AGP also exposes internal KSP and other resolvable
+        // configurations; resolving those is neither an application dependency audit
+        // nor safe (AGP may hold an exclusive lock while dependency-check inspects them).
+        // scanConfigurations is a list of exact configuration names, not a pattern.
+        gradle.projectsEvaluated {
+            def requiredReleaseRuntimeConfigurations = [
+                "demoReleaseRuntimeClasspath",
+                "prodReleaseRuntimeClasspath",
+            ]
+            def appProject = project.rootProject.findProject(":app")
+            def missingConfigurations = requiredReleaseRuntimeConfigurations.findAll { name ->
+                def configuration = appProject == null ? null : appProject.configurations.findByName(name)
+                configuration == null || !configuration.canBeResolved
+            }
+            if (!missingConfigurations.isEmpty()) {
+                throw new GradleException(
+                    "Dependency-Check cannot verify both app release runtime graphs. " +
+                    "Missing or non-resolvable configurations: ${missingConfigurations.join(', ')}"
+                )
+            }
+
+            extension.scanConfigurations = requiredReleaseRuntimeConfigurations
+            project.logger.lifecycle(
+                "OWASP Dependency-Check will scan app release runtime configurations: " +
+                requiredReleaseRuntimeConfigurations.join(", ")
+            )
+        }
+
         def dataDirectory = System.getenv("ODC_DATA_DIRECTORY")
         if (dataDirectory) {
             extension.data.directory = dataDirectory
