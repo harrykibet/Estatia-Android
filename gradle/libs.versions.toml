@@ -34,7 +34,7 @@ bouncy-prov = "1.85.2"
 compose-bom =  "2026.08.00"
 credentialManager = "1.6.0"
 dokka = "2.2.0"
-firebase-bom = "34.18.0"
+firebase-bom = "35.2.0"
 firebaseCrashlyticsPlugin = "3.0.8"
 firebasePerfPlugin = "2.0.2"
 google-android-material = "1.14.0"
@@ -89,10 +89,10 @@ glide = "5.0.9"
 googleServices = "4.5.0"
 guava = "33.7.1-jre"
 mapsPlatformSecrets = "2.0.1"
-micrometer = "1.17.1"
+micrometer = "1.18.0"
 prometheusMetrics = "1.7.0"
-protobufJava = "4.36.0"
 retrofitSerialization = "1.0.0"
+robolectric = "4.17"
 
 [plugins]
 
@@ -226,13 +226,10 @@ analytics = [
     "metrics-performance",
     "play-services-appset",
     "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
     "micrometer-core",
     "micrometer-registry-prometheus",
     "micrometer-registry-otlp",
     "conscrypt-openjdk-uber",
-    "protobufJava",
-    "opentelemetry-sdk"
 ]
 
 play = [
@@ -308,7 +305,6 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 androidx-dataStore = { group = "androidx.datastore", name = "datastore", version.ref = "androidxDataStore" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 protobuf-kotlin-lite = { group = "com.google.protobuf", name = "protobuf-kotlin-lite", version.ref = "protobuf" }
-protobufJava = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobufJava" }
 protobuf-protoc = { group = "com.google.protobuf", name = "protoc", version.ref = "protobuf" }
 protobuf-javalite = { group = "com.google.protobuf", name = "protobuf-javalite", version.ref = "protobuf" }
 
@@ -397,6 +393,7 @@ androidx-test-core-ktx = { group = "androidx.test", name = "core-ktx", version.r
 androidx-tracing = { group = "androidx.tracing", name = "tracing", version.ref = "androidx-tracing" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 junit-vintage-engine = { group = "org.junit.vintage", name = "junit-vintage-engine", version.ref = "junit-vintage" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 amplify-core = { group = "com.amplifyframework", name = "aws-core", version.ref = "amplify" }
 amplify-api = { group = "com.amplifyframework", name = "aws-api", version.ref = "amplify" }
@@ -479,8 +476,6 @@ caffeine = "com.github.ben-manes.caffeine:caffeine:3.2.4"
 
 # Analytics and Perfomance
 opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.65.0"
-opentelemetry-sdk = "io.opentelemetry:opentelemetry-sdk:1.34.1"
-opentelemetry-exporter-otlp = "io.opentelemetry:opentelemetry-exporter-otlp:1.65.0"
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 prometheus-metrics-annotations = { group = "io.prometheus", name = "prometheus-metrics-annotations", version.ref = "prometheusMetrics" }

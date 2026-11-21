@@ -18,6 +18,9 @@
 
 # OpenTelemetry optional auto-configuration SPI
 -dontwarn io.opentelemetry.sdk.autoconfigure.spi.**
+# Micrometer's OTLP registry relocates optional SDK auto-configuration SPI types.
+# Its metrics exporter does not require the SDK auto-configuration extensions.
+-dontwarn io.micrometer.registry.otlp.shaded.io.opentelemetry.sdk.autoconfigure.spi.**
 
 # SLF4J optional logging integrations
 -dontwarn org.slf4j.**
