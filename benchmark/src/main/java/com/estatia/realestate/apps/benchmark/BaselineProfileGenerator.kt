@@ -63,6 +63,11 @@ class BaselineProfileGenerator {
             tag = ScreenTestTags.PROPERTY_FEED,
             description = "Initial authenticated Home property feed",
         )
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "First authenticated Home property page",
+        )
 
             device.waitForIdle(UI_IDLE_TIMEOUT_MS)
         }
@@ -298,18 +303,33 @@ class BaselineProfileGenerator {
             navigationTag = NavigationTestTags.HOME,
         )
 
-        val feed = waitFor(
+        waitFor(
             device = device,
             tag = ScreenTestTags.PROPERTY_FEED,
-            description = "Home property feed",
+            description = "Home property feed gesture surface",
         )
 
-        feed.setGestureMargin(device.displayWidth / 10)
+        // VerticalPager advances from page zero with an upward swipe. Verify
+        // the page tag changes rather than relying on an accessibility scroll event.
+        val firstPage = waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "First Home property page",
+        )
+        firstPage.swipe(Direction.UP, FEED_PAGE_SWIPE_PERCENT)
 
-        feed.fling(Direction.DOWN)
-        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+        val secondPage = waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
+            description = "Second Home property page after advancing the feed",
+        )
+        secondPage.swipe(Direction.DOWN, FEED_PAGE_SWIPE_PERCENT)
 
-        feed.fling(Direction.DOWN)
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "Home feed after returning to the first property",
+        )
         device.waitForIdle(UI_IDLE_TIMEOUT_MS)
     }
 
@@ -639,6 +659,8 @@ class BaselineProfileGenerator {
         const val SEARCH_QUERY = "Nairobi"
 
         const val PROPERTY_SWIPE_PERCENT = 1.0f
+
+        const val FEED_PAGE_SWIPE_PERCENT = 0.70f
     }
 }
 
@@ -673,6 +695,10 @@ private object NavigationTestTags {
 private object ScreenTestTags {
 
     const val PROPERTY_FEED = "PropertyFeed"
+
+    const val PROPERTY_FEED_PAGE_0 = "PropertyFeedPage_0"
+
+    const val PROPERTY_FEED_PAGE_1 = "PropertyFeedPage_1"
 
     const val PROPERTY_DETAILS = "PropertyDetailsScreen"
 

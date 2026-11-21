@@ -29,6 +29,7 @@ import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDataso
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
@@ -206,15 +207,24 @@ internal class FirestoreProperties @Inject constructor(
                 "Unable to parse property"
             )
 
-            // Try to fetch contact info if available (gated by rules)
-            val contactSnapshot = database.collection(PROPERTIES)
-                .document(propertyId)
-                .collection(CONTACT)
-                .document("info")
-                .get()
-                .await()
+            // Contact information is separately gated. A user may be allowed to
+            // read the public property but not its contact document.
+            val contactInfo = try {
+                database.collection(PROPERTIES)
+                    .document(propertyId)
+                    .collection(CONTACT)
+                    .document("info")
+                    .get()
+                    .await()
+                    .toObject(PropertyContactEntity::class.java)
+            } catch (exception: FirebaseFirestoreException) {
+                if (exception.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    throw exception
+                }
 
-            val contactInfo = contactSnapshot.toObject(PropertyContactEntity::class.java)
+                metricsTracker.incrementCounter("network.properties.contact_read_denied")
+                null
+            }
 
             property.copy(contact = contactInfo)
         }

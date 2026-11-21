@@ -2,6 +2,7 @@ package com.estatia.realestate.apps.feature.shared_ui
 
 import com.estatia.realestate.apps.core.architecture.annotations.Ui.UiScreen
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.pager.HorizontalPager
@@ -78,14 +79,18 @@ fun PropertyFeedScreen(
                 commentsContent(id, dismissComments)
             }
         }
-    )
- {
-        VerticalPager(
-            state = pagerState,
+    ) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("PropertyFeed")
-        ) { page ->
+        ) {
+            VerticalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("PropertyFeedPage_${pagerState.currentPage}")
+            ) { page ->
 
             val listing = listings[page]
 
@@ -149,6 +154,7 @@ fun PropertyFeedScreen(
                     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
                 }
             }
+        }
         }
     }
 }

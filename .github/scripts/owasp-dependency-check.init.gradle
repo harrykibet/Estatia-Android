@@ -1,0 +1,32 @@
+initscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.owasp:dependency-check-gradle:13.0.0")
+    }
+}
+
+gradle.beforeProject { project ->
+    if (project == project.rootProject) {
+        project.pluginManager.apply("org.owasp.dependencycheck")
+
+        def extension = project.extensions.getByName("dependencyCheck")
+        extension.failBuildOnCVSS = 7.0
+        extension.failOnError = true
+        extension.formats = ["HTML", "JSON", "SARIF"]
+        extension.outputDirectory = project.rootProject.file("reports")
+        extension.skipTestGroups = true
+
+        def dataDirectory = System.getenv("ODC_DATA_DIRECTORY")
+        if (dataDirectory) {
+            extension.data.directory = dataDirectory
+        }
+
+        def nvdApiKey = System.getenv("NVD_API_KEY")
+        extension.nvd.delay = nvdApiKey ? 3500 : 8000
+        if (nvdApiKey) {
+            extension.nvd.apiKey = nvdApiKey
+        }
+    }
+}

@@ -48,7 +48,10 @@ profile collection. Configure these repository Actions secrets:
 
 Use a dedicated Firebase account. It must have a verified email, a linked/verified phone
 number (the login state machine requires a non-empty phone number), a matching Firestore user
-document, and readable property documents for the Home feed. The credentials are passed as
+document, and at least two active, readable property documents. The critical-journey profile
+advances from the first property to the second and returns to the first, so one property is not
+enough to validate the feed pager. Contact details are separately gated and may be unavailable
+without making the public property itself unavailable. The credentials are passed as
 instrumentation arguments only to the Prod job; the Demo job does not receive them. Login is
 completed before `BaselineProfileRule.collect`, so it is not included in the Startup Profile.
 
