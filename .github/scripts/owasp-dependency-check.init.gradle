@@ -8,7 +8,10 @@ initscript {
 }
 
 gradle.beforeProject { project ->
-    if (project == project.rootProject) {
+    // Init scripts also run for included builds such as build-logic. Apply the
+    // repository-wide scan only to the main Android build, identified by its
+    // :app project; included builds must not be required to expose app variants.
+    if (project == project.rootProject && project.findProject(":app") != null) {
         project.pluginManager.apply(org.owasp.dependencycheck.gradle.DependencyCheckPlugin)
 
         def extension = project.extensions.getByName("dependencyCheck")
