@@ -101,8 +101,8 @@ class FirestorePropertiesTest {
             every { contactDocument.get() } returns contactTask
             coEvery { contactTask.await() } throws FirebaseFirestoreException(
                 "Contact details are not readable by this user.",
-                null,
                 FirebaseFirestoreException.Code.PERMISSION_DENIED,
+                null,
             )
 
             val result = firestoreProperties.getPropertyById(propertyId)
