@@ -9,7 +9,7 @@ initscript {
 
 gradle.beforeProject { project ->
     if (project == project.rootProject) {
-        project.pluginManager.apply("org.owasp.dependencycheck")
+        project.pluginManager.apply(org.owasp.dependencycheck.gradle.DependencyCheckPlugin)
 
         def extension = project.extensions.getByName("dependencyCheck")
         extension.failBuildOnCVSS = 7.0
