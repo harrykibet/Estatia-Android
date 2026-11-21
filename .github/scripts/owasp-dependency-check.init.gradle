@@ -7,11 +7,13 @@ initscript {
     }
 }
 
+// The aggregate task runs from the root project and resolves child-project
+// configurations from its task action. Gradle 9.7 rejects that cross-project
+// resolution without an exclusive project lock. Apply Dependency-Check directly
+// to :app and run its project-local analyze task instead. The app runtime
+// classpaths include the transitive runtime dependencies of its project modules.
 gradle.beforeProject { project ->
-    // Init scripts also run for included builds such as build-logic. Apply the
-    // repository-wide scan only to the main Android build, identified by its
-    // :app project; included builds must not be required to expose app variants.
-    if (project == project.rootProject && project.findProject(":app") != null) {
+    if (project.path == ":app") {
         project.pluginManager.apply(org.owasp.dependencycheck.gradle.DependencyCheckPlugin)
 
         def extension = project.extensions.getByName("dependencyCheck")
@@ -21,19 +23,16 @@ gradle.beforeProject { project ->
         extension.outputDirectory = project.rootProject.file("reports")
         extension.skipTestGroups = true
 
-        // Scan only the runtime dependency graphs used by the two distributable
-        // Android flavors. Gradle/AGP also exposes internal KSP and other resolvable
-        // configurations; resolving those is neither an application dependency audit
-        // nor safe (AGP may hold an exclusive lock while dependency-check inspects them).
-        // scanConfigurations is a list of exact configuration names, not a pattern.
-        gradle.projectsEvaluated {
-            def requiredReleaseRuntimeConfigurations = [
-                "demoReleaseRuntimeClasspath",
-                "prodReleaseRuntimeClasspath",
-            ]
-            def appProject = project.rootProject.findProject(":app")
-            def missingConfigurations = requiredReleaseRuntimeConfigurations.findAll { name ->
-                def configuration = appProject == null ? null : appProject.configurations.findByName(name)
+        def releaseRuntimeConfigurations = [
+            "demoReleaseRuntimeClasspath",
+            "prodReleaseRuntimeClasspath",
+        ]
+
+        // Validate configuration presence during :app project configuration,
+        // but let Dependency-Check resolve them from its own project task.
+        project.afterEvaluate {
+            def missingConfigurations = releaseRuntimeConfigurations.findAll { name ->
+                def configuration = project.configurations.findByName(name)
                 configuration == null || !configuration.canBeResolved
             }
             if (!missingConfigurations.isEmpty()) {
@@ -43,10 +42,10 @@ gradle.beforeProject { project ->
                 )
             }
 
-            extension.scanConfigurations = requiredReleaseRuntimeConfigurations
+            extension.scanConfigurations = releaseRuntimeConfigurations
             project.logger.lifecycle(
                 "OWASP Dependency-Check will scan app release runtime configurations: " +
-                requiredReleaseRuntimeConfigurations.join(", ")
+                releaseRuntimeConfigurations.join(", ")
             )
         }
 
