@@ -1,13 +1,87 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // CI-only emulator rule. Never deploy this rules file to a live project.
-    match /ci_backend_probe/{documentId} {
-      allow read, delete: if request.auth != null &&
-        resource.data.uid == request.auth.uid;
-      allow create, update: if request.auth != null &&
-        request.resource.data.uid == request.auth.uid;
+
+    // --- Helper Functions ---
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return request.auth.token.admin == true;
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Ensure that when creating, the document ID matches the auth UID and the data payload
+      allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid;
+
+      // Prevent users from escalating their own privileges
+      allow update: if isOwner(userId)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verified', 'userType']);
+
+      match /likedProperties/{propertyId} {
+          allow read, write: if isOwner(userId);
+      }
+
+      match /ownedProperties/{propertyId} {
+          allow read, write: if isOwner(userId);
+      }
+    }
+
+    // --- Properties Collection ---
+    match /properties/{propertyId} {
+      allow read: if true;
+
+      // Ensure the ownerId in data matches the creator
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+
+      // Allow updates only by owner or admin. Immutable fields: ownerId.
+      allow update: if (isOwner(resource.data.ownerId) || isAdmin())
+                    && request.resource.data.ownerId == resource.data.ownerId;
+
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+
+      // --- Gated Contact Information ---
+      match /contact/info {
+          // Prevent scraping: only authenticated users can see contact details.
+          // Rate limiting should be handled via a backend function for high-volume protection,
+          // but this rule provides a baseline security layer.
+          allow read: if isAuthenticated();
+
+          // Only the property owner can set/update contact info.
+          allow write: if isOwner(get(/databases/$(database)/documents/properties/$(propertyId)).data.ownerId)
+                       || isAdmin();
+      }
+
+      match /likes/{userId} {
+          allow read: if isAuthenticated();
+          allow create: if isOwner(userId);
+          allow update, delete: if isOwner(userId);
+      }
+
+      match /comments/{commentId} {
+          allow read: if isAuthenticated();
+
+          // Prevent identity spoofing on comments
+          allow create: if isAuthenticated()
+                        && request.resource.data.authorId == request.auth.uid;
+
+          allow update, delete: if isOwner(resource.data.authorId) || isAdmin();
+      }
+    }
+
+    // --- Analytics (Restricted) ---
+    match /analytics/{eventId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if isAuthenticated();
     }
   }
 }
