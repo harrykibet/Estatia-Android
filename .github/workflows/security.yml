@@ -100,7 +100,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew \
             --init-script .github/scripts/owasp-dependency-check.init.gradle \
-            dependencyCheckAggregate \
+            :app:dependencyCheckAnalyze \
             --no-configuration-cache --stacktrace --console=plain
 
       - name: Verify Dependency-Check scanned the Gradle dependency graph
