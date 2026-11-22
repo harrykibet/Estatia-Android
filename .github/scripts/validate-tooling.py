@@ -68,7 +68,7 @@ def main() -> int:
             continue
         if relative.startswith((".github/scripts/", ".github/workflows/", ".github/actions/", "scripts/")):
             selected.append((path, relative))
-        elif relative.endswith((".sh", ".py", ".yml", ".yaml")):
+        elif relative.endswith((".sh", ".py", ".yml", ".yaml", ".json", ".xml", ".toml")):
             selected.append((path, relative))
 
     for path, relative in selected:

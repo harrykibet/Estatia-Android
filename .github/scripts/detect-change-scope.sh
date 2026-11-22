@@ -74,7 +74,7 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    .github/scripts/*|.github/workflows/*|.github/actions/*|scripts/*|*.sh|*.py|*.yml|*.yaml|codemagic.yaml|.gitlab-ci.yml)
+    .github/scripts/*|.github/workflows/*|.github/actions/*|scripts/*|*.sh|*.py|*.yml|*.yaml|*.json|*.xml|*.toml|*.rules|*.pro|codemagic.yaml|.gitlab-ci.yml)
       is_tooling=true
       tooling_changed=true
       ;;
