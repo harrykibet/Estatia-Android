@@ -76,6 +76,20 @@ jobs:
           restore-keys: |
             owasp-dependency-check-${{ runner.os }}-
 
+      - name: Verify Kotlin Gradle plugin is patched in build logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/kotlin-gradle-plugin-dependency.txt"
+          ./gradlew -p build-logic :convention:dependencyInsight \
+            --configuration compileClasspath \
+            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \
+            --no-configuration-cache --console=plain | tee "$report"
+          if ! grep -Fq "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21" "$report"; then
+            echo "::error::The build-logic classpath must resolve the patched Kotlin Gradle plugin 2.4.21."
+            exit 1
+          fi
+
       - name: Run OWASP Dependency Check against resolved Gradle dependencies
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
