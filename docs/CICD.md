@@ -27,7 +27,7 @@ Every pull request is classified before expensive jobs start. Classification is 
 |---|---|
 | Documentation and community files | Markdown fences and relative-link validation; issue-form YAML parsing where applicable |
 | Scripts and GitHub automation | Shell syntax, Python parsing, YAML parsing, and supported JSON/XML/TOML parsing; ShellCheck warnings when available |
-| Module Gradle configuration | Gradle project configuration check |
+| Module Gradle configuration | Gradle project configuration check plus impacted module verification tasks |
 | Ordinary Kotlin/Android source | Gradle impact analysis selects module-level lint, unit-test, and compile tasks plus downstream consumers |
 | Global build logic and architecture enforcement | Full architecture, lint, and convention-plugin gates |
 | Release packaging, app variants, and shrinker rules | Minified Demo and Prod R8 validation |
@@ -41,7 +41,7 @@ Full-project coverage and broad regression audits remain nightly/manual quality 
 
 ### Tier 2: Main branch (selective post-merge verification)
 
-A push to main uses the same change classification. Ordinary source edits run impacted module tasks; module Gradle edits run configuration validation; global architecture changes run architecture/lint/convention gates. UI smoke and signed release builds run only when UI or packaging paths change. A manual dispatch can still request the full unit suite and four-device fleet.
+A push to main uses the same change classification. Ordinary source edits run impacted module tasks; module Gradle edits run configuration validation and impacted module tasks; global architecture changes run architecture/lint/convention gates and the full unit-test suite. UI smoke and signed release builds run only when UI or packaging paths change. A manual dispatch can still request the full unit suite and four-device fleet.
 
 ### Tier 3: Nightly and manual exhaustive verification
 

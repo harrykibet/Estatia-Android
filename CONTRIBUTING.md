@@ -86,7 +86,7 @@ Run the selected tasks printed as IMPACT_TASKS=.... A syntax error such as a mis
 
 ### Gradle configuration and global architecture changes
 
-Module-level Gradle edits receive a Gradle configuration check. Run the authoritative architecture contract for root build configuration, build logic, architecture enforcement, module boundaries, or other global policy changes:
+Module-level Gradle edits receive a Gradle configuration check and impacted module compile/lint/unit-test tasks. Root build configuration and build logic may select the global path. Run the authoritative architecture contract for root build configuration, build logic, architecture enforcement, module boundaries, or other global policy changes:
 
     ./gradlew verifyArchitecture
 Other useful checks for code changes include:
