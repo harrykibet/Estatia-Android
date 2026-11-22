@@ -387,7 +387,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ always() && needs.change-scope.outputs.smoke_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
+    if: ${{ always() && needs.change-scope.outputs.smoke_changed == 'true' && (needs.change-scope.outputs.compile_only_allowed != 'true' || github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci:compile-only')) && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7

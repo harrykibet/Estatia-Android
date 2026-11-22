@@ -84,6 +84,11 @@ def test_change_scope_classifier() -> None:
             "unknown_changed": "false", "baseline_changed": "true",
             "firebase_changed": "false", "compile_only_allowed": "false",
         }),
+        ("minor-ui-source", ["feature/profile/src/main/java/ProfileScreen.kt"], {
+            "source_changed": "true", "smoke_changed": "true",
+            "baseline_changed": "false", "firebase_changed": "false",
+            "compile_only_allowed": "true",
+        }),
         ("firebase-source", ["core/network/src/main/java/com/example/firebase/Firestore.kt"], {
             "source_changed": "true", "firebase_changed": "true",
             "compile_only_allowed": "false",

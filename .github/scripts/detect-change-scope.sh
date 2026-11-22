@@ -178,7 +178,7 @@ done
 compile_only_allowed=false
 if [[ "$source_changed" == "true" && "$compile_only_files" == "true" && \\
       "$gradle_changed" != "true" && "$architecture_changed" != "true" && \\
-      "$release_changed" != "true" && "$smoke_changed" != "true" && \\
+      "$release_changed" != "true" && \\
       "$unknown_changed" != "true" && "$module_gradle_changed" != "true" && \\
       "$baseline_changed" != "true" && "$firebase_changed" != "true" ]]; then
   compile_only_allowed=true
@@ -190,5 +190,5 @@ write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \\
 
 printf 'Changed paths (%s):\n' "${#changed_files[@]}"
 printf '  %s\n' "${changed_files[@]}"
-printf 'Scope: docs_only=%s docs_changed=%s tooling_only=%s tooling_changed=%s source_changed=%s gradle_changed=%s architecture_changed=%s release_changed=%s smoke_changed=%s unknown_changed=%s module_gradle_changed=%s\n' \
+printf 'Scope: docs_only=%s docs_changed=%s tooling_only=%s tooling_changed=%s source_changed=%s gradle_changed=%s architecture_changed=%s release_changed=%s smoke_changed=%s unknown_changed=%s module_gradle_changed=%s baseline_changed=%s firebase_changed=%s compile_only_allowed=%s\n' \\
   "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed" "$baseline_changed" "$firebase_changed" "$compile_only_allowed"
