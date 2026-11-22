@@ -3,6 +3,7 @@ import java.io.File
 
 buildscript {
     repositories {
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
