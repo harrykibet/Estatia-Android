@@ -90,17 +90,7 @@ for path in "${changed_files[@]}"; do
       ;;
   esac
 
-  case "$path" in
-    settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
-      gradle_changed=true
-      ;;
-  esac
 
-  case "$path" in
-    settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
-      architecture_changed=true
-      ;;
-  esac
 
   case "$path" in
     app/build.gradle|app/build.gradle.kts|app/proguard-rules.pro|app/*/proguard-rules.pro|app/src/*/AndroidManifest.xml|build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/libs.versions.toml|buildSrc/*|build-logic/*)
