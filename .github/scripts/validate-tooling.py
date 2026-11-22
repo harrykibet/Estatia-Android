@@ -93,6 +93,14 @@ def test_change_scope_classifier() -> None:
             "source_changed": "true", "firebase_changed": "true",
             "compile_only_allowed": "false",
         }),
+        ("firebase-prod-source", ["app/src/prod/java/com/example/FirebaseProdDataSource.kt"], {
+            "source_changed": "true", "firebase_changed": "true",
+            "compile_only_allowed": "false",
+        }),
+        ("firebase-demo-source", ["app/src/demo/java/com/example/FirebaseDemoDataSource.kt"], {
+            "source_changed": "true", "firebase_changed": "true",
+            "compile_only_allowed": "false",
+        }),
         ("module-gradle", ["core/network/build.gradle.kts"], {
             "gradle_changed": "true", "module_gradle_changed": "true",
             "architecture_changed": "false", "release_changed": "false",
@@ -206,6 +214,14 @@ def main() -> int:
         elif relative.endswith((".sh", ".py", ".yml", ".yaml", ".json", ".xml", ".toml")):
             selected.append((path, relative))
 
+    # Shell helpers are a shared automation surface. Whenever tooling validation
+    # runs, lint every repository automation script so an unrelated tooling edit
+    # cannot leave latent shell warnings in an untouched helper.
+    for path in sorted((ROOT / ".github" / "scripts").glob("*.sh")):
+        relative = path.relative_to(ROOT).as_posix()
+        if path.is_file() and (path, relative) not in selected:
+            selected.append((path, relative))
+
     for path, relative in selected:
         try:
             validate(path, relative)
@@ -216,7 +232,7 @@ def main() -> int:
 
     try:
         test_change_scope_classifier()
-        print("Change-scope classifier self-tests passed (10 representative path categories).")
+        print("Change-scope classifier self-tests passed (14 representative path categories).")
     except (AssertionError, OSError, subprocess.CalledProcessError) as error:
         print(f"::error::Change-scope classifier self-test failed: {error}", file=sys.stderr)
         return 1

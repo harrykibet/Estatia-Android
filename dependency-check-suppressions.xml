@@ -6,18 +6,6 @@
     <!-- Exact PURL + CVE/CPE rules only; unrelated findings remain active. -->
     <suppress>
         <notes><![CDATA[
-            Dependency-Check maps AndroidX SQLite API artifacts to the upstream SQLite
-            engine CPE at version 2.7.0. AndroidX documents sqlite-framework as using
-            Android framework APIs; sqlite-android is the AndroidX SQLite API artifact,
-            not a separately shipped upstream SQLite engine release. This rule only
-            removes that mismatched SQLite-engine CPE from these two PURLs.
-            Reviewed against AndroidX SQLite release documentation on 2026-11-22.
-        ]]></notes>
-        <packageUrl regex="true">^pkg:maven/androidx\.sqlite/(sqlite-android|sqlite-framework-android)@.*$</packageUrl>
-        <cpe>cpe:2.3:a:sqlite:sqlite:2.7.0:*:*:*:*:*:*:*</cpe>
-    </suppress>
-    <suppress>
-        <notes><![CDATA[
             CVE-2007-1652 is a defect in the historical OpenID enabled-site/token
             implementation. AppAuth is a modern native OAuth 2.0 / OpenID Connect
             client; this PURL is not the affected OpenID relying-party implementation.
