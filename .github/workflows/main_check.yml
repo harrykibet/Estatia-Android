@@ -122,7 +122,7 @@ jobs:
       - name: Validate Gradle project configuration
         run: |
           chmod +x ./gradlew
-          ./gradlew help --no-configuration-cache --stacktrace --console=plain
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh main-gradle-configuration ./gradlew help --no-configuration-cache --stacktrace --console=plain
 
   impact-analysis:
     name: Calculate affected module verification tasks
@@ -345,6 +345,14 @@ jobs:
     name: Targeted UI Smoke or Full Device Fleet
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+  GRADLE_CI_MAX_WORKERS: 1
+  GRADLE_CI_GRADLE_XMX: 4608m
+  GRADLE_CI_KOTLIN_XMX: 1536m
+  GRADLE_CI_PARALLEL: "false"
+  GRADLE_CI_KOTLIN_PARALLEL: "false"
+  GRADLE_CI_SAMPLE_SECONDS: 30
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
