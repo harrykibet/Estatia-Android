@@ -78,7 +78,14 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    .github/scripts/*|.github/workflows/*|.github/actions/*|scripts/*|*.sh|*.py|*.yml|*.yaml|*.json|*.xml|*.toml|*.rules|*.pro|codemagic.yaml|.gitlab-ci.yml)
+    .github/scripts/*|.github/workflows/*|.github/actions/*|scripts/*)
+      is_tooling=true
+      tooling_changed=true
+      ;;
+  esac
+
+  case "$path" in
+    *.sh|*.py|*.yml|*.yaml|*.json|*.xml|*.toml|*.rules|*.pro)
       is_tooling=true
       tooling_changed=true
       ;;
@@ -150,5 +157,5 @@ write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \
 
 printf 'Changed paths (%s):\n' "${#changed_files[@]}"
 printf '  %s\n' "${changed_files[@]}"
-printf 'Scope: docs=%s tooling=%s source=%s gradle=%s architecture=%s release=%s smoke=%s unknown=%s\n' \
-  "$docs_only" "$tooling_only" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed"
+printf 'Scope: docs_only=%s docs_changed=%s tooling_only=%s tooling_changed=%s source_changed=%s gradle_changed=%s architecture_changed=%s release_changed=%s smoke_changed=%s unknown_changed=%s module_gradle_changed=%s\n' \
+  "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed"
