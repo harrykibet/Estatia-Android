@@ -194,6 +194,90 @@ def test_change_scope_classifier() -> None:
                     f"Change-scope case {label} failed: {mismatches}\n{execution.stdout}"
                 )
 
+def _run_git(args, cwd) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, stdout=subprocess.PIPE, text=True,
+    ).stdout.strip()
+
+
+def _parse_outputs(output_file: Path) -> dict:
+    parsed = {}
+    for line in output_file.read_text(encoding="utf-8").splitlines():
+        key, value = line.split("=", 1)
+        parsed[key] = value  # last value wins, exactly like GitHub Actions
+    return parsed
+
+
+def _assert_full_scope(label: str, actual: dict) -> None:
+    expected = {"source_changed": "true", "gradle_changed": "true",
+                "architecture_changed": "true", "release_changed": "true",
+                "unknown_changed": "true", "baseline_changed": "true",
+                "firebase_changed": "true", "docs_only": "false",
+                "compile_only_allowed": "false"}
+    mismatches = {k: (v, actual.get(k)) for k, v in expected.items() if actual.get(k) != v}
+    if mismatches:
+        raise AssertionError(f"Fail-open case {label} did not retain full scope: {mismatches}")
+
+
+def test_change_scope_fail_open() -> None:
+    """Prove the classifier fails open and works from shallow checkouts."""
+    classifier = ROOT / ".github" / "scripts" / "detect-change-scope.sh"
+    with tempfile.TemporaryDirectory(prefix="estatia-scope-open-") as temporary:
+        root = Path(temporary)
+        origin = root / "origin"
+        origin.mkdir()
+        _run_git(["init", "--quiet"], origin)
+        _run_git(["config", "user.name", "Estatia CI"], origin)
+        _run_git(["config", "user.email", "ci@example.invalid"], origin)
+        _run_git(["config", "uploadpack.allowAnySHA1InWant", "true"], origin)
+        (origin / "seed").write_text("base\n", encoding="utf-8")
+        _run_git(["add", "-A"], origin)
+        _run_git(["commit", "--quiet", "-m", "base"], origin)
+        base = _run_git(["rev-parse", "HEAD"], origin)
+        (origin / "README.md").write_text("docs\n", encoding="utf-8")
+        _run_git(["add", "-A"], origin)
+        _run_git(["commit", "--quiet", "-m", "docs"], origin)
+        head = _run_git(["rev-parse", "HEAD"], origin)
+
+        def run(label, cwd, event, base_sha, head_sha, extra_env=None):
+            output_file = root / f"{label}.out"
+            output_file.write_text("", encoding="utf-8")
+            env = os.environ.copy()
+            env["GITHUB_OUTPUT"] = str(output_file)
+            env.update(extra_env or {})
+            subprocess.run(
+                ["bash", str(classifier), event, base_sha, head_sha],
+                cwd=cwd, env=env, check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            )
+            return _parse_outputs(output_file)
+
+        # 1. Unknown event and unknown commits retain full verification.
+        _assert_full_scope("unknown-event", run("e", origin, "workflow_run", base, head))
+        _assert_full_scope("bad-sha", run("b", origin, "pull_request", "0" * 40 + "1", head))
+
+        # 2. An unexpected runtime error (mktemp failing) must trip the ERR trap.
+        fake_bin = root / "bin"
+        fake_bin.mkdir()
+        fake = fake_bin / "mktemp"
+        fake.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        fake.chmod(0o755)
+        _assert_full_scope("runtime-error", run(
+            "r", origin, "pull_request", base, head,
+            {"PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"},
+        ))
+
+        # 3. A depth-1 clone lacks the base commit; the classifier must fetch it.
+        shallow = root / "shallow"
+        subprocess.run(
+            ["git", "clone", "--quiet", "--depth=1", f"file://{origin}", str(shallow)],
+            check=True,
+        )
+        shallow_scope = run("s", shallow, "pull_request", base, head)
+        if shallow_scope.get("docs_only") != "true":
+            raise AssertionError(f"Shallow-checkout case misclassified a docs change: {shallow_scope}")
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
@@ -232,7 +316,8 @@ def main() -> int:
 
     try:
         test_change_scope_classifier()
-        print("Change-scope classifier self-tests passed (14 representative path categories).")
+        test_change_scope_fail_open()
+        print("Change-scope classifier self-tests passed (14 path categories, fail-open and shallow-checkout cases).")
     except (AssertionError, OSError, subprocess.CalledProcessError) as error:
         print(f"::error::Change-scope classifier self-test failed: {error}", file=sys.stderr)
         return 1

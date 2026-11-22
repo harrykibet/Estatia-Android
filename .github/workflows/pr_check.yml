@@ -41,8 +41,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Detect documentation-only changes
         id: classify
@@ -465,25 +463,11 @@ jobs:
       - smoke-test
     if: ${{ always() }}
     steps:
+      - name: Checkout gate script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
       - name: Verify all executed checks completed successfully
         env:
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import sys
-
-          jobs = json.loads(os.environ["CI_JOB_RESULTS"])
-          failed = {
-              name: details.get("result", "unknown")
-              for name, details in jobs.items()
-              if details.get("result") not in {"success", "skipped"}
-          }
-          if failed:
-              for name, result in sorted(failed.items()):
-                  print(f"::error::Required CI job {name} finished with result {result}.")
-              sys.exit(1)
-
-          print("CI Gate passed. All executed checks succeeded; skipped jobs were scope-gated.")
-          PY
+        run: python3 .github/scripts/ci-gate.py

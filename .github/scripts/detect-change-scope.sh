@@ -32,6 +32,9 @@ write_full_scope() {
 
 # Unexpected classifier errors must never produce empty outputs that silently
 # skip required verification. Fall back to the conservative full-scope profile.
+# If some outputs were already appended before the failure, GitHub Actions keeps
+# the LAST value written for a duplicated key, so the full-scope values appended
+# here always win.
 fail_open() {
   local exit_code=$?
   trap - ERR
@@ -45,6 +48,17 @@ case "$event_name" in
   pull_request|merge_group|push) ;;
   *) write_full_scope; exit 0 ;;
 esac
+
+# Shallow checkouts do not contain the base commit. Fetch just the two commits
+# (tree diffs do not need history) so workflows can use fetch-depth: 1.
+ensure_commit() {
+  git cat-file -e "$1^{commit}" 2>/dev/null ||
+    git fetch --no-tags --depth=1 --quiet origin "$1" 2>/dev/null || true
+}
+if [[ -n "$base_sha" && -n "$head_sha" && ! "$base_sha" =~ ^0+$ ]]; then
+  ensure_commit "$base_sha"
+  ensure_commit "$head_sha"
+fi
 
 if [[ -z "$base_sha" || -z "$head_sha" || "$base_sha" =~ ^0+$ ]] ||
    ! git cat-file -e "$base_sha^{commit}" 2>/dev/null ||
