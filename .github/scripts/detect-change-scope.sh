@@ -39,7 +39,7 @@ if [[ -z "$base_sha" || -z "$head_sha" || "$base_sha" =~ ^0+$ ]] ||
   exit 0
 fi
 
-mapfile -d '' -t changed_files < <(git diff --name-only --diff-filter=ACMRT -z "$base_sha" "$head_sha")
+mapfile -d '' -t changed_files < <(git diff --name-only --diff-filter=ACDMRT -z "$base_sha" "$head_sha")
 if [[ ${#changed_files[@]} -eq 0 ]]; then
   write_full_scope
   echo "No changed paths found; retaining full verification."
@@ -61,6 +61,8 @@ module_gradle_changed=false
 for path in "${changed_files[@]}"; do
   is_docs=false
   is_tooling=false
+  is_source=false
+  is_gradle=false
 
   case "$path" in
     README.md|CODE_OF_CONDUCT.md|CONTRIBUTING.md|ACCESSIBILITY.md|SUPPORT.md|SECURITY.md|CHANGELOG.md|GOVERNANCE.md|MAINTAINERS.md|AUTHORS.md|CONTRIBUTORS.md|docs/*|LICENSE|LICENSE.*|NOTICE|NOTICE.*|COPYING|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
@@ -84,12 +86,14 @@ for path in "${changed_files[@]}"; do
 
   case "$path" in
     app/src/*|core/*/src/*|feature/*/src/*|benchmark/src/*|lint/src/*)
+      is_source=true
       source_changed=true
       ;;
   esac
 
   case "$path" in
     *.gradle|*.gradle.kts|settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*)
+      is_gradle=true
       gradle_changed=true
       ;;
   esac
@@ -98,6 +102,12 @@ for path in "${changed_files[@]}"; do
   if [[ "$is_docs" != "true" && "$is_tooling" != "true" ]]; then
     tooling_only=false
   fi
+
+  case "$path" in
+    app/build.gradle|app/build.gradle.kts|core/*/build.gradle|core/*/build.gradle.kts|feature/*/build.gradle|feature/*/build.gradle.kts|benchmark/build.gradle|benchmark/build.gradle.kts|lint/build.gradle|lint/build.gradle.kts)
+      module_gradle_changed=true
+      ;;
+  esac
 
   case "$path" in
     build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
@@ -128,7 +138,7 @@ for path in "${changed_files[@]}"; do
     smoke_changed=true
   fi
 
-  if [[ "$is_docs" != "true" && "$is_tooling" != "true" && "$source_changed" != "true" && "$gradle_changed" != "true" ]]; then
+  if [[ "$is_docs" != "true" && "$is_tooling" != "true" && "$is_source" != "true" && "$is_gradle" != "true" ]]; then
     unknown_changed=true
     architecture_changed=true
     release_changed=true
