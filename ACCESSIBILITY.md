@@ -27,7 +27,7 @@ The project uses the principles of WCAG 2.2 Level AA as a design and review targ
 ## Text, color, and visual presentation
 
 - Support Android font scaling and display-size settings. Content must not be clipped, overlap, disappear, or become unusable when text is enlarged.
-- Maintain sufficient contrast. As a baseline, target at least 4.5:1 for normal text and 3:1 for large text. Important non-text controls, boundaries, and graphical information should generally reach 3:1 against adjacent colors.
+- Maintain sufficient contrast. As a baseline, target at least 4.5:1 for normal text and 3:1 for large text. Important non-text controls, boundaries, and graphical information required to understand the interface should generally reach 3:1 against adjacent colors.
 - Do not rely on color alone to distinguish states, indicate validation, communicate chart meaning, or convey map information.
 - Use readable typography, clear labels, consistent spacing, and concise error messages. When validation fails, identify the affected field and explain how to correct it.
 - Verify both light and dark themes where supported, including disabled, selected, focused, error, and pressed states.
@@ -56,7 +56,13 @@ For a new or materially changed screen or interaction:
 5. Review contrast and focus visibility in supported themes.
 6. Use Android Accessibility Scanner or equivalent tooling as a supplementary check when available; automated scans do not replace manual assistive-technology testing.
 
-For a defect report, describe the affected screen and task, the assistive technology or display setting involved, expected behavior, and actual behavior. Do not include private user data in screenshots or logs.
+## Known barriers and reporting
+
+Estatia does not yet publish a complete screen-by-screen accessibility audit or inventory of known barriers. Existing screens may therefore contain accessibility defects. This policy sets the target for new and changed work; it must not be interpreted as evidence that an unaudited screen is accessible.
+
+Report a barrier using the [Accessibility Barrier issue form](https://github.com/harrykibet/Estatia-Android/issues/new?template=accessibility_report.yml). Include the task you were trying to complete, the affected screen, the device and Android version, the assistive technology or display setting involved, and the steps that exposed the barrier. Explain what you expected and what actually happened.
+
+Do not include personal information, account details, private property or tenant information, payment data, authentication material, or unredacted production logs. Suspected security vulnerabilities must be reported privately using [SECURITY.md](./SECURITY.md), not through a public accessibility issue.
 
 ## Pull request review
 
@@ -65,5 +71,7 @@ Pull requests that change user-facing UI should state the accessibility impact. 
 ## References
 
 - [WCAG 2.2](https://www.w3.org/TR/WCAG22/)
-- [Android accessibility principles](https://developer.android.com/guide/topics/ui/accessibility)
+- [WCAG 2.2: Contrast (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+- [WCAG 2.2: Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)
+- [Android accessibility principles](https://developer.android.com/guide/topics/ui/accessibility/apps)
 - [Jetpack Compose accessibility](https://developer.android.com/develop/ui/compose/accessibility)
