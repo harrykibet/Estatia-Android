@@ -3,7 +3,7 @@ name: PR Check (High Maturity)
 on:
   pull_request:
     branches: [ "main" ]
-    types: [ opened, synchronize, reopened, ready_for_review ]
+    types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
   merge_group:
     types: [ checks_requested ]
     branches: [ "main" ]
@@ -35,6 +35,9 @@ jobs:
       smoke_changed: ${{ steps.classify.outputs.smoke_changed }}
       unknown_changed: ${{ steps.classify.outputs.unknown_changed }}
       module_gradle_changed: ${{ steps.classify.outputs.module_gradle_changed }}
+      baseline_changed: ${{ steps.classify.outputs.baseline_changed }}
+      firebase_changed: ${{ steps.classify.outputs.firebase_changed }}
+      compile_only_allowed: ${{ steps.classify.outputs.compile_only_allowed }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -239,6 +242,7 @@ jobs:
         env:
           ESTATIA_IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'origin/main' }}
           ESTATIA_IMPACT_HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          ESTATIA_COMPILE_ONLY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:compile-only') && needs.change-scope.outputs.compile_only_allowed == 'true' }}
         shell: bash
         run: |
           set -euo pipefail

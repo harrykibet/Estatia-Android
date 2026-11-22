@@ -68,16 +68,25 @@ def test_change_scope_classifier() -> None:
             "source_changed": "false", "gradle_changed": "false",
             "architecture_changed": "false", "release_changed": "false",
             "smoke_changed": "false", "unknown_changed": "false",
+            "baseline_changed": "false", "firebase_changed": "false",
+            "compile_only_allowed": "false",
         }),
         ("module-source", ["core/model/src/main/kotlin/Sample.kt"], {
             "source_changed": "true", "gradle_changed": "false",
             "architecture_changed": "false", "release_changed": "false",
             "smoke_changed": "false", "unknown_changed": "false",
+            "baseline_changed": "false", "firebase_changed": "false",
+            "compile_only_allowed": "true",
         }),
         ("ui-source", ["feature/home/src/main/java/HomeScreen.kt"], {
             "source_changed": "true", "smoke_changed": "true",
             "architecture_changed": "false", "release_changed": "false",
-            "unknown_changed": "false",
+            "unknown_changed": "false", "baseline_changed": "true",
+            "firebase_changed": "false", "compile_only_allowed": "false",
+        }),
+        ("firebase-source", ["core/network/src/main/java/com/example/firebase/Firestore.kt"], {
+            "source_changed": "true", "firebase_changed": "true",
+            "compile_only_allowed": "false",
         }),
         ("module-gradle", ["core/network/build.gradle.kts"], {
             "gradle_changed": "true", "module_gradle_changed": "true",

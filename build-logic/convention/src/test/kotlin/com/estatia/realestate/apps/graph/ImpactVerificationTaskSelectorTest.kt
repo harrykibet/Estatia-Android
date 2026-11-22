@@ -8,8 +8,52 @@ class ImpactVerificationTaskSelectorTest {
         "lintDemoDebug",
         "testDemoDebugUnitTest",
         "lintProdDebug",
-        "testProdDebugUnitTest"
+        "testProdDebugUnitTest",
+        "assembleDemoDebug",
+        "assembleProdDebug"
     )
+
+    @Test
+    fun compileOnlyMainSourceChangesAssembleOnlyAffectedAndroidDebugVariants() {
+        assertEquals(
+            listOf(":core:model:assembleDemoDebug", ":core:model:assembleProdDebug"),
+            ImpactVerificationTaskSelector.select(
+                projectPath = ":core:model",
+                pluginIds = setOf("com.android.library"),
+                registeredTaskNames = appDebugTasks,
+                changedFiles = listOf("core/model/src/main/kotlin/com/example/Property.kt"),
+                compileOnly = true
+            )
+        )
+    }
+
+    @Test
+    fun compileOnlyFlavorSourceChangesAssembleOnlyThatFlavor() {
+        assertEquals(
+            listOf(":app:assembleDemoDebug"),
+            ImpactVerificationTaskSelector.select(
+                projectPath = ":app",
+                pluginIds = setOf("com.android.application"),
+                registeredTaskNames = appDebugTasks,
+                changedFiles = listOf("app/src/demo/java/com/example/DemoOnly.kt"),
+                compileOnly = true
+            )
+        )
+    }
+
+    @Test
+    fun compileOnlyJvmChangesCompileClassesWithoutRunningUnitTests() {
+        assertEquals(
+            listOf(":lint:classes"),
+            ImpactVerificationTaskSelector.select(
+                projectPath = ":lint",
+                pluginIds = setOf("org.jetbrains.kotlin.jvm"),
+                registeredTaskNames = setOf("classes", "test", "jar"),
+                changedFiles = listOf("lint/src/main/kotlin/com/example/Detector.kt"),
+                compileOnly = true
+            )
+        )
+    }
 
     @Test
     fun selectsDemoDebugTasksForDemoFlavorSources() {

@@ -19,11 +19,14 @@ write_outputs() {
     echo "smoke_changed=$9"
     echo "unknown_changed=${10}"
     echo "module_gradle_changed=${11}"
+    echo "baseline_changed=${12}"
+    echo "firebase_changed=${13}"
+    echo "compile_only_allowed=${14}"
   } >> "$output_file"
 }
 
 write_full_scope() {
-  write_outputs false false false false true true true true true true true
+  write_outputs false false false false true true true true true true true true true false
   echo "Unable to classify this event or diff safely; retaining full verification."
 }
 
@@ -57,6 +60,9 @@ release_changed=false
 smoke_changed=false
 unknown_changed=false
 module_gradle_changed=false
+baseline_changed=false
+firebase_changed=false
+compile_only_files=true
 
 for path in "${changed_files[@]}"; do
   is_docs=false
@@ -91,6 +97,11 @@ for path in "${changed_files[@]}"; do
       ;;
   esac
 
+  if [[ "$is_docs" != "true" ]] && [[ ! "$path" =~ ^(app|benchmark|lint)/src/main/.+\\.(kt|java)$ ]] && \\
+     [[ ! "$path" =~ ^(core|feature)/[^/]+/src/main/.+\\.(kt|java)$ ]]; then
+    compile_only_files=false
+  fi
+
   case "$path" in
     app/src/*|core/*/src/*|feature/*/src/*|benchmark/src/*|lint/src/*)
       is_source=true
@@ -119,6 +130,18 @@ for path in "${changed_files[@]}"; do
   case "$path" in
     build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
       architecture_changed=true
+      ;;
+  esac
+
+  case "$path" in
+    benchmark/src/*|benchmark/build.gradle.kts|app/build.gradle.kts|app/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/main/*EstatiaApplication.kt|app/src/main/*MainActivity.kt|app/src/demoRelease/generated/baselineProfiles/*|app/src/prodRelease/generated/baselineProfiles/*|feature/home/src/main/*HomeScreen.kt|feature/shared-ui/src/main/*PropertyFeedScreen.kt|core/player-engine/src/main/*Player*.kt|core/player-ui/src/main/*Player*.kt|build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt|gradle/libs.versions.toml|.github/scripts/prepare-google-services.sh)
+      baseline_changed=true
+      ;;
+  esac
+
+  case "$path" in
+    app/build.gradle.kts|app/src/main/*EstatiaApplication.kt|app/src/*Firebase*.kt|app/src/androidTest/*FirebaseEmulatorIntegrationTest.kt|core/network/src/*firebase/*|core/network/src/*ProdDataSourcesModule.kt|core/network/build.gradle.kts|core/analytics/src/*|core/analytics/build.gradle.kts|build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt|gradle/libs.versions.toml|firebase.emulators.json|firestore.emulator.rules|storage.emulator.rules|.github/scripts/prepare-google-services.sh|.github/scripts/prepare-android-emulator.sh|.github/scripts/start-connected-android-emulator.sh|.github/scripts/stop-connected-android-emulator.sh)
+      firebase_changed=true
       ;;
   esac
 
@@ -152,10 +175,20 @@ for path in "${changed_files[@]}"; do
   fi
 done
 
-write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \
-  "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed"
+compile_only_allowed=false
+if [[ "$source_changed" == "true" && "$compile_only_files" == "true" && \\
+      "$gradle_changed" != "true" && "$architecture_changed" != "true" && \\
+      "$release_changed" != "true" && "$smoke_changed" != "true" && \\
+      "$unknown_changed" != "true" && "$module_gradle_changed" != "true" && \\
+      "$baseline_changed" != "true" && "$firebase_changed" != "true" ]]; then
+  compile_only_allowed=true
+fi
+
+write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \\
+  "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed" \\
+  "$baseline_changed" "$firebase_changed" "$compile_only_allowed"
 
 printf 'Changed paths (%s):\n' "${#changed_files[@]}"
 printf '  %s\n' "${changed_files[@]}"
 printf 'Scope: docs_only=%s docs_changed=%s tooling_only=%s tooling_changed=%s source_changed=%s gradle_changed=%s architecture_changed=%s release_changed=%s smoke_changed=%s unknown_changed=%s module_gradle_changed=%s\n' \
-  "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed"
+  "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed" "$baseline_changed" "$firebase_changed" "$compile_only_allowed"

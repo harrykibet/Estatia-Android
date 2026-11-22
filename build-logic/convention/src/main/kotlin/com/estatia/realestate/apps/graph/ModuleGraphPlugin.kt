@@ -68,6 +68,12 @@ class ModuleGraphPlugin : Plugin<Project> {
                         return@doLast
                     }
 
+                    val compileOnly = System.getenv("ESTATIA_COMPILE_ONLY")
+                        ?.equals("true", ignoreCase = true) == true
+                    if (compileOnly) {
+                        logger.lifecycle("CI compile-only fast path enabled by the maintainer's ci:compile-only label.")
+                    }
+
                     val fullImpact = ModuleGraphExtractor.findImpactedModules(diffOutput, modules, edges, rootDir)
                     val tasks = fullImpact.sorted().flatMap { modulePath ->
                         val module = target.findProject(modulePath)
@@ -88,7 +94,8 @@ class ModuleGraphPlugin : Plugin<Project> {
                                 projectPath = module.path,
                                 pluginIds = pluginIds,
                                 registeredTaskNames = module.tasks.names,
-                                changedFiles = diffOutput
+                                changedFiles = diffOutput,
+                                compileOnly = compileOnly
                             )
                             if (selectedTasks.isEmpty()) {
                                 println(
