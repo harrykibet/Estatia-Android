@@ -111,7 +111,7 @@ jobs:
           --console=plain
 
       - name: Prepare Firebase configuration for full architecture and lint gates
-        if: ${{ needs.change-scope.outputs.docs_only != 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+        if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
@@ -238,7 +238,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+    if: ${{ needs.change-scope.outputs.docs_only != 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7

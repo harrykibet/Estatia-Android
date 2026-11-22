@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path.cwd().resolve()
-LINK_RE = re.compile(r"!?[[^]]*\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)")
+LINK_RE = re.compile(r"""!?\\[ [^\\]]* \\]\\( \\s* (<[^>]+>|[^)\\s]+) (?:\\s+[^)]*)? \\)""", re.VERBOSE)
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
