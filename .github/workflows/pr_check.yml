@@ -180,11 +180,11 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
       - name: Run Full Architecture and Lint Gates
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain --warning-mode all
 
       - name: Test Build Logic Convention Plugins
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain --warning-mode all
 
       - name: Upload Lint Diagnostic Reports
         if: ${{  always() && github.event_name != 'pull_request'  }}
