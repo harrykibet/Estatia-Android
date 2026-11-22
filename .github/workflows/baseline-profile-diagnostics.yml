@@ -136,7 +136,7 @@ jobs:
           )
           if [[ "${#benchmark_compile_tasks[@]}" -eq 0 ]]; then
             echo "::error::Could not discover ${variant} benchmark Kotlin compile tasks."
-            printf '%s\n' "$task_listing" | grep -E "compile${variant}.*Kotlin" || true
+            grep -E "compile${variant}.*Kotlin" "$task_listing_file" || true
             exit 1
           fi
 
