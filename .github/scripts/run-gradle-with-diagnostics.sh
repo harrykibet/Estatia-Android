@@ -252,6 +252,7 @@ gradle_pid=""
 
 stop_monitor
 snapshot "final-gradle-exit-$gradle_status"
+stream_snapshot "final-gradle-exit-$gradle_status"
 
 printf 'Gradle diagnostic wrapper completed with exit code %s.\n' "$gradle_status"
 exit "$gradle_status"
