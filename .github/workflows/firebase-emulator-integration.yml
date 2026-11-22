@@ -127,6 +127,15 @@ jobs:
             exit 1
           fi
 
+      - name: Compile production app and emulator integration test sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew \
+            :app:compileProdDebugKotlin \
+            :app:compileProdDebugAndroidTestKotlin \
+            --no-configuration-cache --stacktrace --console=plain
+
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
 
