@@ -110,19 +110,4 @@
         <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-(api|common|context)@.*$</packageUrl>
         <cpe>cpe:2.3:a:opentelemetry:opentelemetry:*:*:*:*:*:node.js:*:*</cpe>
     </suppress>
-    <suppress>
-        <notes><![CDATA[
-            The report assigns the nested scotty-minified.jar the Firebase
-            Crashlytics PURL (21.1.0) and infers a Guava CPE from low-confidence
-            product-name evidence; 21.1.0 is the Crashlytics version, not a Guava
-            version. The app's separately resolved com.google.guava:guava dependency
-            is 33.7.1-jre (Android jar variant) and is guarded by an app-level minimum
-            version constraint plus a CI dependencyInsight check for both release
-            variants. This suppression applies only to the Guava CPE on this exact
-            Crashlytics PURL. Genuine com.google.guava:guava package findings remain
-            in scope and are not suppressed.
-        ]]></notes>
-        <packageUrl>pkg:maven/com.google.firebase/firebase-crashlytics@21.1.0</packageUrl>
-        <cpe>cpe:2.3:a:google:guava:*:*:*:*:*:*:*:*</cpe>
-    </suppress>
 </suppressions>

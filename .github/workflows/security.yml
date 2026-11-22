@@ -123,7 +123,7 @@ jobs:
           import sys
           from pathlib import Path
 
-          minimum = (32, 0, 1)
+          minimum = (33, 8, 0)
           pattern = re.compile(
               r"com\.google\.guava:guava:"
               r"(\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?)"
@@ -154,7 +154,7 @@ jobs:
               vulnerable = [value for value, parts in parsed if parts < minimum]
               if vulnerable:
                   raise SystemExit(
-                      f"::error::{report.name}: Guava below 32.0.1 detected: {', '.join(vulnerable)}"
+                      f"::error::{report.name}: Guava below 33.8.0 detected: {', '.join(vulnerable)}"
                   )
 
               versions = ", ".join(sorted({value for value, _ in parsed}))
@@ -188,6 +188,51 @@ jobs:
             --init-script .github/scripts/owasp-dependency-check.init.gradle \
             :app:dependencyCheckAnalyze \
             --no-configuration-cache --stacktrace --console=plain
+
+      - name: Inspect bundled Crashlytics classes related to Guava advisories
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find "$HOME/.gradle/caches" -type f -name 'scotty-minified.jar' -print)
+          if [[ ${#jars[@]} -eq 0 ]]; then
+            echo "::warning::Crashlytics scotty-minified.jar was not present in the Gradle cache for direct inspection."
+            exit 0
+          fi
+
+          for jar in "${jars[@]}"; do
+            echo "Inspecting ${jar#"$HOME/.gradle/"}"
+            python3 - "$jar" <<'PY'
+          import sys
+          import zipfile
+
+          tokens = (
+              b"FileBackedOutputStream",
+              b"createTempDir",
+              b"AtomicDoubleArray",
+              b"CompactHashMap",
+              b"CompactHashSet",
+              b"MapMakerInternalMap",
+          )
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              matches = []
+              guava_paths = []
+              for entry in archive.infolist():
+                  if entry.filename.endswith(".class"):
+                      data = archive.read(entry)
+                      found = [token.decode() for token in tokens if token in data]
+                      if "com/google/common/" in entry.filename:
+                          guava_paths.append(entry.filename)
+                      if found:
+                          matches.append((entry.filename, found))
+              print(f"Guava namespace class entries: {len(guava_paths)}")
+              for name in guava_paths[:100]:
+                  print(f"  GUAVA_CLASS {name}")
+              print(f"Classes containing affected API/type names: {len(matches)}")
+              for name, found in matches[:100]:
+                  print(f"  API_REFERENCE {name}: {', '.join(found)}")
+          PY
+          done
 
       - name: Verify Dependency-Check scanned the Gradle dependency graph
         shell: bash
