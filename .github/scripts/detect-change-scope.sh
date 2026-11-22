@@ -97,8 +97,8 @@ for path in "${changed_files[@]}"; do
       ;;
   esac
 
-  if [[ "$is_docs" != "true" ]] && [[ ! "$path" =~ ^(app|benchmark|lint)/src/main/.+\\.(kt|java)$ ]] && \
-     [[ ! "$path" =~ ^(core|feature)/[^/]+/src/main/.+\\.(kt|java)$ ]]; then
+  if [[ "$is_docs" != "true" ]] && [[ ! "$path" =~ ^(app|benchmark|lint)/src/main/.+\.(kt|java)$ ]] && \
+     [[ ! "$path" =~ ^(core|feature)/[^/]+/src/main/.+\.(kt|java)$ ]]; then
     compile_only_files=false
   fi
 
