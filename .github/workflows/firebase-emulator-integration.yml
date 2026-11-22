@@ -46,7 +46,9 @@ jobs:
 
   firebase-emulator-integration:
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.firebase_changed == 'true' }}
+    # Heavy tier: skip draft PRs; it runs once the PR is marked ready for review
+    # (and on every later push), and on merge_group / dispatch.
+    if: ${{ needs.change-scope.outputs.firebase_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     name: Auth + Firestore + Storage SDK emulator round trip
     runs-on: ubuntu-24.04
     timeout-minutes: 90

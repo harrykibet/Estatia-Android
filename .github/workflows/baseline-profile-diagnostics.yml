@@ -46,7 +46,9 @@ jobs:
 
   variant-baseline-profile:
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' }}
+    # Heavy tier: skip draft PRs; it runs once the PR is marked ready for review
+    # (and on every later push), and on merge_group / dispatch.
+    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
