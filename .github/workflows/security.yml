@@ -2,6 +2,8 @@ name: Dependency Security Scan
 
 on:
   pull_request:
+    branches: [ "main" ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
@@ -11,18 +13,18 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: dependency-security-${{  github.event.pull_request.number || github.ref  }}
-  cancel-in-progress: ${{  github.event_name == 'pull_request'  }}
+  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dependency-change-detection:
     name: Detect Dependency Changes
     runs-on: ubuntu-latest
     outputs:
-      dependencies: ${{  steps.filter.outputs.dependencies  }}
+      dependencies: ${{ steps.filter.outputs.dependencies }}
     steps:
       - name: Check Dependency-Related Paths
-        if: ${{  github.event_name == 'pull_request'  }}
+        if: ${{ github.event_name == 'pull_request' }}
         id: filter
         uses: dorny/paths-filter@v4
         with:
@@ -48,7 +50,10 @@ jobs:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     needs: [ dependency-change-detection ]
-    if: ${{  github.event_name != 'pull_request' || needs.dependency-change-detection.outputs.dependencies == 'true'  }}
+    # Dependency analysis is part of the heavy tier: skip drafts, run when
+    # the PR becomes ready, and rerun on every later push that changes
+    # dependency-related inputs. Scheduled/manual runs remain exhaustive.
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.dependency-change-detection.outputs.dependencies == 'true') }}
     timeout-minutes: 45
     steps:
       - name: Checkout Code
@@ -67,7 +72,7 @@ jobs:
 
       - name: Prepare Android local.properties
         shell: bash
-        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
 
       - name: Restore Dependency-Check database cache
         uses: actions/cache@v6
@@ -82,9 +87,9 @@ jobs:
         run: |
           set -euo pipefail
           report="$RUNNER_TEMP/kotlin-gradle-plugin-dependency.txt"
-          ./gradlew -p build-logic :convention:dependencyInsight \
-            --configuration compileClasspath \
-            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \
+          ./gradlew -p build-logic :convention:dependencyInsight \\
+            --configuration compileClasspath \\
+            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \\
             --no-configuration-cache --console=plain | tee "$report"
           if ! grep -Fq "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21" "$report"; then
             echo "::error::The build-logic classpath must resolve the patched Kotlin Gradle plugin 2.4.21."
@@ -113,9 +118,9 @@ jobs:
           fi
 
           chmod +x ./gradlew
-          ./gradlew \
-            --init-script .github/scripts/owasp-dependency-check.init.gradle \
-            :app:dependencyCheckAnalyze \
+          ./gradlew \\
+            --init-script .github/scripts/owasp-dependency-check.init.gradle \\
+            :app:dependencyCheckAnalyze \\
             --no-configuration-cache --stacktrace --console=plain
 
       - name: Verify Dependency-Check scanned the Gradle dependency graph
@@ -164,3 +169,20 @@ jobs:
           name: dependency-report
           path: reports
           if-no-files-found: warn
+
+  ci-gate:
+    name: Dependency Security Gate
+    runs-on: ubuntu-latest
+    needs:
+      - dependency-change-detection
+      - dependency-check
+    if: ${{ always() }}
+    steps:
+      - name: Checkout gate script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Verify all executed checks completed successfully
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci-gate.py
