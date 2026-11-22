@@ -317,13 +317,13 @@ jobs:
           retention-days: 5
 
   release-r8-validation:
-    needs: [ change-scope ]
+    needs: [ change-scope, gradle-configuration-validation, architecture-gate, selective-verification ]
     name: Level 3 - Minified Release (R8 / Protobuf)
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ always() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
