@@ -29,8 +29,8 @@ androidx-test-uiautomator = "2.4.0"
 androidx-compose-ui-test = "1.12.0"
 androidx-viewpager2 = "1.1.0"
 androidx-work = "2.11.2"
-bouncy-kix = "1.85"
-bouncy-prov = "1.85.2"
+bouncy-kix = "1.87"
+bouncy-prov = "1.87"
 compose-bom =  "2026.08.00"
 credentialManager = "1.6.0"
 dokka = "2.2.0"
@@ -329,6 +329,7 @@ androidx-compose-material3-adaptive-navigation = { group = "androidx.compose.mat
 androidx-compose-material3-windowSizeClass = { group = "androidx.compose.material3", name = "material3-window-size-class" }
 androidx-compose-material3-navigationSuite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
+google-accompanist = { group = "com.google.accompanist", name = "accompanist-pager", version.ref = "accompanist" }
 
 # Lifecycle
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
@@ -397,6 +398,7 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 amplify-core = { group = "com.amplifyframework", name = "aws-core", version.ref = "amplify" }
 amplify-api = { group = "com.amplifyframework", name = "aws-api", version.ref = "amplify" }
+amplify-analytics = { group = "com.amplifyframework", name = "aws-analytics-pinpoint", version.ref = "amplify" }
 amplify-auth = { group = "com.amplifyframework", name = "aws-auth-cognito", version.ref = "amplify" }
 amplify-storage = { group = "com.amplifyframework", name = "aws-storage-s3", version.ref = "amplify" }
 amplify-logging = { group = "com.amplifyframework", name = "aws-logging-cloudwatch", version.ref = "amplify" }
