@@ -7,22 +7,22 @@ on:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened, ready_for_review ]
     paths:
-      - "app/**"
-      - "core/network/**"
-      - "core/analytics/**"
-      - "core/datastore/**"
-      - "build.gradle.kts"
-      - "build-logic/**"
+      - "app/build.gradle.kts"
+      - "app/src/main/**/EstatiaApplication.kt"
+      - "app/src/**/Firebase*.kt"
+      - "app/src/androidTest/**/FirebaseEmulatorIntegrationTest.kt"
+      - "core/network/src/**/firebase/**"
+      - "core/network/src/**/di/ProdDataSourcesModule.kt"
+      - "core/analytics/src/**"
+      - "build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt"
       - "gradle/libs.versions.toml"
       - "firebase.emulators.json"
       - "firestore.emulator.rules"
       - "storage.emulator.rules"
-      - ".github/workflows/firebase-emulator-integration.yml"
       - ".github/scripts/prepare-google-services.sh"
       - ".github/scripts/prepare-android-emulator.sh"
       - ".github/scripts/start-connected-android-emulator.sh"
       - ".github/scripts/stop-connected-android-emulator.sh"
-      - ".github/scripts/run-gradle-with-diagnostics.sh"
   workflow_dispatch:
 
 concurrency:
