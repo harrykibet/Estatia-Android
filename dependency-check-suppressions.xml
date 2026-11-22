@@ -62,7 +62,7 @@
             PURLs are not the separately bundled SQLite engine. Suppress only the
             upstream SQLite CPE on these exact AndroidX artifacts.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/androidx\\.sqlite/(sqlite-android|sqlite-framework-android)@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/androidx\.sqlite/(sqlite-android|sqlite-framework-android)@.*$</packageUrl>
         <cpe>cpe:2.3:a:sqlite:sqlite:*:*:*:*:*:*:*:*</cpe>
     </suppress>
     <suppress>
@@ -71,7 +71,7 @@
             The matched CPE is the unrelated historical Android Browser product.
             Limit this product-name correction to the AndroidX Browser PURL.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/androidx\\.browser/browser@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/androidx\.browser/browser@.*$</packageUrl>
         <cpe>cpe:2.3:a:android:android_browser:*:*:*:*:*:*:*:*</cpe>
     </suppress>
     <suppress>
@@ -79,7 +79,7 @@
             CameraX Lifecycle is an AndroidX lifecycle integration library. The
             matched Camera Life CPE identifies an unrelated photo-hosting product.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/androidx\\.camera/camera-lifecycle@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/androidx\.camera/camera-lifecycle@.*$</packageUrl>
         <cpe>cpe:2.3:a:camera_life:camera_life:*:*:*:*:*:*:*:*</cpe>
     </suppress>
     <suppress>
@@ -87,7 +87,7 @@
             CameraX Video is an AndroidX camera recording library. CVE-2015-3362
             identifies the Drupal Video module, not AndroidX CameraX Video.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/androidx\\.camera/camera-video@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/androidx\.camera/camera-video@.*$</packageUrl>
         <cpe>cpe:2.3:a:video_project:video:*:*:*:*:*:drupal:*:*</cpe>
     </suppress>
     <suppress>
@@ -97,7 +97,7 @@
             Tasks.org Android to-do application; this match is limited to that CPE
             on this exact Maven artifact.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/org\\.jetbrains\\.kotlinx/kotlinx-coroutines-play-services@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlinx/kotlinx-coroutines-play-services@.*$</packageUrl>
         <cpe>cpe:2.3:a:tasks:tasks:*:*:*:*:*:*:*:*</cpe>
         <cpe>cpe:2.3:a:tasks:tasks:13.0.0:*:*:*:*:android:*:*</cpe>
     </suppress>
@@ -107,7 +107,7 @@
             (@opentelemetry/core), not the OpenTelemetry Java API, common or context
             artifacts. Suppress only the Node.js CPE for these Java Maven PURLs.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/io\\.opentelemetry/opentelemetry-(api|common|context)@.*$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-(api|common|context)@.*$</packageUrl>
         <cpe>cpe:2.3:a:opentelemetry:opentelemetry:*:*:*:*:*:node.js:*:*</cpe>
     </suppress>
     <suppress>

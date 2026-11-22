@@ -125,9 +125,9 @@ jobs:
 
           minimum = (32, 0, 1)
           pattern = re.compile(
-              r"com\\.google\\.guava:guava:"
-              r"(\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9_.-]+)?)"
-              r"(?:\\s*->\\s*(\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9_.-]+)?))?"
+              r"com\.google\.guava:guava:"
+              r"(\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?)"
+              r"(?:\s*->\s*(\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?))?"
           )
 
           for report in map(Path, sys.argv[1:]):
@@ -144,7 +144,7 @@ jobs:
 
               parsed = []
               for value in resolved:
-                  version = re.match(r"(\\d+)\\.(\\d+)\\.(\\d+)", value)
+                  version = re.match(r"(\d+)\.(\d+)\.(\d+)", value)
                   if version is None:
                       raise SystemExit(
                           f"::error::{report.name}: unable to parse selected Guava version {value!r}."
