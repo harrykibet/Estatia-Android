@@ -163,11 +163,11 @@ abstract class GenerateModuleGraphsTask : DefaultTask() {
         }.toSet()
 
         val bin = dotBinary.orNull
-        val hasDot = bin?.let { b ->
-            runCatching { ProcessBuilder(b, "-V").start().waitFor() == 0 }.getOrDefault(false)
-        } ?: false
+        val usableDotBinary = bin?.takeIf { candidate ->
+            runCatching { ProcessBuilder(candidate, "-V").start().waitFor() == 0 }.getOrDefault(false)
+        }
 
-        if (bin != null && !hasDot) {
+        if (bin != null && usableDotBinary == null) {
             logger.warn("[GRAPHVIZ_NOT_FOUND] '$bin' not usable — PNG generation skipped.")
         }
 
@@ -194,9 +194,9 @@ abstract class GenerateModuleGraphsTask : DefaultTask() {
                     }
                 w.println("}")
             }
-            if (hasDot && bin != null) {
+            if (usableDotBinary != null) {
                 val png = File(target.absolutePath.removeSuffix(".gv") + ".png")
-                val proc = ProcessBuilder(bin, "-Tpng", target.absolutePath, "-o", png.absolutePath)
+                val proc = ProcessBuilder(usableDotBinary, "-Tpng", target.absolutePath, "-o", png.absolutePath)
                     .redirectErrorStream(true).start()
                 val exit = proc.waitFor()
                 if (exit != 0) {
