@@ -19,6 +19,10 @@ gradle.beforeProject { project ->
         def extension = project.extensions.getByName("dependencyCheck")
         extension.failBuildOnCVSS = 7.0
         extension.failOnError = true
+        extension.failBuildOnUnusedSuppressionRule = true
+        extension.suppressionFiles = [
+            project.rootProject.file("dependency-check-suppressions.xml").absolutePath,
+        ]
         extension.formats = ["HTML", "JSON", "SARIF"]
         extension.outputDirectory = project.rootProject.file("reports")
         extension.skipTestGroups = true
