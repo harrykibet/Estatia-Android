@@ -110,8 +110,9 @@ for path in "${changed_files[@]}"; do
   esac
 
   if [[ "$is_docs" != "true" ]] && {
-       [[ "$path" =~ ^(feature|core)/(home|shared-ui|ui|navigation|design-system|player-ui)/ ]] ||
+       [[ "$path" =~ ^core/(ui|navigation|design-system|player-ui)/src/main/ ]] ||
        [[ "$path" =~ ^feature/[^/]+/src/main/.*(Screen|Route|NavGraph|Navigation).*\\.kt$ ]] ||
+       [[ "$path" =~ ^feature/[^/]+/src/main/.*/(ui|navigation)/ ]] ||
        [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\\.kt$ ]] ||
        [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
        [[ "$path" == .github/actions/smoke-ui-local/* ]] ||

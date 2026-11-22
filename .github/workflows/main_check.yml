@@ -317,8 +317,8 @@ jobs:
 
   instrumented-tests:
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.architecture_changed == 'true' || github.event_name == 'workflow_dispatch' }}
-    name: Full Instrumented Test Suite
+    if: ${{ needs.change-scope.outputs.smoke_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    name: Targeted UI Smoke or Full Device Fleet
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -379,7 +379,7 @@ jobs:
 
   build-release:
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.smoke_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.change-scope.outputs.release_changed == 'true' || github.event_name == 'workflow_dispatch' }}
     name: Release Build
     runs-on: ubuntu-latest
     timeout-minutes: 90
