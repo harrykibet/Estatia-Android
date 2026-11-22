@@ -18,11 +18,12 @@ write_outputs() {
     echo "release_changed=$8"
     echo "smoke_changed=$9"
     echo "unknown_changed=${10}"
+    echo "module_gradle_changed=${11}"
   } >> "$output_file"
 }
 
 write_full_scope() {
-  write_outputs false false false false true true true true true true
+  write_outputs false false false false true true true true true true true
   echo "Unable to classify this event or diff safely; retaining full verification."
 }
 
@@ -55,6 +56,7 @@ architecture_changed=false
 release_changed=false
 smoke_changed=false
 unknown_changed=false
+module_gradle_changed=false
 
 for path in "${changed_files[@]}"; do
   is_docs=false
@@ -134,7 +136,7 @@ for path in "${changed_files[@]}"; do
 done
 
 write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \
-  "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed"
+  "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed"
 
 printf 'Changed paths (%s):\n' "${#changed_files[@]}"
 printf '  %s\n' "${changed_files[@]}"

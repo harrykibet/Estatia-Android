@@ -206,7 +206,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.source_changed == 'true' }}
+    if: ${{ needs.change-scope.outputs.source_changed == 'true' || needs.change-scope.outputs.module_gradle_changed == 'true' }}
     outputs:
       impact_tasks: ${{ steps.impact.outputs.tasks }}
     steps:
@@ -323,7 +323,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ always() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
+    if: ${{ always() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true')) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
