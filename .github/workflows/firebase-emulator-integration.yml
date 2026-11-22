@@ -21,9 +21,12 @@ permissions:
 env:
   CI: "true"
   ANDROID_SERIAL: emulator-5554
-  GRADLE_CI_MAX_WORKERS: 2
-  GRADLE_CI_GRADLE_XMX: 5g
-  GRADLE_CI_KOTLIN_XMX: 2g
+  GRADLE_CI_MAX_WORKERS: 1
+  GRADLE_CI_GRADLE_XMX: 4608m
+  GRADLE_CI_KOTLIN_XMX: 1536m
+  GRADLE_CI_PARALLEL: "false"
+  GRADLE_CI_KOTLIN_PARALLEL: "false"
+  GRADLE_CI_SAMPLE_SECONDS: 30
 
 jobs:
   change-scope:
@@ -103,17 +106,20 @@ jobs:
           report_dir="$RUNNER_TEMP/firebase-protobuf-dependencies"
           mkdir -p "$report_dir"
 
-          ./gradlew :app:dependencyInsight \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh protobuf-javalite-dependency-insight \
+            ./gradlew :app:dependencyInsight \
             --configuration prodDebugRuntimeClasspath \
             --dependency com.google.protobuf:protobuf-javalite \
             --no-configuration-cache --console=plain | tee "$report_dir/protobuf-javalite.txt"
 
-          ./gradlew :app:dependencyInsight \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh protolite-well-known-types-dependency-insight \
+            ./gradlew :app:dependencyInsight \
             --configuration prodDebugRuntimeClasspath \
             --dependency com.google.firebase:protolite-well-known-types \
             --no-configuration-cache --console=plain | tee "$report_dir/protolite-well-known-types.txt"
 
-          ./gradlew :app:dependencyInsight \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh protobuf-java-dependency-insight \
+            ./gradlew :app:dependencyInsight \
             --configuration prodDebugRuntimeClasspath \
             --dependency com.google.protobuf:protobuf-java \
             --no-configuration-cache --console=plain | tee "$report_dir/protobuf-java.txt"
@@ -137,7 +143,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh prod-debug-instrumentation-compile \
+            ./gradlew \
             :app:compileProdDebugKotlin \
             :app:compileProdDebugAndroidTestKotlin \
             --no-configuration-cache --stacktrace --console=plain
