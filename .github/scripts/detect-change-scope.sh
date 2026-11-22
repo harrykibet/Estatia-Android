@@ -46,11 +46,17 @@ fi
 docs_only=true
 for path in "${changed_files[@]}"; do
   case "$path" in
-    *.md|docs/*|LICENSE|LICENSE.*|NOTICE|NOTICE.*|COPYING|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
+    README.md|CODE_OF_CONDUCT.md|CONTRIBUTING.md|ACCESSIBILITY.md|SUPPORT.md|SECURITY.md|CHANGELOG.md|GOVERNANCE.md|MAINTAINERS.md|AUTHORS.md|CONTRIBUTORS.md|docs/*|LICENSE|LICENSE.*|NOTICE|NOTICE.*|COPYING|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md)
       docs_changed=true
       ;;
     *)
-      docs_only=false
+      # Only module-root README files are documentation. Markdown under source,
+      # resources, assets, or deeper implementation directories stays on full CI.
+      if [[ "$path" =~ ^(app|benchmark|lint|build-logic)/README\.md$ || "$path" =~ ^(core|feature)/[^/]+/README\.md$ ]]; then
+        docs_changed=true
+      else
+        docs_only=false
+      fi
       ;;
   esac
 done
