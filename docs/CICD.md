@@ -39,6 +39,27 @@ A routine Kotlin syntax correction should fail in its affected module compile or
 
 Full-project coverage and broad regression audits remain nightly/manual quality gates; they are not appended to every ordinary PR's impacted task list.
 
+### Pull-request trigger layers
+
+The PR workflow uses the pull-request lifecycle as a cost boundary rather than choosing only one trigger:
+
+| PR state/event | Checks |
+|---|---|
+| Draft opened or draft commit pushed | Change classification; documentation and tooling validation when relevant; Gradle configuration validation when relevant; the fast architecture regression suite for architecture changes; and impacted module verification |
+| Draft marked ready for review | The same fast and impact-aware checks, plus the relevant heavy tier: full architecture/lint/convention validation, minified R8 validation, Pixel 2 smoke instrumentation, Firebase emulator integration, and Baseline Profile generation |
+| New commit pushed after review readiness | Re-run the applicable fast and heavy checks against the new head; concurrency cancels superseded PR runs |
+| Manual dispatch / scheduled security scan | Explicit exhaustive or scheduled coverage, independent of draft state |
+
+The heavy workflows remain change-scoped. For example, a ready PR does not run Baseline Profile generation unless profiling-related paths changed, and OWASP Dependency-Check runs only when dependency-related paths changed. The dependency scan is skipped while a PR is draft and runs when it becomes ready for review. Each workflow has a stable gate job so an intentionally skipped, classifier-approved heavy job is distinguishable from a missing or failed check.
+
+The stable PR status checks intended for branch protection are `CI Gate`, `Baseline Profile Gate`, `Firebase Integration Gate`, and `Dependency Security Gate`. Configure these as required checks on `main`; the per-workflow gates aggregate the jobs within their own workflow.
+
+### Pre-merge freshness for this repository
+
+The workflows retain `merge_group` triggers for portability, but this repository is owned by a personal account. GitHub currently makes merge queues available only to public repositories owned by organizations, or qualifying private repositories owned by organizations on GitHub Enterprise Cloud. Therefore, the `merge_group` path is not an active pre-merge layer for this repository.
+
+Use the strict branch-freshness alternative on `main`: require branches to be up to date before merging. When `main` advances, update the PR branch and wait for the PR checks to pass on that updated head before merging. The `main_check` workflow is an additional post-merge safety net for the checks it defines; it is not a replacement for checking an up-to-date PR before merge.
+
 ### Tier 2: Main branch (selective post-merge verification)
 
 A push to main uses the same change classification. Ordinary source edits run impacted module tasks; module Gradle edits run configuration validation and impacted module tasks; global architecture changes run architecture/lint/convention gates and the full unit-test suite. UI smoke and signed release builds run only when UI or packaging paths change. A manual dispatch can still request the full unit suite and four-device fleet.
