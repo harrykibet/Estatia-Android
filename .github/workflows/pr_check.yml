@@ -33,6 +33,8 @@ jobs:
       architecture_changed: ${{ steps.classify.outputs.architecture_changed }}
       release_changed: ${{ steps.classify.outputs.release_changed }}
       smoke_changed: ${{ steps.classify.outputs.smoke_changed }}
+      unknown_changed: ${{ steps.classify.outputs.unknown_changed }}
+      module_gradle_changed: ${{ steps.classify.outputs.module_gradle_changed }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
