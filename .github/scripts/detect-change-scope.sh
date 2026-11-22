@@ -166,13 +166,13 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    benchmark/src/*|benchmark/build.gradle.kts|app/build.gradle.kts|app/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/main/*EstatiaApplication.kt|app/src/main/*MainActivity.kt|app/src/demoRelease/generated/baselineProfiles/*|app/src/prodRelease/generated/baselineProfiles/*|feature/home/src/main/*HomeScreen.kt|feature/shared-ui/src/main/*PropertyFeedScreen.kt|core/player-engine/src/main/*Player*.kt|core/player-ui/src/main/*Player*.kt|build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt|gradle/libs.versions.toml|.github/scripts/prepare-google-services.sh)
+    benchmark/src/*|benchmark/build.gradle.kts|app/build.gradle.kts|app/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/main/*EstatiaApplication.kt|app/src/main/*MainActivity.kt|app/src/demoRelease/generated/baselineProfiles/*|app/src/prodRelease/generated/baselineProfiles/*|feature/home/src/main/*HomeScreen.kt|feature/shared-ui/src/main/*PropertyFeedScreen.kt|core/player-engine/src/main/*Player*.kt|core/player-ui/src/main/*Player*.kt|build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt|gradle/libs.versions.toml|.github/scripts/prepare-google-services.sh|.github/scripts/run-gradle-with-diagnostics.sh|.github/workflows/baseline-profile-diagnostics.yml)
       baseline_changed=true
       ;;
   esac
 
   case "$path" in
-    app/build.gradle.kts|app/src/main/*EstatiaApplication.kt|app/src/*Firebase*.kt|core/network/src/*firebase/*|core/network/src/*ProdDataSourcesModule.kt|core/network/build.gradle.kts|core/analytics/src/*|core/analytics/build.gradle.kts|build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt|gradle/libs.versions.toml|firebase.emulators.json|firestore.emulator.rules|storage.emulator.rules|.github/scripts/prepare-google-services.sh|.github/scripts/prepare-android-emulator.sh|.github/scripts/start-connected-android-emulator.sh|.github/scripts/stop-connected-android-emulator.sh)
+    app/build.gradle.kts|app/src/main/*EstatiaApplication.kt|app/src/*Firebase*.kt|core/network/src/*firebase/*|core/network/src/*ProdDataSourcesModule.kt|core/network/build.gradle.kts|core/analytics/src/*|core/analytics/build.gradle.kts|build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt|gradle/libs.versions.toml|firebase.emulators.json|firestore.emulator.rules|storage.emulator.rules|.github/scripts/prepare-google-services.sh|.github/scripts/prepare-android-emulator.sh|.github/scripts/start-connected-android-emulator.sh|.github/scripts/stop-connected-android-emulator.sh|.github/scripts/run-gradle-with-diagnostics.sh|.github/workflows/firebase-emulator-integration.yml)
       firebase_changed=true
       ;;
   esac
@@ -193,6 +193,9 @@ for path in "${changed_files[@]}"; do
        [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
        [[ "$path" =~ /src/androidTest/ ]] ||
      [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
+       [[ "$path" == .github/workflows/pr_check.yml ]] ||
+       [[ "$path" == .github/workflows/smoke-ui-diagnostics.yml ]] ||
+       [[ "$path" == .github/scripts/run-gradle-with-diagnostics.sh ]] ||
        [[ "$path" == .github/scripts/prepare-android-emulator.sh ]] ||
        [[ "$path" == .github/scripts/start-connected-android-emulator.sh ]] ||
        [[ "$path" == .github/scripts/stop-connected-android-emulator.sh ]]
