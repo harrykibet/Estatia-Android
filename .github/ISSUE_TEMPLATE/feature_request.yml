@@ -1,0 +1,73 @@
+name: Feature request
+description: Propose a user-facing capability or engineering improvement.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem and the outcome that would improve it. A proposed implementation is welcome, but please explain the need first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: Who is affected, what are they trying to do, and what is difficult or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the behavior or capability you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable conditions that would make this request complete.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe existing workarounds or other approaches considered.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Property discovery and search
+        - Listings and property management
+        - Authentication and profiles
+        - Payments
+        - Chat and engagement
+        - Media feed and playback
+        - Accessibility
+        - Architecture or developer experience
+        - CI/CD, security, or reliability
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add diagrams, sanitized screenshots, examples, or related issues where useful. Do not include personal or production data.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues and pull requests for a similar request.
+          required: true
+        - label: This request does not disclose a security vulnerability or private user data.
+          required: true

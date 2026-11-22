@@ -157,14 +157,28 @@ For contributors and engineers seeking deeper technical insights:
 
 * [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — Full system architecture, module responsibilities, data flow, concurrency, and scalability.
 * [ENGINEERING.md](./docs/ENGINEERING.md) — Coding standards, testing, performance, security, CI/CD, and developer guidelines.
+* [CI/CD strategy](./docs/CICD.md) — Pipeline tiers, verification commands, and workflow operations.
+
+## Community and Participation
+
+Please review these project policies before contributing or reporting a problem:
+
+* [Code of Conduct](./CODE_OF_CONDUCT.md) — expectations for respectful participation and private conduct reporting.
+* [Contributing Guide](./CONTRIBUTING.md) — development setup, architecture expectations, verification commands, and pull request process.
+* [Support](./SUPPORT.md) — where to ask questions and how to report reproducible problems.
+* [Security Policy](./SECURITY.md) — private vulnerability reporting and supported versions.
+* [Accessibility Guidelines](./ACCESSIBILITY.md) — accessibility expectations for user-facing changes.
+* [Issue templates](./.github/ISSUE_TEMPLATE/) and [Pull Request template](./.github/PULL_REQUEST_TEMPLATE.md) — structured reporting and review information.
 
 ### Verification Contract
 
-Estatia uses a single authoritative command for architectural validation. This command must pass locally before any PR is submitted:
+For changes to application source, build logic, or architecture, run the authoritative architecture gate:
 
 ```bash
 ./gradlew verifyArchitecture
 ```
+
+This Android build gate is not required for documentation-only changes. For docs-only pull requests, validate Markdown formatting and links, review code examples for accuracy, and validate structured YAML such as GitHub issue forms. Android compilation, instrumentation, release/R8, and mutation checks are not needed unless the change also affects application code, build logic, or executable automation.
 
 This task aggregates:
 - **Lint**: Semantic implementation checks.
