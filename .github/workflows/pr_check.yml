@@ -81,6 +81,35 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: python3 ./.github/scripts/validate-tooling.py "$BASE_SHA" "$HEAD_SHA"
 
+  gradle-configuration-validation:
+    name: Gradle configuration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.gradle_changed == 'true' && needs.change-scope.outputs.architecture_changed != 'true' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\\n' "$ANDROID_HOME" > local.properties
+
+      - name: Validate Gradle project configuration
+        run: |
+          chmod +x ./gradlew
+          ./gradlew help --no-configuration-cache --stacktrace --console=plain
+
   architecture-gate:
     needs: [ change-scope ]
     if: ${{ needs.change-scope.outputs.architecture_changed == 'true' }}
@@ -334,7 +363,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ needs.change-scope.outputs.smoke_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.selective-verification.result == 'success' }}
+    if: ${{ needs.change-scope.outputs.smoke_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7

@@ -98,7 +98,7 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*|*/build.gradle|*/build.gradle.kts|*.gradle|*.gradle.kts)
+    settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
       architecture_changed=true
       ;;
   esac
@@ -109,14 +109,16 @@ for path in "${changed_files[@]}"; do
       ;;
   esac
 
-  if [[ "$path" =~ ^(feature|core)/(home|shared-ui|ui|navigation|design-system|player-ui)/ ]] ||
-     [[ "$path" =~ ^feature/[^/]+/src/main/.*(Screen|Route|NavGraph|Navigation).*\.kt$ ]] ||
-     [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\.kt$ ]] ||
-     [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
-     [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
-     [[ "$path" == .github/scripts/prepare-android-emulator.sh ]] ||
-     [[ "$path" == .github/scripts/start-connected-android-emulator.sh ]] ||
-     [[ "$path" == .github/scripts/stop-connected-android-emulator.sh ]]; then
+  if [[ "$is_docs" != "true" ]] && {
+       [[ "$path" =~ ^(feature|core)/(home|shared-ui|ui|navigation|design-system|player-ui)/ ]] ||
+       [[ "$path" =~ ^feature/[^/]+/src/main/.*(Screen|Route|NavGraph|Navigation).*\\.kt$ ]] ||
+       [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\\.kt$ ]] ||
+       [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
+       [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
+       [[ "$path" == .github/scripts/prepare-android-emulator.sh ]] ||
+       [[ "$path" == .github/scripts/start-connected-android-emulator.sh ]] ||
+       [[ "$path" == .github/scripts/stop-connected-android-emulator.sh ]]
+     }; then
     smoke_changed=true
   fi
 
