@@ -35,7 +35,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     env:
-      GRADLE_CI_MAX_WORKERS: 2
+  GRADLE_CI_MAX_WORKERS: 1
+  GRADLE_CI_GRADLE_XMX: 4608m
+  GRADLE_CI_KOTLIN_XMX: 1536m
+  GRADLE_CI_PARALLEL: "false"
+  GRADLE_CI_KOTLIN_PARALLEL: "false"
+  GRADLE_CI_SAMPLE_SECONDS: 30
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
