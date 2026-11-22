@@ -16,7 +16,7 @@ fi
 
 if [[ -f "$PID_FILE" ]]; then
   EMULATOR_PID="$(cat "$PID_FILE")"
-  for attempt in $(seq 1 15); do
+  for _ in $(seq 1 15); do
     if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
       break
     fi

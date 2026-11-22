@@ -83,7 +83,7 @@ echo "Emulator log: $AVD_LOG"
 
 # Wait for both the ADB transport and Android framework boot completion.
 BOOTED=false
-for attempt in $(seq 1 90); do
+for _ in $(seq 1 90); do
   if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
     echo "::error::Android Emulator exited before boot completed."
     tail -n 120 "$AVD_LOG" || true
