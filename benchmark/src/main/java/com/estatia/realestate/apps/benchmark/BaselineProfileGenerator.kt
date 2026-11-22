@@ -326,6 +326,9 @@ class BaselineProfileGenerator {
             tag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
             description = "Second Home property page after advancing the feed",
         )
+        // The return gesture is dispatched through a different UiObject2.
+        // Apply the same margin here so embedded media controls cannot intercept it.
+        secondPage.setGestureMargin(device.displayWidth / 5)
         secondPage.swipe(Direction.DOWN, FEED_PAGE_SWIPE_PERCENT)
 
         waitFor(
