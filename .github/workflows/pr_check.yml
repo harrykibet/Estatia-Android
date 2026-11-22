@@ -449,3 +449,41 @@ jobs:
           path: ${{ runner.temp }}/gradle-ci-diagnostics/
           if-no-files-found: ignore
           retention-days: 5
+
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs:
+      - change-scope
+      - documentation-validation
+      - tooling-validation
+      - gradle-configuration-validation
+      - architecture-gate
+      - impact-analysis
+      - selective-verification
+      - release-r8-validation
+      - smoke-test
+    if: ${{ always() }}
+    steps:
+      - name: Verify all executed checks completed successfully
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          jobs = json.loads(os.environ["CI_JOB_RESULTS"])
+          failed = {
+              name: details.get("result", "unknown")
+              for name, details in jobs.items()
+              if details.get("result") not in {"success", "skipped"}
+          }
+          if failed:
+              for name, result in sorted(failed.items()):
+                  print(f"::error::Required CI job {name} finished with result {result}.")
+              sys.exit(1)
+
+          print("CI Gate passed. All executed checks succeeded; skipped jobs were scope-gated.")
+          PY

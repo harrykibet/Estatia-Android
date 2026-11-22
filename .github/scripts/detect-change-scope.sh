@@ -30,6 +30,17 @@ write_full_scope() {
   echo "Unable to classify this event or diff safely; retaining full verification."
 }
 
+# Unexpected classifier errors must never produce empty outputs that silently
+# skip required verification. Fall back to the conservative full-scope profile.
+fail_open() {
+  local exit_code=$?
+  trap - ERR
+  echo "::warning::Change classifier failed with exit code ${exit_code}; retaining full verification."
+  write_full_scope
+  exit 0
+}
+trap fail_open ERR
+
 case "$event_name" in
   pull_request|merge_group|push) ;;
   *) write_full_scope; exit 0 ;;
@@ -42,7 +53,14 @@ if [[ -z "$base_sha" || -z "$head_sha" || "$base_sha" =~ ^0+$ ]] ||
   exit 0
 fi
 
-mapfile -d '' -t changed_files < <(git diff --name-only --diff-filter=ACDMRT -z "$base_sha" "$head_sha")
+diff_file="$(mktemp)"
+if ! git diff --name-only --diff-filter=ACDMRT -z "$base_sha" "$head_sha" > "$diff_file"; then
+  rm -f "$diff_file"
+  write_full_scope
+  exit 0
+fi
+mapfile -d '' -t changed_files < "$diff_file"
+rm -f "$diff_file"
 if [[ ${#changed_files[@]} -eq 0 ]]; then
   write_full_scope
   echo "No changed paths found; retaining full verification."

@@ -6,23 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened, ready_for_review ]
-    paths:
-      - "benchmark/src/**"
-      - "benchmark/build.gradle.kts"
-      - "app/build.gradle.kts"
-      - "app/proguard-rules.pro"
-      - "app/src/main/AndroidManifest.xml"
-      - "app/src/main/**/EstatiaApplication.kt"
-      - "app/src/main/**/MainActivity.kt"
-      - "app/src/demoRelease/generated/baselineProfiles/**"
-      - "app/src/prodRelease/generated/baselineProfiles/**"
-      - "feature/home/src/main/**/HomeScreen.kt"
-      - "feature/shared-ui/src/main/**/PropertyFeedScreen.kt"
-      - "core/player-engine/src/main/**/Player*.kt"
-      - "core/player-ui/src/main/**/Player*.kt"
-      - "build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt"
-      - "gradle/libs.versions.toml"
-      - ".github/scripts/prepare-google-services.sh"
+  merge_group:
+    types: [ checks_requested ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
@@ -40,7 +26,29 @@ env:
   GRADLE_CI_KOTLIN_XMX: 2g
 
 jobs:
+  change-scope:
+    name: Classify baseline-profile changes
+    runs-on: ubuntu-latest
+    outputs:
+      baseline_changed: ${{ steps.classify.outputs.baseline_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Classify relevant changes
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: bash ./.github/scripts/detect-change-scope.sh "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA"
+
   variant-baseline-profile:
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' }}
     name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
