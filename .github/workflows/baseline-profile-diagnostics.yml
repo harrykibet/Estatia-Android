@@ -16,17 +16,16 @@ on:
       - "app/src/main/**/MainActivity.kt"
       - "app/src/demoRelease/generated/baselineProfiles/**"
       - "app/src/prodRelease/generated/baselineProfiles/**"
-      - "feature/home/src/main/**"
-      - "feature/shared-ui/src/main/**"
-      - "core/player-engine/src/main/**"
-      - "core/player-ui/src/main/**"
+      - "feature/home/src/main/**/HomeScreen.kt"
+      - "feature/shared-ui/src/main/**/PropertyFeedScreen.kt"
+      - "core/player-engine/src/main/**/Player*.kt"
+      - "core/player-ui/src/main/**/Player*.kt"
       - "build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt"
       - "gradle/libs.versions.toml"
       - ".github/scripts/prepare-google-services.sh"
       - ".github/scripts/prepare-android-emulator.sh"
       - ".github/scripts/start-connected-android-emulator.sh"
       - ".github/scripts/stop-connected-android-emulator.sh"
-      - ".github/scripts/run-gradle-with-diagnostics.sh"
   workflow_dispatch:
 
 concurrency:
