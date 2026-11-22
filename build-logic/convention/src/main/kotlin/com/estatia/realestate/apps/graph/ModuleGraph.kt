@@ -109,9 +109,9 @@ object ModuleGraphExtractor {
         // 2. Identify directly affected modules
         val directlyAffected = mutableSetOf<String>()
         diffFiles.forEach { path ->
+            // Do not require the changed leaf to exist: deleted files still affect
+            // their owning module and must not silently disappear from the impact set.
             val file = File(rootDir, path)
-            if (!file.exists()) return@forEach
-
             var dir = file.parentFile
             while (dir != null && dir != rootDir) {
                 val buildFile = File(dir, "build.gradle.kts")
