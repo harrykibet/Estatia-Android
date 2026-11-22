@@ -19,37 +19,33 @@ All platforms utilize **Gradle Managed Devices (GMD)** to ensure that tests run 
 
 We use a "funnel" approach where expensive operations are deferred to later stages.
 
-### Tier 1: PR Check (High Maturity & Fast Feedback)
-*   **Trigger**: Every Pull Request (GitHub/GitLab) or PR build (Codemagic).
-*   **Goal**: Ensure architectural compliance and catch regressions in < 15 minutes.
-*   **Key Operations**:
-    *   **Level 0: Architecture Gate**: Runs `./gradlew verifyArchitecture` (Lint, KSP, Konsist, Canary violations, and Dependency Drift checks).
-    *   **Level 1: Selective Verification**: Uses `./gradlew calculateImpact` to identify and run tests/lint only for impacted modules.
-    *   **Level 2: Coverage Ratchet**: Verifies code coverage hasn't regressed using `./gradlew jacocoProdDebugVerification`.
-    *   **Level 3: Smoke UI Suite**: Instrumented tests on a single `pixel2Api34` device to verify basic app startup.
-    *   **Self-Healing**: Automatically updates lint baselines if violations are resolved (Ratchet mechanism).
+### Tier 1: Pull-request feedback (change-impact aware)
 
-### Tier 2: Main Branch (Full Verification)
-*   **Trigger**: Merge/Push to `main`.
-*   **Goal**: Ensure release readiness and multi-device compatibility.
-*   **Key Operations**:
-    *   **Exhaustive Analysis**: Full `./gradlew lint` and `./gradlew test` across all modules.
-    *   **Fleet Testing**: Runs instrumented tests across four distinct device shapes (Small Phone, Modern Pixel, Medium Phone, Tablet).
-    *   **Linux Emulator Readiness**: Main Branch and each Nightly managed-device job prepare KVM and install the Android Emulator SDK package once on their own hosted runner before Gradle Managed Device setup. Runner isolation means this setup is repeated in the Chaos, Baseline Profile, and Macrobenchmark jobs.
-    *   **Release Build**: `assembleProdRelease` with full R8 shrinking and production signing.
-    *   **Artifact Archival**: Signed APKs are archived for internal QA distribution.
+Every pull request is classified before expensive jobs start. Classification is fail-safe: an unknown event, unavailable diff range, or unrecognized path retains conservative verification.
 
-### Tier 3: Nightly (Stress & Optimization)
-*   **Trigger**: Scheduled daily at 00:00 UTC.
-*   **Goal**: Heavy-duty performance tuning, security auditing, and chaos validation.
-*   **Key Operations**:
-    *   **Deterministic Chaos**: Runs `FeedGestureChaosTest` on `pixel6Api31` to find rare race conditions.
-    *   **Baseline Profile Generation**: Captures AOT profiles and automatically creates a PR to update them in the repo.
-    *   **Performance Benchmarks**: Measures Startup and Scrolling performance via Macrobenchmarks.
-    *   **Security & Purity**: Runs OWASP Dependency Check and `auditReleaseSymbols` (LAW-038 R8 mapping audit across Demo and Prod release variants).
-    *   **Full Quality Audit**: Generates exhaustive JaCoCo coverage reports and runs architecture audits on all variants.
+| Change category | Verification |
+|---|---|
+| Documentation and community files | Markdown fences and relative-link validation; issue-form YAML parsing where applicable |
+| Scripts and GitHub automation | Shell syntax, Python parsing, YAML parsing, and supported JSON/XML/TOML parsing; ShellCheck warnings when available |
+| Module Gradle configuration | Gradle project configuration check |
+| Ordinary Kotlin/Android source | Gradle impact analysis selects module-level lint, unit-test, and compile tasks plus downstream consumers |
+| Global build logic and architecture enforcement | Full architecture, lint, and convention-plugin gates |
+| Release packaging, app variants, and shrinker rules | Minified Demo and Prod R8 validation |
+| UI, navigation, manifest, and instrumented-test changes | Targeted Pixel 2 smoke instrumentation after impacted verification succeeds |
+| Firebase adapters, app bootstrap, emulator rules, and Firebase tests | Firebase Auth, Firestore, and Storage emulator round trip |
+| Benchmark harness, startup, feed, and player profiling paths | Demo and Prod Baseline Profile generation and packaging |
 
----
+A routine Kotlin syntax correction should fail in its affected module compile or unit-test task. It does not by itself start release packaging, a device fleet, Firebase emulators, or Baseline Profile generation.
+
+Full-project coverage and broad regression audits remain nightly/manual quality gates; they are not appended to every ordinary PR's impacted task list.
+
+### Tier 2: Main branch (selective post-merge verification)
+
+A push to main uses the same change classification. Ordinary source edits run impacted module tasks; module Gradle edits run configuration validation; global architecture changes run architecture/lint/convention gates. UI smoke and signed release builds run only when UI or packaging paths change. A manual dispatch can still request the full unit suite and four-device fleet.
+
+### Tier 3: Nightly and manual exhaustive verification
+
+Nightly and manual workflows retain the broad regression, chaos, coverage, benchmark, security, baseline-profile, and architecture audits. This keeps expensive fleet-level verification available without making every small PR pay for it.
 
 ## 📱 Supported Hardware Fleet (GMD)
 

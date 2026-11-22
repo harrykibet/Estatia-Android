@@ -2,8 +2,19 @@ plugins {
     alias(libs.plugins.estatia.android.application)
 }
 
+val firebaseEmulatorIntegration =
+    providers.gradleProperty("firebaseEmulatorIntegration").orNull?.toBoolean() ?: false
+
 android {
     namespace = "com.estatia.realestate.apps"
+
+    defaultConfig {
+        buildConfigField(
+            "boolean",
+            "FIREBASE_EMULATOR_INTEGRATION",
+            firebaseEmulatorIntegration.toString(),
+        )
+    }
 }
 
  dokka {
@@ -53,6 +64,10 @@ dependencies {
     implementation(libs.androidx.compose.material3.windowSizeClass)
 
     androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(platform(libs.firebase.bom))
+    androidTestImplementation(libs.firebase.auth)
+    androidTestImplementation(libs.firebase.firestore)
+    androidTestImplementation(libs.firebase.storage)
     // Keep AndroidJUnitRunner and its test-storage implementation on the instrumentation APK classpath.
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.monitor)

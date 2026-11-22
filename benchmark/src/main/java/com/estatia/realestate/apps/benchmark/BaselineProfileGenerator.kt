@@ -1,5 +1,6 @@
 package com.estatia.realestate.apps.benchmark
 
+import android.content.Intent
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -15,18 +16,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Generates the Baseline Profile for Estatia's critical user journeys.
+ * Generates separate Startup Profile and Baseline Profile rules for Estatia.
  *
- * Authentication is intentionally NOT performed by this benchmark.
+ * The Prod target signs in with a dedicated Firebase benchmark account before
+ * profile collection begins. Sign-in setup is outside collect(), so credentials
+ * and login UI are not included in authenticated startup/journey profiles.
+ * Demo retains its deterministic demo authentication provider.
  *
- * The application must already be in an authenticated state before the
- * authenticated journeys are executed. This prevents credentials from being
- * embedded in benchmark source code and avoids coupling profile generation
- * to a particular backend account.
+ * Credentials are supplied only through instrumentation arguments populated
+ * from GitHub Actions secrets. They are never embedded in source or printed.
  *
  * The benchmark is fail-fast. Required UI elements are asserted rather than
- * silently skipped so that an incomplete journey cannot accidentally produce
- * an incomplete Baseline Profile.
+ * silently skipped so an incomplete journey cannot produce an incomplete profile.
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
@@ -34,11 +35,58 @@ class BaselineProfileGenerator {
     @get:Rule
     val baselineProfileRule = BaselineProfileRule()
 
+    /**
+     * Captures only the authenticated launch path for DEX startup layout optimization.
+     *
+     * The Startup Profile must remain limited to work required to display the initial
+     * authenticated Home experience. Other destinations and post-startup interactions
+     * belong in [generateCriticalUserJourneys].
+     */
     @Test
-    fun generate() = baselineProfileRule.collect(
-        packageName = BenchmarkTargetPackage.requirePackageName(),
-        includeInStartupProfile = true,
-    ) {
+    fun generateStartup() = run {
+        val setupDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        prepareProductionBenchmarkSession(setupDevice)
+        baselineProfileRule.collect(
+            packageName = BenchmarkTargetPackage.requirePackageName(),
+            includeInStartupProfile = true,
+        ) {
+        val device = UiDevice.getInstance(
+            InstrumentationRegistry.getInstrumentation(),
+        )
+
+        pressHome()
+        startActivityAndWait()
+        waitForAuthenticatedNavigationUi(device)
+
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED,
+            description = "Initial authenticated Home property feed",
+        )
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "First authenticated Home property page",
+        )
+
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+        }
+    }
+
+    /**
+     * Captures the broader critical user journeys for the Baseline Profile only.
+     *
+     * These journeys remain part of the Baseline Profile, but must not expand the
+     * Startup Profile beyond the initial authenticated Home experience.
+     */
+    @Test
+    fun generateCriticalUserJourneys() = run {
+        val setupDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        prepareProductionBenchmarkSession(setupDevice)
+        baselineProfileRule.collect(
+            packageName = BenchmarkTargetPackage.requirePackageName(),
+            includeInStartupProfile = false,
+        ) {
         val device = UiDevice.getInstance(
             InstrumentationRegistry.getInstrumentation(),
         )
@@ -82,7 +130,8 @@ class BaselineProfileGenerator {
             description = "Home property feed",
         )
 
-        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+        }
     }
 
     // =========================================================================
@@ -90,11 +139,94 @@ class BaselineProfileGenerator {
     // =========================================================================
 
     /**
+     * Establish a real Firebase session for Prod before Macrobenchmark records.
+     * Demo continues to use its deterministic demo identity.
+     */
+    private fun prepareProductionBenchmarkSession(device: UiDevice) {
+        val packageName = BenchmarkTargetPackage.requirePackageName()
+        if (packageName.endsWith(".demo")) return
+
+        val arguments = InstrumentationRegistry.getArguments()
+        val email = arguments.getString(BENCHMARK_TEST_EMAIL_ARGUMENT).orEmpty()
+        val password = arguments.getString(BENCHMARK_TEST_PASSWORD_ARGUMENT).orEmpty()
+        check(email.isNotBlank() && password.isNotBlank()) {
+            "Production profile generation requires BASELINE_PROFILE_TEST_EMAIL and " +
+                "BASELINE_PROFILE_TEST_PASSWORD GitHub Actions secrets."
+        }
+
+        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent = checkNotNull(
+            targetContext.packageManager.getLaunchIntentForPackage(packageName),
+        ) {
+            "Could not resolve the Prod application launch Activity for $packageName."
+        }.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+
+        device.pressHome()
+        targetContext.startActivity(launchIntent)
+
+        var homeNavigation = device.wait(
+            Until.findObject(By.res(NavigationTestTags.HOME)),
+            SESSION_RESTORE_TIMEOUT_MS,
+        )
+        if (homeNavigation == null) {
+            val emailField = device.wait(
+                Until.findObject(By.res(ScreenTestTags.LOGIN_EMAIL_FIELD)),
+                LOGIN_SCREEN_TIMEOUT_MS,
+            ) ?: throw AssertionError(
+                "Prod exposed neither authenticated Home navigation nor the login email field. " +
+                    "Inspect Firebase initialization and app startup diagnostics."
+            )
+            val passwordField = waitFor(
+                device = device,
+                tag = ScreenTestTags.LOGIN_PASSWORD_FIELD,
+                description = "Production benchmark login password field",
+                timeoutMs = LOGIN_SCREEN_TIMEOUT_MS,
+            )
+            emailField.text = email
+            passwordField.text = password
+
+            // UiObject2.setText() updates the fields through accessibility actions.
+            // Do not press Back here: when the IME is not visible, Back exits the
+            // unauthenticated root Activity and backgrounds the app before login.
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+            waitFor(
+                device = device,
+                tag = ScreenTestTags.LOGIN_BUTTON,
+                description = "Production benchmark login button after entering credentials",
+                timeoutMs = LOGIN_SCREEN_TIMEOUT_MS,
+            ).click()
+            homeNavigation = device.wait(
+                Until.findObject(By.res(NavigationTestTags.HOME)),
+                AUTHENTICATION_TIMEOUT_MS,
+            )
+        }
+
+        checkNotNull(homeNavigation) {
+            "Firebase benchmark sign-in did not reach authenticated Home. Confirm the account " +
+                "has a verified email, completed Estatia's required phone-verification step, " +
+                "and has a matching Firestore user document with readable Home property data. " +
+                "Credentials are excluded from diagnostics."
+        }
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED,
+            description = "Home property feed after Firebase benchmark authentication",
+            timeoutMs = AUTHENTICATION_TIMEOUT_MS,
+        )
+        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+
+        // Keep login outside the collected profile, but measure the persisted session on cold launch.
+        device.executeShellCommand("am force-stop $packageName")
+        device.pressHome()
+    }
+
+    /**
      * Verifies that the benchmark started with an authenticated session.
      *
-     * This method intentionally does not perform authentication.
-     *
-     * Credentials must never be embedded in BaselineProfileGenerator.
+     * Production sign-in happens in prepareProductionBenchmarkSession(), before
+     * this assertion runs inside the recorded profile journey.
      */
     private fun waitForAuthenticatedNavigationUi(
         device: UiDevice,
@@ -171,18 +303,39 @@ class BaselineProfileGenerator {
             navigationTag = NavigationTestTags.HOME,
         )
 
-        val feed = waitFor(
+        waitFor(
             device = device,
             tag = ScreenTestTags.PROPERTY_FEED,
-            description = "Home property feed",
+            description = "Home property feed gesture surface",
         )
 
-        feed.setGestureMargin(device.displayWidth / 10)
+        // VerticalPager advances from page zero with an upward swipe. Verify
+        // the page tag changes rather than relying on an accessibility scroll event.
+        val firstPage = waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "First Home property page",
+        )
+        // Match ScrollBenchmark: keep the gesture away from the embedded media
+        // player's edge controls so the parent VerticalPager receives the swipe.
+        firstPage.setGestureMargin(device.displayWidth / 5)
+        firstPage.swipe(Direction.UP, FEED_PAGE_SWIPE_PERCENT)
 
-        feed.fling(Direction.DOWN)
-        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+        val secondPage = waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
+            description = "Second Home property page after advancing the feed",
+        )
+        // The return gesture is dispatched through a different UiObject2.
+        // Apply the same margin here so embedded media controls cannot intercept it.
+        secondPage.setGestureMargin(device.displayWidth / 5)
+        secondPage.swipe(Direction.DOWN, FEED_PAGE_SWIPE_PERCENT)
 
-        feed.fling(Direction.DOWN)
+        waitFor(
+            device = device,
+            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            description = "Home feed after returning to the first property",
+        )
         device.waitForIdle(UI_IDLE_TIMEOUT_MS)
     }
 
@@ -500,6 +653,10 @@ class BaselineProfileGenerator {
 
     private companion object {
         const val AUTHENTICATION_TIMEOUT_MS = 60_000L
+        const val SESSION_RESTORE_TIMEOUT_MS = 20_000L
+        const val LOGIN_SCREEN_TIMEOUT_MS = 30_000L
+        const val BENCHMARK_TEST_EMAIL_ARGUMENT = "baselineProfileTestEmail"
+        const val BENCHMARK_TEST_PASSWORD_ARGUMENT = "baselineProfileTestPassword"
 
         const val UI_TIMEOUT_MS = 15_000L
 
@@ -508,6 +665,8 @@ class BaselineProfileGenerator {
         const val SEARCH_QUERY = "Nairobi"
 
         const val PROPERTY_SWIPE_PERCENT = 1.0f
+
+        const val FEED_PAGE_SWIPE_PERCENT = 0.70f
     }
 }
 
@@ -543,6 +702,10 @@ private object ScreenTestTags {
 
     const val PROPERTY_FEED = "PropertyFeed"
 
+    const val PROPERTY_FEED_PAGE_0 = "PropertyFeedPage_0"
+
+    const val PROPERTY_FEED_PAGE_1 = "PropertyFeedPage_1"
+
     const val PROPERTY_DETAILS = "PropertyDetailsScreen"
 
     const val SEARCH_FIELD = "SearchTextField"
@@ -556,6 +719,12 @@ private object ScreenTestTags {
     const val MARKET = "MarketScreen"
 
     const val PROFILE = "ProfileScreen"
+
+    const val LOGIN_EMAIL_FIELD = "LoginEmailField"
+
+    const val LOGIN_PASSWORD_FIELD = "LoginPasswordField"
+
+    const val LOGIN_BUTTON = "LoginButton"
 }
 
 /**

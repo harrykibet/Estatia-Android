@@ -5,6 +5,8 @@ import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.NetworkException
 import com.estatia.realestate.apps.core.common.interfaces.IClock
 import com.estatia.realestate.apps.core.network.core.ExponentialRetryPolicy
+import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.PROPERTIES
+import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.CONTACT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKED_PROPERTIES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.USERS
 import com.estatia.realestate.apps.core.network.interfaces.IExceptionMapper
@@ -14,7 +16,10 @@ import com.estatia.realestate.apps.core.testing_network.chaos.ChaosNetworkClient
 import com.google.android.gms.tasks.Task
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.storage.FirebaseStorage
 import io.mockk.coEvery
@@ -30,7 +35,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 @OptIn(ExperimentalCoroutinesApi::class)
 @Utility
 class FirestorePropertiesTest {
@@ -38,6 +48,7 @@ class FirestorePropertiesTest {
     private lateinit var database: FirebaseFirestore
     private lateinit var storage: FirebaseStorage
     private lateinit var networkChaos: NetworkChaosController
+    private lateinit var metricsTracker: com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
     private lateinit var firestoreProperties: FirestoreProperties
 
     @Before
@@ -64,8 +75,54 @@ class FirestorePropertiesTest {
             retryPolicy = retryPolicy
         )
 
-        val metricsTracker = mockk<com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker>(relaxed = true)
+        metricsTracker = mockk(relaxed = true)
         firestoreProperties = FirestoreProperties(database, storage, networkClient, metricsTracker)
+    }
+
+    @Test
+    fun `getPropertyById preserves public property when gated contact read is denied`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            val propertyId = "public-property-123"
+            val propertiesCollection = mockk<CollectionReference>()
+            val propertyDocument = mockk<DocumentReference>()
+            val propertyTask = mockk<Task<DocumentSnapshot>>()
+            val propertySnapshot = mockk<DocumentSnapshot>()
+            val contactCollection = mockk<CollectionReference>()
+            val contactDocument = mockk<DocumentReference>()
+            val contactTask = mockk<Task<DocumentSnapshot>>()
+
+            every { database.collection(PROPERTIES) } returns propertiesCollection
+            every { propertiesCollection.document(propertyId) } returns propertyDocument
+            every { propertyDocument.get() } returns propertyTask
+            coEvery { propertyTask.await() } returns propertySnapshot
+            every { propertySnapshot.exists() } returns true
+            every { propertySnapshot.id } returns propertyId
+            every { propertySnapshot.data } returns mapOf("title" to "Public property")
+
+            every { propertyDocument.collection(CONTACT) } returns contactCollection
+            every { contactCollection.document("info") } returns contactDocument
+            every { contactDocument.get() } returns contactTask
+            coEvery { contactTask.await() } throws FirebaseFirestoreException(
+                "Contact details are not readable by this user.",
+                FirebaseFirestoreException.Code.PERMISSION_DENIED,
+                null,
+            )
+
+            val result = firestoreProperties.getPropertyById(propertyId)
+
+            assertTrue(result is AppResult.Success)
+            val property = (result as AppResult.Success).data
+            assertEquals(propertyId, property.id)
+            assertEquals("Public property", property.title)
+            assertEquals(null, property.contact)
+            verify(exactly = 1) {
+                metricsTracker.incrementCounter("network.properties.contact_read_denied")
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
     }
 
     @Test
@@ -109,6 +166,65 @@ class FirestorePropertiesTest {
             verify(exactly = 3) { likedCollection.get() }
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+
+    @Test
+    fun `Firestore Timestamp property dates normalize to epoch milliseconds without losing cursor precision`() {
+        val timestamp = Timestamp(1_700_000_000L, 123_456_789)
+
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "property-123",
+            fields = mapOf(
+                "title" to "Timestamp-backed listing",
+                "createdAt" to timestamp,
+                "price" to 125_000,
+            ),
+        )
+
+        assertEquals("property-123", property.id)
+        assertEquals("Timestamp-backed listing", property.title)
+        assertEquals(125_000.0, checkNotNull(property.price), 0.0)
+        assertEquals(1_700_000_000_123L, checkNotNull(property.createdAt))
+
+        val cursor = FirestorePropertyMapper.toCursor("property-123", timestamp)
+        assertEquals(1_700_000_000_123L, cursor.createdAt)
+        assertEquals(1_700_000_000L, checkNotNull(cursor.createdAtSeconds))
+        assertEquals(123_456_789, checkNotNull(cursor.createdAtNanoseconds))
+
+        val queryValue = FirestorePropertyMapper.toFirestoreCursorValue(cursor) as Timestamp
+        assertEquals(timestamp.seconds, queryValue.seconds)
+        assertEquals(timestamp.nanoseconds, queryValue.nanoseconds)
+    }
+
+    @Test
+    fun `legacy numeric property dates remain milliseconds and keep numeric cursor type`() {
+        val createdAt = 1_700_000_000_123L
+
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "legacy-property",
+            fields = mapOf("createdAt" to createdAt),
+        )
+        val cursor = FirestorePropertyMapper.toCursor("legacy-property", createdAt)
+
+        assertEquals(createdAt, checkNotNull(property.createdAt))
+        assertEquals(createdAt, cursor.createdAt)
+        assertEquals(null, cursor.createdAtSeconds)
+        assertEquals(null, cursor.createdAtNanoseconds)
+        assertEquals(createdAt, FirestorePropertyMapper.toFirestoreCursorValue(cursor))
+    }
+
+    @Test
+    fun `unsupported Firestore property date types fail with a field-specific error`() {
+        try {
+            FirestorePropertyMapper.toEntity(
+                documentId = "invalid-property",
+                fields = mapOf("createdAt" to "not-a-timestamp"),
+            )
+            throw AssertionError("Expected an invalid Firestore createdAt value to fail.")
+        } catch (exception: IllegalArgumentException) {
+            assertTrue(exception.message.orEmpty().contains("createdAt"))
         }
     }
 

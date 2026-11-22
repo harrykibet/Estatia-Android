@@ -1,0 +1,66 @@
+initscript {
+    repositories {
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath("org.owasp:dependency-check-gradle:13.0.0")
+    }
+}
+
+// The aggregate task runs from the root project and resolves child-project
+// configurations from its task action. Gradle 9.7 rejects that cross-project
+// resolution without an exclusive project lock. Apply Dependency-Check directly
+// to :app and run its project-local analyze task instead. The app runtime
+// classpaths include the transitive runtime dependencies of its project modules.
+gradle.beforeProject { project ->
+    if (project.path == ":app") {
+        project.pluginManager.apply(org.owasp.dependencycheck.gradle.DependencyCheckPlugin)
+
+        def extension = project.extensions.getByName("dependencyCheck")
+        extension.failBuildOnCVSS = 7.0
+        extension.failOnError = true
+        extension.formats = ["HTML", "JSON", "SARIF"]
+        extension.outputDirectory = project.rootProject.file("reports")
+        extension.skipTestGroups = true
+
+        def releaseRuntimeConfigurations = [
+            "demoReleaseRuntimeClasspath",
+            "prodReleaseRuntimeClasspath",
+        ]
+
+        // Android Gradle Plugin creates flavor runtime configurations during
+        // variant finalization, which can occur after :app's afterEvaluate callback.
+        // Wait until all projects have completed evaluation before validating and
+        // setting the exact release graphs. The analysis task itself remains local
+        // to :app, avoiding Gradle 9's unsafe cross-project resolution path.
+        gradle.projectsEvaluated {
+            def missingConfigurations = releaseRuntimeConfigurations.findAll { name ->
+                def configuration = project.configurations.findByName(name)
+                configuration == null || !configuration.canBeResolved
+            }
+            if (!missingConfigurations.isEmpty()) {
+                throw new GradleException(
+                    "Dependency-Check cannot verify both app release runtime graphs. " +
+                    "Missing or non-resolvable configurations: ${missingConfigurations.join(', ')}"
+                )
+            }
+
+            extension.scanConfigurations = releaseRuntimeConfigurations
+            project.logger.lifecycle(
+                "OWASP Dependency-Check will scan app release runtime configurations: " +
+                releaseRuntimeConfigurations.join(", ")
+            )
+        }
+
+        def dataDirectory = System.getenv("ODC_DATA_DIRECTORY")
+        if (dataDirectory) {
+            extension.data.directory = dataDirectory
+        }
+
+        def nvdApiKey = System.getenv("NVD_API_KEY")
+        extension.nvd.delay = nvdApiKey ? 3500 : 8000
+        if (nvdApiKey) {
+            extension.nvd.apiKey = nvdApiKey
+        }
+    }
+}

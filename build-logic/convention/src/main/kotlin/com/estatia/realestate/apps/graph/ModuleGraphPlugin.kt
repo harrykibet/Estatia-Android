@@ -44,9 +44,24 @@ class ModuleGraphPlugin : Plugin<Project> {
             
             calculateImpact.configure {
                 doLast {
+                    // PR and main-branch workflows pass the exact comparison range.
+                    // Fall back to origin/main for existing callers that do not pass overrides.
+                    val impactBase = System.getenv("ESTATIA_IMPACT_BASE")
+                        ?.takeIf { it.isNotBlank() } ?: "origin/main"
+                    val impactHead = System.getenv("ESTATIA_IMPACT_HEAD")
+                        ?.takeIf { it.isNotBlank() } ?: "HEAD"
+                    val diffReference = if (impactBase == "origin/main") {
+                        impactBase
+                    } else {
+                        "$impactBase...$impactHead"
+                    }
                     val diffOutput = try {
-                        ProcessBuilder("git", "diff", "--name-only", "origin/main").start().inputStream.bufferedReader().readText().lines().filter { it.isNotBlank() }
-                    } catch (_: Exception) { emptyList<String>() }
+                        ProcessBuilder("git", "diff", "--name-only", diffReference)
+                            .start().inputStream.bufferedReader().readText().lines().filter { it.isNotBlank() }
+                    } catch (error: Exception) {
+                        logger.warn("Could not calculate impacted paths from '$diffReference': ${error.message}")
+                        emptyList<String>()
+                    }
 
                     if (diffOutput.isEmpty()) {
                         println("IMPACT_TASKS=test lint")
