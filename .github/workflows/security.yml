@@ -55,6 +55,13 @@ jobs:
     # dependency-related inputs. Scheduled/manual runs remain exhaustive.
     if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.dependency-change-detection.outputs.dependencies == 'true') }}
     timeout-minutes: 45
+    env:
+      GRADLE_CI_MAX_WORKERS: 1
+      GRADLE_CI_GRADLE_XMX: 5g
+      GRADLE_CI_KOTLIN_XMX: 1536m
+      GRADLE_CI_PARALLEL: "false"
+      GRADLE_CI_KOTLIN_PARALLEL: "false"
+      GRADLE_CI_SAMPLE_SECONDS: 30
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -87,7 +94,8 @@ jobs:
         run: |
           set -euo pipefail
           report="$RUNNER_TEMP/kotlin-gradle-plugin-dependency.txt"
-          ./gradlew -p build-logic :convention:dependencyInsight \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh security-kotlin-plugin-insight \
+            ./gradlew -p build-logic :convention:dependencyInsight \
             --configuration compileClasspath \
             --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \
             --no-configuration-cache --console=plain | tee "$report"
@@ -118,7 +126,8 @@ jobs:
           fi
 
           chmod +x ./gradlew
-          ./gradlew \
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh owasp-dependency-check \
+            ./gradlew \
             --init-script .github/scripts/owasp-dependency-check.init.gradle \
             :app:dependencyCheckAnalyze \
             --no-configuration-cache --stacktrace --console=plain
@@ -169,6 +178,15 @@ jobs:
           name: dependency-report
           path: reports
           if-no-files-found: warn
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-resource-${{ github.run_number }}-dependency-check
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
 
   ci-gate:
     name: Dependency Security Gate
