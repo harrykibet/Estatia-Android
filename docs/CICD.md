@@ -39,6 +39,16 @@ A routine Kotlin syntax correction should fail in its affected module compile or
 
 Full-project coverage and broad regression audits remain nightly/manual quality gates; they are not appended to every ordinary PR's impacted task list.
 
+### CI resource budgets and telemetry
+
+The standard public ubuntu-24.04 hosted runner provides 4 vCPUs and 16 GB RAM. Resource artifacts collected on 22 November 2026 showed connected ProdDebug instrumentation reaching approximately 3.0 GiB of available memory while Gradle used about 6.5 GiB RSS, QEMU about 3.3 GiB and the Kotlin compiler daemon about 0.8 GiB. Architecture/lint reached about 3.6 GiB of available memory. These successful comparison-job snapshots show limited headroom and memory pressure, but do not prove that memory pressure caused the failed runner shutdowns; the cgroup OOM-kill counters in those comparison jobs were zero.
+
+Emulator-heavy jobs use a controlled experiment profile: one Gradle worker, a 4.5 GiB Gradle heap, a 1.5 GiB Kotlin daemon heap, and disabled Gradle/Kotlin project parallelism. This leaves more CPU and memory headroom for QEMU and, in Firebase integration, Auth/Firestore/Storage emulator processes. Every Gradle invocation in these jobs uses the shared diagnostics wrapper so preflight commands and the final instrumentation command do not create incompatible Gradle daemons with different heap arguments.
+
+The diagnostics wrapper records detailed snapshots in RUNNER_TEMP/gradle-ci-diagnostics for artifact upload and emits a compact [ci-resource] line every 30 seconds. Live telemetry includes available memory, cgroup current/peak usage and OOM counters when exposed, memory/CPU/I/O pressure stall information, load average and the largest resident processes. The live Actions log is essential when the runner shuts down before if: always() cleanup and artifact-upload steps can run.
+
+The Android emulator guest memory and device profile remain unchanged during this first experiment to preserve Baseline Profile device characteristics. Evaluate peak RSS, PSI, build duration and task outcomes before adjusting those device settings or changing the resource budgets again.
+
 ### Pull-request trigger layers
 
 The PR workflow uses the pull-request lifecycle as a cost boundary rather than choosing only one trigger:
