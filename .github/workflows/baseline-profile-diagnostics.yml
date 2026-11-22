@@ -118,13 +118,12 @@ jobs:
           task_listing="$(./gradlew :benchmark:tasks --all --no-configuration-cache --console=plain)"
           mapfile -t benchmark_compile_tasks < <(
             printf '%s\n' "$task_listing" |
-              grep -Eo 'compile[A-Za-z0-9]+AndroidTestKotlin' |
-              grep -E '^compile(Demo|Prod).*AndroidTestKotlin$' |
+              grep -Eo 'compile(Demo|Prod)[A-Za-z0-9]*Kotlin' |
               sort -u
           )
           if [[ "${#benchmark_compile_tasks[@]}" -eq 0 ]]; then
-            echo "::error::Could not discover Demo/Prod benchmark Android Test Kotlin compile tasks."
-            printf '%s\n' "$task_listing" | grep -E 'compile.*AndroidTestKotlin' || true
+            echo "::error::Could not discover Demo/Prod benchmark Kotlin compile tasks."
+            printf '%s\n' "$task_listing" | grep -E 'compile(Demo|Prod).*Kotlin' || true
             exit 1
           fi
 
