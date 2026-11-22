@@ -20,7 +20,7 @@ def changed_paths(base: str, head: str) -> list[str]:
     if not base or not head or set(base) == {"0"}:
         raise ValueError("A valid base and head commit are required.")
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRT", "-z", base, head],
+        ["git", "diff", "--name-only", "--diff-filter=ACDMRT", "-z", base, head],
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -57,51 +57,59 @@ def test_change_scope_classifier() -> None:
     """Exercise the path classifier against representative isolated Git diffs."""
     classifier = ROOT / ".github" / "scripts" / "detect-change-scope.sh"
     cases = [
-        ("docs", "README.md", {
+        ("docs", ["README.md"], {
             "docs_only": "true", "docs_changed": "true", "tooling_changed": "false",
             "source_changed": "false", "gradle_changed": "false",
             "architecture_changed": "false", "release_changed": "false",
             "smoke_changed": "false", "unknown_changed": "false",
         }),
-        ("script", ".github/scripts/helper.sh", {
+        ("script", [".github/scripts/helper.sh"], {
             "docs_only": "false", "tooling_only": "true", "tooling_changed": "true",
             "source_changed": "false", "gradle_changed": "false",
             "architecture_changed": "false", "release_changed": "false",
             "smoke_changed": "false", "unknown_changed": "false",
         }),
-        ("module-source", "core/model/src/main/kotlin/Sample.kt", {
+        ("module-source", ["core/model/src/main/kotlin/Sample.kt"], {
             "source_changed": "true", "gradle_changed": "false",
             "architecture_changed": "false", "release_changed": "false",
             "smoke_changed": "false", "unknown_changed": "false",
         }),
-        ("ui-source", "feature/home/src/main/java/HomeScreen.kt", {
+        ("ui-source", ["feature/home/src/main/java/HomeScreen.kt"], {
             "source_changed": "true", "smoke_changed": "true",
             "architecture_changed": "false", "release_changed": "false",
             "unknown_changed": "false",
         }),
-        ("module-gradle", "core/network/build.gradle.kts", {
-            "gradle_changed": "true", "architecture_changed": "false",
-            "release_changed": "false", "unknown_changed": "false",
+        ("module-gradle", ["core/network/build.gradle.kts"], {
+            "gradle_changed": "true", "module_gradle_changed": "true",
+            "architecture_changed": "false", "release_changed": "false",
+            "unknown_changed": "false",
         }),
-        ("proguard", "app/proguard-rules.pro", {
+        ("proguard", ["app/proguard-rules.pro"], {
             "tooling_changed": "true", "release_changed": "true",
             "architecture_changed": "false", "unknown_changed": "false",
         }),
-        ("firebase-rules", "firestore.emulator.rules", {
+        ("firebase-rules", ["firestore.emulator.rules"], {
             "tooling_changed": "true", "release_changed": "false",
             "architecture_changed": "false", "unknown_changed": "false",
         }),
-        ("firebase-json", "firebase.emulators.json", {
+        ("firebase-json", ["firebase.emulators.json"], {
             "tooling_changed": "true", "release_changed": "false",
             "architecture_changed": "false", "unknown_changed": "false",
         }),
-        ("unknown", "infra/custom.conf", {
+        ("unknown", ["infra/custom.conf"], {
             "unknown_changed": "true", "architecture_changed": "true",
             "release_changed": "true",
         }),
+        ("mixed-source-unknown", [
+            "core/model/src/main/kotlin/Sample.kt",
+            "infra/custom.conf",
+        ], {
+            "source_changed": "true", "unknown_changed": "true",
+            "architecture_changed": "true", "release_changed": "true",
+        }),
     ]
 
-    for label, relative_path, expected in cases:
+    for label, relative_paths, expected in cases:
         with tempfile.TemporaryDirectory(prefix="estatia-change-scope-") as temporary:
             worktree = Path(temporary)
             subprocess.run(["git", "init", "--quiet"], cwd=worktree, check=True)
@@ -120,14 +128,15 @@ def test_change_scope_classifier() -> None:
                 stdout=subprocess.PIPE, text=True,
             ).stdout.strip()
 
-            changed_file = worktree / relative_path
-            changed_file.parent.mkdir(parents=True, exist_ok=True)
-            if relative_path.endswith(".json"):
-                changed_file.write_text('{"emulators": {}}\n', encoding="utf-8")
-            elif relative_path.endswith((".sh", ".kt")):
-                changed_file.write_text("// scope test\n", encoding="utf-8")
-            else:
-                changed_file.write_text("scope test\n", encoding="utf-8")
+            for relative_path in relative_paths:
+                changed_file = worktree / relative_path
+                changed_file.parent.mkdir(parents=True, exist_ok=True)
+                if relative_path.endswith(".json"):
+                    changed_file.write_text('{"emulators": {}}\n', encoding="utf-8")
+                elif relative_path.endswith((".sh", ".kt")):
+                    changed_file.write_text("// scope test\n", encoding="utf-8")
+                else:
+                    changed_file.write_text("scope test\n", encoding="utf-8")
             subprocess.run(["git", "add", "-A"], cwd=worktree, check=True)
             subprocess.run(
                 ["git", "commit", "--quiet", "-m", label], cwd=worktree, check=True
@@ -193,7 +202,7 @@ def main() -> int:
 
     try:
         test_change_scope_classifier()
-        print("Change-scope classifier self-tests passed (9 representative path categories).")
+        print("Change-scope classifier self-tests passed (10 representative path categories).")
     except (AssertionError, OSError, subprocess.CalledProcessError) as error:
         print(f"::error::Change-scope classifier self-test failed: {error}", file=sys.stderr)
         return 1
