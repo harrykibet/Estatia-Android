@@ -6,13 +6,13 @@
     <!-- Exact PURL + CVE/CPE rules only; unrelated findings remain active. -->
     <suppress>
         <notes><![CDATA[
-            CVE-2007-1652 is a defect in the historical OpenID enabled-site/token
-            implementation. AppAuth is a modern native OAuth 2.0 / OpenID Connect
-            client; this PURL is not the affected OpenID relying-party implementation.
-            This rule is limited to the exact AppAuth PURL and historical CVE.
+            AppAuth is a native OAuth 2.0 / OpenID Connect client, not the historical
+            OpenID server/product identified by this CPE. Dependency-Check associates
+            CVE-2007-1651 (and the related historical OpenID match) with the exact
+            AppAuth PURL. Scope this correction to the OpenID CPE on AppAuth only.
         ]]></notes>
         <packageUrl>pkg:maven/net.openid/appauth@0.11.1</packageUrl>
-        <vulnerabilityName>CVE-2007-1652</vulnerabilityName>
+        <cpe>cpe:2.3:a:openid:openid:*:*:*:*:*:*:*:*</cpe>
     </suppress>
     <suppress>
         <notes><![CDATA[
@@ -52,5 +52,77 @@
         ]]></notes>
         <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(kotlin-stdlib|kotlin-stdlib-jdk7|kotlin-stdlib-jdk8|kotlin-parcelize-runtime)@.*$</packageUrl>
         <vulnerabilityName>CVE-2026-53914</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            The reported 2.7.0 version is the AndroidX SQLite library release, not
+            the upstream SQLite engine version. The sqlite-framework artifact
+            implements AndroidX interfaces through Android framework APIs; these
+            PURLs are not the separately bundled SQLite engine. Suppress only the
+            upstream SQLite CPE on these exact AndroidX artifacts.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\\.sqlite/(sqlite-android|sqlite-framework-android)@.*$</packageUrl>
+        <cpe>cpe:2.3:a:sqlite:sqlite:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            androidx.browser:browser is the AndroidX Custom Tabs support library.
+            The matched CPE is the unrelated historical Android Browser product.
+            Limit this product-name correction to the AndroidX Browser PURL.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\\.browser/browser@.*$</packageUrl>
+        <cpe>cpe:2.3:a:android:android_browser:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CameraX Lifecycle is an AndroidX lifecycle integration library. The
+            matched Camera Life CPE identifies an unrelated photo-hosting product.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\\.camera/camera-lifecycle@.*$</packageUrl>
+        <cpe>cpe:2.3:a:camera_life:camera_life:*:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CameraX Video is an AndroidX camera recording library. CVE-2015-3362
+            identifies the Drupal Video module, not AndroidX CameraX Video.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\\.camera/camera-video@.*$</packageUrl>
+        <cpe>cpe:2.3:a:video_project:video:*:*:*:*:*:drupal:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            kotlinx-coroutines-play-services is the Kotlin Coroutines adapter for
+            Google Play Services Task APIs. The Tasks CPE identifies the unrelated
+            Tasks.org Android to-do application; this match is limited to that CPE
+            on this exact Maven artifact.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\\.jetbrains\\.kotlinx/kotlinx-coroutines-play-services@.*$</packageUrl>
+        <cpe>cpe:2.3:a:tasks:tasks:*:*:*:*:*:*:*:*</cpe>
+        <cpe>cpe:2.3:a:tasks:tasks:13.0.0:*:*:*:*:android:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2026-54285 affects the OpenTelemetry JavaScript Node.js client
+            (@opentelemetry/core), not the OpenTelemetry Java API, common or context
+            artifacts. Suppress only the Node.js CPE for these Java Maven PURLs.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/io\\.opentelemetry/opentelemetry-(api|common|context)@.*$</packageUrl>
+        <cpe>cpe:2.3:a:opentelemetry:opentelemetry:*:*:*:*:*:node.js:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            The report assigns the nested scotty-minified.jar the Firebase
+            Crashlytics PURL (21.1.0) and infers a Guava CPE from low-confidence
+            product-name evidence; 21.1.0 is the Crashlytics version, not a Guava
+            version. The app's separately resolved com.google.guava:guava dependency
+            is 33.7.1-jre (Android jar variant) and is guarded by an app-level minimum
+            version constraint plus a CI dependencyInsight check for both release
+            variants. This suppression applies only to the Guava CPE on this exact
+            Crashlytics PURL. Genuine com.google.guava:guava package findings remain
+            in scope and are not suppressed.
+        ]]></notes>
+        <packageUrl>pkg:maven/com.google.firebase/firebase-crashlytics@21.1.0</packageUrl>
+        <cpe>cpe:2.3:a:google:guava:*:*:*:*:*:*:*:*</cpe>
     </suppress>
 </suppressions>

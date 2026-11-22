@@ -105,6 +105,62 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Guava is patched in both release variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in demo prod; do
+            report="$RUNNER_TEMP/guava-${variant}-dependency.txt"
+            bash ./.github/scripts/run-gradle-with-diagnostics.sh "security-guava-${variant}-insight" \
+              ./gradlew :app:dependencyInsight \
+              --configuration "${variant}ReleaseRuntimeClasspath" \
+              --dependency com.google.guava:guava \
+              --no-configuration-cache --console=plain | tee "$report"
+          done
+
+          python3 - "$RUNNER_TEMP/guava-demo-dependency.txt" "$RUNNER_TEMP/guava-prod-dependency.txt" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          minimum = (32, 0, 1)
+          pattern = re.compile(
+              r"com\\.google\\.guava:guava:"
+              r"(\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9_.-]+)?)"
+              r"(?:\\s*->\\s*(\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9_.-]+)?))?"
+          )
+
+          for report in map(Path, sys.argv[1:]):
+              resolved = []
+              for line in report.read_text(encoding="utf-8").splitlines():
+                  match = pattern.search(line)
+                  if match:
+                      resolved.append(match.group(2) or match.group(1))
+
+              if not resolved:
+                  raise SystemExit(
+                      f"::error::{report.name}: Guava was not found in the inspected release runtime graph."
+                  )
+
+              parsed = []
+              for value in resolved:
+                  version = re.match(r"(\\d+)\\.(\\d+)\\.(\\d+)", value)
+                  if version is None:
+                      raise SystemExit(
+                          f"::error::{report.name}: unable to parse selected Guava version {value!r}."
+                      )
+                  parsed.append((value, tuple(map(int, version.groups()))))
+
+              vulnerable = [value for value, parts in parsed if parts < minimum]
+              if vulnerable:
+                  raise SystemExit(
+                      f"::error::{report.name}: Guava below 32.0.1 detected: {', '.join(vulnerable)}"
+                  )
+
+              versions = ", ".join(sorted({value for value, _ in parsed}))
+              print(f"{report.stem}: resolved patched Guava version(s): {versions}")
+          PY
+
       - name: Run OWASP Dependency Check against resolved Gradle dependencies
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

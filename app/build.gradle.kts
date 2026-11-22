@@ -33,6 +33,20 @@ android {
  }
 
 dependencies {
+    constraints {
+        // Guava's temporary-file vulnerabilities are fixed in 32.0.0-android.
+        // Keep a small safety margin at the maintainer-recommended 32.0.1 line.
+        implementation("com.google.guava:guava") {
+            version {
+                strictly("[32.0.1-android,)")
+            }
+            because(
+                "CVE-2023-2976 and CVE-2020-8908 affect older Guava releases; " +
+                    "the maintainer-recommended fixed baseline is 32.0.1 or newer."
+            )
+        }
+    }
+
     implementation(libs.bundles.android)
     implementation(libs.core.splashscreen)
 
