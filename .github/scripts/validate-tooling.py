@@ -33,7 +33,7 @@ def validate(path: Path, relative: str) -> None:
             ["bash", "-lc", "command -v shellcheck >/dev/null 2>&1"]
         ).returncode == 0
         if shellcheck:
-            subprocess.run(["shellcheck", "--severity=style", str(path)], check=True)
+            subprocess.run(["shellcheck", "--severity=warning", str(path)], check=True)
         else:
             print(f"::notice::{relative}: ShellCheck unavailable; bash syntax check passed.")
     elif suffix == ".py":

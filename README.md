@@ -155,23 +155,37 @@ Engineered for:
 
 For contributors and engineers seeking deeper technical insights:
 
-* [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — Full system architecture, module responsibilities, data flow, concurrency, and scalability.
-* [ENGINEERING.md](./docs/ENGINEERING.md) — Coding standards, testing, performance, security, CI/CD, and developer guidelines.
+* [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — module responsibilities, boundaries, and data flow.
+* [ENGINEERING.md](./docs/ENGINEERING.md) — coding standards, testing, performance, and security.
+* [CI/CD strategy](./docs/CICD.md) — path-aware verification tiers and operational commands.
+
+## Community and Participation
+
+Please review these policies before contributing or reporting a problem:
+
+* [Code of Conduct](./CODE_OF_CONDUCT.md)
+* [Contributing Guide](./CONTRIBUTING.md)
+* [Support](./SUPPORT.md)
+* [Security Policy](./SECURITY.md)
+* [Accessibility Guidelines](./ACCESSIBILITY.md)
+* [Issue templates](./.github/ISSUE_TEMPLATE/) and [Pull Request template](./.github/PULL_REQUEST_TEMPLATE.md)
 
 ### Verification Contract
 
-Estatia uses a single authoritative command for architectural validation. This command must pass locally before any PR is submitted:
+Verification is selected by change impact; a full Android build is not the default for every edit.
 
-```bash
-./gradlew verifyArchitecture
-```
+* Documentation changes receive Markdown, relative-link, code-fence, and issue-form validation.
+* Scripts and GitHub automation receive shell/Python syntax and supported configuration parsing.
+* Ordinary Kotlin/Android changes use Gradle impact analysis to select module compile, lint, and unit-test tasks.
+* Module Gradle files receive project-configuration validation.
+* Global build logic and architecture enforcement changes receive the full architecture gate.
+* R8 release, UI smoke, Firebase emulator, and Baseline Profile checks run only for their relevant change areas.
 
-This task aggregates:
-- **Lint**: Semantic implementation checks.
-- **Konsist**: Global structural invariants.
-- **KSP**: Compiler-level contract enforcement.
-- **Canary**: Heartbeat and regression verification.
-- **Graph**: Dependency boundary validation.
+Run the global architecture gate locally when changing root build configuration, build logic, architecture enforcement, module boundaries, or shared project policy:
+
+    ./gradlew verifyArchitecture
+
+This gate includes lint, structural invariants, compiler-level architecture contracts, canary checks, and dependency-boundary validation.
 
 ---
 

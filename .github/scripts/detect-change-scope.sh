@@ -74,9 +74,8 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    .github/scripts/*|.github/workflows/*|.github/actions/*|scripts/*|*.sh|*.py|*.yml|*.yaml|codemagic.yaml|.gitlab-ci.yml)
-      is_tooling=true
-      tooling_changed=true
+    *.gradle|*.gradle.kts|settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*)
+      gradle_changed=true
       ;;
   esac
 
@@ -86,8 +85,8 @@ for path in "${changed_files[@]}"; do
   fi
 
   case "$path" in
-    app/src/*|core/*/src/*|feature/*/src/*|benchmark/src/*|lint/src/*)
-      source_changed=true
+    build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
+      architecture_changed=true
       ;;
   esac
 
