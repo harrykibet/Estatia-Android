@@ -172,11 +172,13 @@ Please review these project policies before contributing or reporting a problem:
 
 ### Verification Contract
 
-Estatia uses a single authoritative command for architectural validation. This command must pass locally before any PR is submitted:
+For changes to application source, build logic, or architecture, run the authoritative architecture gate:
 
 ```bash
 ./gradlew verifyArchitecture
 ```
+
+This Android build gate is not required for documentation-only changes. For docs-only pull requests, validate Markdown formatting and links, review code examples for accuracy, and validate structured YAML such as GitHub issue forms. Android compilation, instrumentation, release/R8, and mutation checks are not needed unless the change also affects application code, build logic, or executable automation.
 
 This task aggregates:
 - **Lint**: Semantic implementation checks.
