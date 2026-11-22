@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd
+                                  https://dependency-check.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+    <!-- Exact PURL + CVE/CPE rules only; unrelated findings remain active. -->
+    <suppress>
+        <notes><![CDATA[
+            Dependency-Check maps AndroidX SQLite API artifacts to the upstream SQLite
+            engine CPE at version 2.7.0. AndroidX documents sqlite-framework as using
+            Android framework APIs; sqlite-android is the AndroidX SQLite API artifact,
+            not a separately shipped upstream SQLite engine release. This rule only
+            removes that mismatched SQLite-engine CPE from these two PURLs.
+            Reviewed against AndroidX SQLite release documentation on 2026-11-22.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\.sqlite/(sqlite-android|sqlite-framework-android)@.*$</packageUrl>
+        <cpe>cpe:2.3:a:sqlite:sqlite:2.7.0:*:*:*:*:*:*:*</cpe>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2007-1652 is a defect in the historical OpenID enabled-site/token
+            implementation. AppAuth is a modern native OAuth 2.0 / OpenID Connect
+            client; this PURL is not the affected OpenID relying-party implementation.
+            This rule is limited to the exact AppAuth PURL and historical CVE.
+        ]]></notes>
+        <packageUrl>pkg:maven/net.openid/appauth@0.11.1</packageUrl>
+        <vulnerabilityName>CVE-2007-1652</vulnerabilityName>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2008-0986 targets the BMP parser in obsolete libsgl.so shipped in
+            early Android SDK preview releases, not the modern Google Play Services
+            measurement SDK. This product-identity mismatch is limited to these
+            two exact measurement artifact names.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.android\.gms/play-services-measurement-sdk(-api)?@.*$</packageUrl>
+        <vulnerabilityName>CVE-2008-0986</vulnerabilityName>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2008-3891 applies to the Google Apps SAML Single Sign-On service.
+            The matched artifact is Google Play Services App Set ID SDK, a different
+            product and attack surface. Suppressed only for this exact PURL/CVE pair.
+        ]]></notes>
+        <packageUrl>pkg:maven/com.google.android.gms/play-services-appset@16.1.0</packageUrl>
+        <vulnerabilityName>CVE-2008-3891</vulnerabilityName>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2012-2055 is a GitHub Enterprise mass-assignment issue. The detector
+            maps it to Glide disklrucache, gifdecoder and core artifacts via an
+            unrelated GitHub CPE. This is not a Glide vulnerability.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/com\.github\.bumptech\.glide/[^@]+@.*$</packageUrl>
+        <vulnerabilityName>CVE-2012-2055</vulnerabilityName>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+            CVE-2026-53914 affects the Kotlin Gradle plugin build-cache metadata
+            deserializer, not Kotlin runtime libraries shipped in the app. The
+            Kotlin Gradle plugin is upgraded to 2.4.21 and separately asserted on
+            the build-logic compile classpath in security.yml. This rule is limited
+            to the runtime stdlib/parcelize PURLs reported by the app runtime scan.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/(kotlin-stdlib|kotlin-stdlib-jdk7|kotlin-stdlib-jdk8|kotlin-parcelize-runtime)@.*$</packageUrl>
+        <vulnerabilityName>CVE-2026-53914</vulnerabilityName>
+    </suppress>
+</suppressions>
