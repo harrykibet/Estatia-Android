@@ -115,7 +115,8 @@ for path in "${changed_files[@]}"; do
        [[ "$path" =~ ^feature/[^/]+/src/main/.*/(ui|navigation)/ ]] ||
        [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\\.kt$ ]] ||
        [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
-       [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
+       [[ "$path" =~ /src/androidTest/ ]] ||
+     [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
        [[ "$path" == .github/scripts/prepare-android-emulator.sh ]] ||
        [[ "$path" == .github/scripts/start-connected-android-emulator.sh ]] ||
        [[ "$path" == .github/scripts/stop-connected-android-emulator.sh ]]
