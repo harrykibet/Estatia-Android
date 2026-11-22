@@ -140,7 +140,7 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    app/build.gradle.kts|app/src/main/*EstatiaApplication.kt|app/src/*Firebase*.kt|app/src/androidTest/*FirebaseEmulatorIntegrationTest.kt|core/network/src/*firebase/*|core/network/src/*ProdDataSourcesModule.kt|core/network/build.gradle.kts|core/analytics/src/*|core/analytics/build.gradle.kts|build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt|gradle/libs.versions.toml|firebase.emulators.json|firestore.emulator.rules|storage.emulator.rules|.github/scripts/prepare-google-services.sh|.github/scripts/prepare-android-emulator.sh|.github/scripts/start-connected-android-emulator.sh|.github/scripts/stop-connected-android-emulator.sh)
+    app/build.gradle.kts|app/src/main/*EstatiaApplication.kt|app/src/main/*Firebase*.kt|app/src/androidTest/*FirebaseEmulatorIntegrationTest.kt|core/network/src/*firebase/*|core/network/src/*ProdDataSourcesModule.kt|core/network/build.gradle.kts|core/analytics/src/*|core/analytics/build.gradle.kts|build-logic/convention/src/main/kotlin/FirebaseConventionPlugin.kt|gradle/libs.versions.toml|firebase.emulators.json|firestore.emulator.rules|storage.emulator.rules|.github/scripts/prepare-google-services.sh|.github/scripts/prepare-android-emulator.sh|.github/scripts/start-connected-android-emulator.sh|.github/scripts/stop-connected-android-emulator.sh)
       firebase_changed=true
       ;;
   esac

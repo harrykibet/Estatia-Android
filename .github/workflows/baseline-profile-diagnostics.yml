@@ -103,24 +103,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Compile the two target app flavors before spending time provisioning a device.
-          ./gradlew \
-            :app:compileDemoReleaseKotlin \
-            :app:compileProdReleaseKotlin \
+          # Each matrix job receives only its own flavor's Firebase JSON secret.
+          # Compile that same release variant so Gradle never expects the other
+          # flavor's configuration in this isolated job.
+          variant="${{ matrix.variant }}"
+          ./gradlew ":app:compile${variant}ReleaseKotlin" \
             --no-configuration-cache --stacktrace --console=plain
 
-          # Android Test variants are created by the benchmark plugin. Discover the exact
-          # Demo/Prod instrumentation Kotlin compile task names instead of hard-coding AGP
-          # build-type suffixes, then compile only those instrumentation source sets.
+          # Android Test variants are created by the benchmark plugin. Discover
+          # only this matrix flavor's instrumentation Kotlin compile tasks.
           task_listing="$(./gradlew :benchmark:tasks --all --no-configuration-cache --console=plain)"
           mapfile -t benchmark_compile_tasks < <(
             printf '%s\n' "$task_listing" |
-              grep -Eo 'compile(Demo|Prod)[A-Za-z0-9]*Kotlin' |
+              grep -Eo "compile${variant}[A-Za-z0-9]*Kotlin" |
               sort -u
           )
           if [[ "${#benchmark_compile_tasks[@]}" -eq 0 ]]; then
-            echo "::error::Could not discover Demo/Prod benchmark Kotlin compile tasks."
-            printf '%s\n' "$task_listing" | grep -E 'compile(Demo|Prod).*Kotlin' || true
+            echo "::error::Could not discover ${variant} benchmark Kotlin compile tasks."
+            printf '%s\n' "$task_listing" | grep -E "compile${variant}.*Kotlin" || true
             exit 1
           fi
 
