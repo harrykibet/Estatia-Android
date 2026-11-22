@@ -118,8 +118,19 @@ jobs:
           task_listing="$(./gradlew :benchmark:tasks --all --no-configuration-cache --console=plain)"
           mapfile -t benchmark_compile_tasks < <(
             printf '%s\n' "$task_listing" |
-              sed -nE 's/^[[:space:]]*(compile[A-Za-z0-9]+AndroidTestKotlin)[[:space:]]+-.*$/\1/p' |
-              grep -E '^compile(Demo|Prod).*AndroidTestKotlin
+              grep -Eo 'compile[A-Za-z0-9]+AndroidTestKotlin' |
+              grep -E '^compile(Demo|Prod).*AndroidTestKotlin$' |
+              sort -u
+          )
+          if [[ "${#benchmark_compile_tasks[@]}" -eq 0 ]]; then
+            echo "::error::Could not discover Demo/Prod benchmark Android Test Kotlin compile tasks."
+            printf '%s\n' "$task_listing" | grep -E 'compile.*AndroidTestKotlin' || true
+            exit 1
+          fi
+
+          printf 'Compiling benchmark instrumentation tasks:\n'
+          printf '  %s\n' "${benchmark_compile_tasks[@]}"
+          ./gradlew "${benchmark_compile_tasks[@]}" --no-configuration-cache --stacktrace --console=plain
 
       - name: Start connected Android Emulator
         run: bash ./.github/scripts/start-connected-android-emulator.sh
