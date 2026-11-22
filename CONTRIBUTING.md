@@ -53,15 +53,29 @@ If a proposed change needs to alter an architectural boundary or a shared conven
 
 ## 5. Tests and local verification
 
-Run the narrowest useful tests while developing, then run the relevant repository gates before opening a pull request.
+Choose verification based on the files and behavior changed. Run the narrowest useful checks while developing, then run the relevant repository gates before opening a pull request.
 
-The required architecture contract is:
+### Documentation-only changes
+
+Documentation-only changes do not need Android compilation, architecture tests, unit tests, instrumentation, release/R8 builds, benchmarks, or mutation testing. For a docs-only pull request:
+
+- Check Markdown formatting, headings, code fences, and relative links.
+- Check external links when practical.
+- Verify commands and code examples against the current repository.
+- Parse and validate YAML files, including GitHub issue forms, when those files change.
+- State clearly when a documentation change describes a proposed or not-yet-implemented behavior.
+
+When a documentation change also modifies executable scripts, GitHub Actions workflows, build configuration, or application source, run the relevant checks for those files as well.
+
+### Application, build, or architecture changes
+
+For Kotlin/Java source, Android resources, Gradle build logic, or architecture-affecting configuration, run the authoritative architecture contract:
 
 ```bash
 ./gradlew verifyArchitecture
 ```
 
-Other useful checks include:
+Other useful checks for code changes include:
 
 ```bash
 # Run unit tests across the project
