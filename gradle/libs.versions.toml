@@ -1,6 +1,6 @@
 [versions]
 
-androidGradlePlugin = "9.4.0"
+androidGradlePlugin = "9.4.1"
 androidTools = "32.4.0"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.8.0"
@@ -63,8 +63,8 @@ moduleGraph = "2.9.1"
 okhttp3 = "5.5.0"
 retrofit2 = "3.0.0"
 truth = "1.4.5"
-benchmarkMacroJunit4 = "1.4.1"
-baselineprofile = "1.4.1"
+benchmarkMacroJunit4 = "1.5.0"
+baselineprofile = "1.5.0"
 profileinstaller = "1.4.1"
 jacoco = "0.8.15"
 sonarqube = "7.4.0.8496"
