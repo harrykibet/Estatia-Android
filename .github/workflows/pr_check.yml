@@ -200,7 +200,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.source_changed == 'true' }}
+    if: ${{ needs.change-scope.outputs.source_changed == 'true' && needs.change-scope.outputs.architecture_changed != 'true' }}
     outputs:
       impact_tasks: ${{ steps.impact.outputs.tasks }}
     steps:
@@ -222,6 +222,9 @@ jobs:
 
       - name: Calculate impacted module tasks
         id: impact
+        env:
+          ESTATIA_IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'origin/main' }}
+          ESTATIA_IMPACT_HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail

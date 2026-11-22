@@ -92,7 +92,7 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    *.gradle|*.gradle.kts|settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*)
+    settings.gradle|settings.gradle.kts|build.gradle|build.gradle.kts|gradle.properties|gradle/*|buildSrc/*|build-logic/*|lint/*|core/architecture/*|core/testing-architecture/*|core/ksp-architecture/*|core/canary-violations/*)
       gradle_changed=true
       ;;
   esac
