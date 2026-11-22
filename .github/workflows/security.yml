@@ -42,6 +42,7 @@ jobs:
               - '.github/dependabot.yaml'
               - '.github/workflows/security.yml'
               - '.github/scripts/owasp-dependency-check.init.gradle'
+              - 'dependency-check-suppressions.xml'
 
   dependency-check:
     name: OWASP Dependency Check
