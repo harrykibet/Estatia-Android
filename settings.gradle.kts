@@ -3,8 +3,6 @@
 pluginManagement {
     includeBuild("build-logic")
     repositories {
-        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
-        gradlePluginPortal()
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -12,6 +10,8 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
+        gradlePluginPortal()
         mavenCentral()
     }
 }
