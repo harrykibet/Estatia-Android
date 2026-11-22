@@ -38,7 +38,7 @@ dependencies {
         // hardening and keeps the app above the older Guava vulnerability ranges.
         implementation("com.google.guava:guava") {
             version {
-                strictly("[33.8.0,)")
+                strictly("[33.8.0-jre,)")
             }
             because(
                 "CVE-2023-2976/CVE-2020-8908 and CVE-2026-102554 affect older Guava " +
