@@ -87,9 +87,9 @@ jobs:
         run: |
           set -euo pipefail
           report="$RUNNER_TEMP/kotlin-gradle-plugin-dependency.txt"
-          ./gradlew -p build-logic :convention:dependencyInsight \\
-            --configuration compileClasspath \\
-            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \\
+          ./gradlew -p build-logic :convention:dependencyInsight \
+            --configuration compileClasspath \
+            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \
             --no-configuration-cache --console=plain | tee "$report"
           if ! grep -Fq "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21" "$report"; then
             echo "::error::The build-logic classpath must resolve the patched Kotlin Gradle plugin 2.4.21."
@@ -118,9 +118,9 @@ jobs:
           fi
 
           chmod +x ./gradlew
-          ./gradlew \\
-            --init-script .github/scripts/owasp-dependency-check.init.gradle \\
-            :app:dependencyCheckAnalyze \\
+          ./gradlew \
+            --init-script .github/scripts/owasp-dependency-check.init.gradle \
+            :app:dependencyCheckAnalyze \
             --no-configuration-cache --stacktrace --console=plain
 
       - name: Verify Dependency-Check scanned the Gradle dependency graph
