@@ -93,7 +93,7 @@ for path in "${changed_files[@]}"; do
 
 
   case "$path" in
-    app/build.gradle|app/build.gradle.kts|app/proguard-rules.pro|app/*/proguard-rules.pro|app/src/*/AndroidManifest.xml|build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/libs.versions.toml|buildSrc/*|build-logic/*)
+    app/build.gradle|app/build.gradle.kts|app/proguard-rules.pro|app/*/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/demo/AndroidManifest.xml|app/src/prod/AndroidManifest.xml|app/src/demoRelease/AndroidManifest.xml|app/src/prodRelease/AndroidManifest.xml|build.gradle|build.gradle.kts|settings.gradle|settings.gradle.kts|gradle.properties|gradle/libs.versions.toml|buildSrc/*|build-logic/*)
       release_changed=true
       ;;
   esac

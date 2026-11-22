@@ -332,7 +332,7 @@ jobs:
 
   instrumented-tests:
     needs: [ change-scope, selective-verification ]
-    if: ${{ (needs.change-scope.outputs.smoke_changed == 'true' && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true')) || github.event_name == 'workflow_dispatch' }}
+    if: ${{ always() && ((needs.change-scope.outputs.smoke_changed == 'true' && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true')) || github.event_name == 'workflow_dispatch') }}
     name: Targeted UI Smoke or Full Device Fleet
     runs-on: ubuntu-latest
     timeout-minutes: 120
