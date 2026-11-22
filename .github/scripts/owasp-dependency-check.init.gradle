@@ -28,9 +28,12 @@ gradle.beforeProject { project ->
             "prodReleaseRuntimeClasspath",
         ]
 
-        // Validate configuration presence during :app project configuration,
-        // but let Dependency-Check resolve them from its own project task.
-        project.afterEvaluate {
+        // Android Gradle Plugin creates flavor runtime configurations during
+        // variant finalization, which can occur after :app's afterEvaluate callback.
+        // Wait until all projects have completed evaluation before validating and
+        // setting the exact release graphs. The analysis task itself remains local
+        // to :app, avoiding Gradle 9's unsafe cross-project resolution path.
+        gradle.projectsEvaluated {
             def missingConfigurations = releaseRuntimeConfigurations.findAll { name ->
                 def configuration = project.configurations.findByName(name)
                 configuration == null || !configuration.canBeResolved
