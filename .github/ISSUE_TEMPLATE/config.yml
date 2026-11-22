@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/harrykibet/Estatia-Android/security/advisories/new
+    about: Do not disclose suspected vulnerabilities in public issues. Follow SECURITY.md.
+  - name: Read project support guidance
+    url: https://github.com/harrykibet/Estatia-Android/blob/main/SUPPORT.md
+    about: Find the right channel and prepare useful, redacted diagnostic information.
