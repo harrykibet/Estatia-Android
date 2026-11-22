@@ -113,9 +113,9 @@ for path in "${changed_files[@]}"; do
 
   if [[ "$is_docs" != "true" ]] && {
        [[ "$path" =~ ^core/(ui|navigation|design-system|player-ui)/src/main/ ]] ||
-       [[ "$path" =~ ^feature/[^/]+/src/main/.*(Screen|Route|NavGraph|Navigation).*\\.kt$ ]] ||
+       [[ "$path" =~ ^feature/[^/]+/src/main/.*(Screen|Route|NavGraph|Navigation).*\.kt$ ]] ||
        [[ "$path" =~ ^feature/[^/]+/src/main/.*/(ui|navigation)/ ]] ||
-       [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\\.kt$ ]] ||
+       [[ "$path" =~ ^app/src/main/.*(MainActivity|MainApplication|EstatiaApplication|NavGraph|Navigation).*\.kt$ ]] ||
        [[ "$path" == "app/src/main/AndroidManifest.xml" ]] ||
        [[ "$path" =~ /src/androidTest/ ]] ||
      [[ "$path" == .github/actions/smoke-ui-local/* ]] ||
