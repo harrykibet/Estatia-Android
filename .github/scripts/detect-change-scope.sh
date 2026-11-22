@@ -8,10 +8,10 @@ head_sha="${3:-}"
 docs_only=false
 docs_changed=false
 
-# Only classify pull-request diffs and pushes. Merge groups and manually
-# dispatched runs deliberately take the full verification path.
+# Only classify pull-request, merge-group, and push diffs. Manually dispatched
+# runs deliberately take the full verification path.
 case "$event_name" in
-  pull_request|push) ;;
+  pull_request|merge_group|push) ;;
   *)
     echo "docs_only=false" >> "$GITHUB_OUTPUT"
     echo "docs_changed=false" >> "$GITHUB_OUTPUT"
