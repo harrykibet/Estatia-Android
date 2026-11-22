@@ -200,7 +200,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.source_changed == 'true' && needs.change-scope.outputs.architecture_changed != 'true' }}
+    if: ${{ needs.change-scope.outputs.source_changed == 'true' }}
     outputs:
       impact_tasks: ${{ steps.impact.outputs.tasks }}
     steps:
@@ -231,9 +231,12 @@ jobs:
           chmod +x ./gradlew
           bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
           tasks="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
-          if [[ -z "$tasks" || "$tasks" == "test lint" ]]; then
-            echo "::error::Source changes did not resolve to a safe module-specific verification task set."
+          if [[ -z "$tasks" ]]; then
+            echo "::error::Source changes did not resolve to any verification tasks."
             exit 1
+          fi
+          if [[ "$tasks" == "test lint" ]]; then
+            echo "::warning::Impact analysis selected the conservative full unit-test/lint fallback."
           fi
           echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
           echo "Selected impacted tasks: $tasks"
@@ -366,7 +369,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ needs.change-scope.outputs.smoke_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
+    if: ${{ always() && needs.change-scope.outputs.smoke_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7

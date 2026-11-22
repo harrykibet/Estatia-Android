@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.source_changed == 'true' && needs.change-scope.outputs.architecture_changed != 'true' && github.event_name != 'workflow_dispatch' }}
+    if: ${{ needs.change-scope.outputs.source_changed == 'true' && github.event_name != 'workflow_dispatch' }}
     outputs:
       impact_tasks: ${{ steps.impact.outputs.tasks }}
     steps:
@@ -149,9 +149,12 @@ jobs:
           chmod +x ./gradlew
           bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
           tasks="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
-          if [[ -z "$tasks" || "$tasks" == "test lint" ]]; then
-            echo "::error::Source changes did not resolve to a safe module-specific verification task set."
+          if [[ -z "$tasks" ]]; then
+            echo "::error::Source changes did not resolve to any verification tasks."
             exit 1
+          fi
+          if [[ "$tasks" == "test lint" ]]; then
+            echo "::warning::Impact analysis selected the conservative full unit-test/lint fallback."
           fi
           echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
           echo "Selected impacted tasks: $tasks"
@@ -272,7 +275,7 @@ jobs:
 
   unit-tests:
     needs: [ change-scope ]
-    if: ${{ needs.change-scope.outputs.architecture_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Full Unit Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 75
