@@ -3,7 +3,101 @@
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
               xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd
                                   https://dependency-check.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
-    <!-- Exact PURL + CVE/CPE rules only; unrelated findings remain active. -->
+    <!-- Exact PURL + vulnerability-ID rules only; unrelated findings remain active. -->
+
+    <suppress>
+        <notes><![CDATA[
+            AppAuth for Android is an OAuth 2.0 / OpenID Connect client. These
+            2007 findings describe vulnerabilities in the historical OpenID
+            product/server, not this Android client library. Suppress only those
+            two CVEs for the exact AppAuth release scanned.
+        ]]></notes>
+        <packageUrl>pkg:maven/net.openid/appauth@0.11.1</packageUrl>
+        <vulnerabilityName regex="true">^CVE-2007-165[12]$</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            CVE-2008-7298 describes cookie handling in the historical Android
+            Browser product. The matched dependency is the separate AndroidX
+            Browser / Custom Tabs support library, not that browser application.
+            Keep the correction limited to this exact Maven artifact release.
+        ]]></notes>
+        <packageUrl>pkg:maven/androidx.browser/browser@1.9.0</packageUrl>
+        <vulnerabilityName>CVE-2008-7298</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            CVE-2007-4234 affects the unrelated Camera Life photo-hosting product.
+            The dependency is AndroidX CameraX Lifecycle. Suppress only this
+            exact product-name collision for the scanned artifact release.
+        ]]></notes>
+        <packageUrl>pkg:maven/androidx.camera/camera-lifecycle@1.6.1</packageUrl>
+        <vulnerabilityName>CVE-2007-4234</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            CVE-2015-3362 affects the Drupal Video module. The matched dependency
+            is AndroidX CameraX Video, which is unrelated to Drupal. Suppress only
+            this exact CVE for the scanned AndroidX artifact release.
+        ]]></notes>
+        <packageUrl>pkg:maven/androidx.camera/camera-video@1.6.1</packageUrl>
+        <vulnerabilityName>CVE-2015-3362</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            kotlinx-coroutines-play-services adapts Kotlin coroutines to Google
+            Play Services Task APIs. Both CVEs describe vulnerabilities in the
+            unrelated Tasks.org Android application, not this JetBrains library.
+            Suppress only these two CVEs for the exact PURL and version scanned.
+        ]]></notes>
+        <packageUrl>pkg:maven/org.jetbrains.kotlinx/kotlinx-coroutines-play-services@1.11.0</packageUrl>
+        <vulnerabilityName regex="true">^CVE-(2020-22475|2022-39349)$</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            CVE-2026-54285 affects the OpenTelemetry JavaScript Node.js client
+            (@opentelemetry/core), not these OpenTelemetry Java Maven artifacts.
+            Match only the exact three Java PURLs and release from this report.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-(api|common|context)@1\.65\.0$</packageUrl>
+        <vulnerabilityName>CVE-2026-54285</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            Dependency-Check interpreted the AndroidX SQLite artifact release
+            number 2.7.0 as the upstream SQLite engine version. These are the
+            AndroidX API and Android-framework adapter artifacts, not the
+            separately bundled SQLite engine. AndroidX documents the framework
+            driver as using Android SDK SQLite APIs and the bundled driver as a
+            distinct artifact. This suppression is restricted to the 39 SQLite
+            CVEs actually reported against these two exact PURLs in this scan.
+            It does not cover sqlite-bundled or other SQLite dependencies.
+            The SQLite implementation supplied by a device's Android OS remains
+            an OS patch-level responsibility outside this Maven dependency scan.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/androidx\.sqlite/(sqlite-android|sqlite-framework-android)@2\.7\.0$</packageUrl>
+        <vulnerabilityName regex="true">^(?:CVE-2015-3414|CVE-2015-3415|CVE-2015-3416|CVE-2015-3717|CVE-2015-5895|CVE-2015-6607|CVE-2016-6153|CVE-2017-10989|CVE-2018-20346|CVE-2018-20505|CVE-2018-20506|CVE-2018-8740|CVE-2019-19645|CVE-2019-19646|CVE-2020-11655|CVE-2020-11656|CVE-2020-13434|CVE-2020-13435|CVE-2020-13630|CVE-2020-13631|CVE-2020-13632|CVE-2020-15358|CVE-2022-35737|CVE-2023-7104|CVE-2025-6965|CVE-2025-70873|CVE-2026-11822|CVE-2026-11824|CVE-2026-119371|CVE-2026-119372|CVE-2026-119373|CVE-2026-119374|CVE-2026-119375|CVE-2026-119376|CVE-2026-119377|CVE-2026-119378|CVE-2026-119379|CVE-2026-119586|CVE-2026-119591)$</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes><![CDATA[
+            The Firebase Crashlytics scotty-minified.jar was assigned Guava CPEs
+            by filename/product matching. Direct inspection of Crashlytics 21.1.0
+            found zero com/google/common class entries and zero references to the
+            affected Guava API/type names. Suppress only the three Guava CVEs
+            reported against this exact Crashlytics PURL and version. The app's
+            resolved Guava dependency remains independently pinned and verified
+            at 33.8.0-jre or newer in both release runtime graphs.
+        ]]></notes>
+        <packageUrl>pkg:maven/com.google.firebase/firebase-crashlytics@21.1.0</packageUrl>
+        <vulnerabilityName regex="true">^(?:CVE-2023-2976|CVE-2018-10237|CVE-2020-8908)$</vulnerabilityName>
+    </suppress>
 
     <suppress>
         <notes><![CDATA[
@@ -15,6 +109,7 @@
         <packageUrl regex="true">^pkg:maven/com\.google\.android\.gms/play-services-measurement-sdk(-api)?@.*$</packageUrl>
         <vulnerabilityName>CVE-2008-0986</vulnerabilityName>
     </suppress>
+
     <suppress>
         <notes><![CDATA[
             CVE-2008-3891 applies to the Google Apps SAML Single Sign-On service.
@@ -24,6 +119,7 @@
         <packageUrl>pkg:maven/com.google.android.gms/play-services-appset@16.1.0</packageUrl>
         <vulnerabilityName>CVE-2008-3891</vulnerabilityName>
     </suppress>
+
     <suppress>
         <notes><![CDATA[
             CVE-2012-2055 is a GitHub Enterprise mass-assignment issue. The detector
@@ -33,6 +129,7 @@
         <packageUrl regex="true">^pkg:maven/com\.github\.bumptech\.glide/[^@]+@.*$</packageUrl>
         <vulnerabilityName>CVE-2012-2055</vulnerabilityName>
     </suppress>
+
     <suppress>
         <notes><![CDATA[
             CVE-2026-53914 affects the Kotlin Gradle plugin build-cache metadata
