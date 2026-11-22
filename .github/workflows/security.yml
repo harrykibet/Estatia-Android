@@ -44,6 +44,7 @@ jobs:
               - '.github/dependabot.yaml'
               - '.github/workflows/security.yml'
               - '.github/scripts/owasp-dependency-check.init.gradle'
+              - '.github/scripts/run-gradle-with-diagnostics.sh'
               - 'dependency-check-suppressions.xml'
 
   dependency-check:
