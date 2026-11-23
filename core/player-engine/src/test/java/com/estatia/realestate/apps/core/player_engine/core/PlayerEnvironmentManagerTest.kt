@@ -65,7 +65,8 @@ class PlayerEnvironmentManagerTest {
             environmentCoordinator = coordinator,
             sizingPolicy = mockk(relaxed = true),
             dynamicBitrateController = mockk(relaxed = true),
-            engineScope = scope,
+            // The observer is intentionally long-lived; backgroundScope is auto-cancelled by runTest.
+            engineScope = scope.backgroundScope,
             playerDispatcher = dispatcher
         )
         manager.start(
