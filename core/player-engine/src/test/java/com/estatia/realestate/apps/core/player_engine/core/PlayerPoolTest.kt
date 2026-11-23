@@ -245,6 +245,7 @@ class PlayerPoolTest {
 
     @Test
     fun `observePlayer follows the player through creation and release`() = runTest {
+        pool.updateMaxPoolSize(1, emptySet()) // Disable idle-player prewarming so the factory mock is deterministic.
         val uri = MediaReference("http://test.com")
         val player = mockk<ExoPlayer>(relaxed = true)
         every { playerFactory.create(any()) } returns
@@ -270,6 +271,7 @@ class PlayerPoolTest {
 
     @Test
     fun `observePlayer emits the replacement after a forced legacy re-create`() = runTest {
+        pool.updateMaxPoolSize(1, emptySet()) // Exercise create(), not the idle-player reuse path.
         val uri = MediaReference("http://test.com")
         val first = mockk<ExoPlayer>(relaxed = true)
         val second = mockk<ExoPlayer>(relaxed = true)
@@ -298,6 +300,7 @@ class PlayerPoolTest {
 
     @Test
     fun `position survives a background reclaim`() = runTest {
+        pool.updateMaxPoolSize(1, emptySet()) // Keep both creations on the configured factory path.
         val uri = MediaReference("http://test.com")
         val first = mockk<ExoPlayer>(relaxed = true)
         val second = mockk<ExoPlayer>(relaxed = true)
