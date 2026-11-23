@@ -20,8 +20,18 @@ ROOT = Path.cwd().resolve()
 def changed_paths(base: str, head: str) -> list[str]:
     if not base or not head or set(base) == {"0"}:
         raise ValueError("A valid base and head commit are required.")
+    # Match detect-change-scope.sh: classify only changes introduced since the
+    # common ancestor, not unrelated changes that arrived on the base branch later.
+    merge_base = subprocess.run(
+        ["git", "merge-base", base, head],
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    if not merge_base:
+        raise ValueError("A merge base could not be found for the supplied commits.")
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--no-renames", "--diff-filter=ACDMRT", "-z", base, head],
+        ["git", "diff", "--name-only", "--no-renames", "--diff-filter=ACDMRT", "-z", merge_base, head],
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -348,6 +358,15 @@ def test_change_scope_renames_and_diverged_base() -> None:
                 "A docs-only PR was inflated by unrelated changes that landed on main: " f"{scope}"
             )
 
+        # The tooling validator must classify the exact same diverged range as the
+        # shared classifier, rather than including changes introduced on main.
+        validation_paths = changed_paths(main_tip, feature_head)
+        if validation_paths != ["README.md"]:
+            raise AssertionError(
+                "Tooling validation included unrelated changes from main: "
+                f"{validation_paths}"
+            )
+
 
 def test_ci_gate() -> None:
     """The aggregate gate passes only on success/skipped and fails closed otherwise."""
@@ -395,6 +414,75 @@ def test_diagnostics_wrapper_pipe() -> None:
             raise AssertionError(f"Wrapper held the output pipe open for {elapsed:.1f}s after Gradle exited.")
 
 
+def test_scrub_check_secrets() -> None:
+    """Credential scrubbing removes leaks and fails closed when scanning fails."""
+    scrubber = ROOT / ".github" / "scripts" / "scrub-check-secrets.sh"
+    secret = "ci-secret-9A%/"
+    with tempfile.TemporaryDirectory(prefix="estatia-secret-scrub-") as temporary:
+        root = Path(temporary)
+        artifacts = root / "artifacts"
+        source_profiles = root / "source-profiles"
+        artifacts.mkdir()
+        source_profiles.mkdir()
+        encoded = __import__("base64").b64encode(secret.encode("utf-8")).decode("ascii")
+        percent_encoded = __import__("urllib.parse", fromlist=["quote"]).quote(secret, safe="")
+        leaked_files = {
+            artifacts / "raw.txt": secret,
+            artifacts / "base64.txt": encoded,
+            source_profiles / "percent-encoded.txt": percent_encoded,
+        }
+        for path, content in leaked_files.items():
+            path.write_text(content, encoding="utf-8")
+        clean_file = artifacts / "clean.txt"
+        clean_file.write_text("no credential material here\n", encoding="utf-8")
+
+        environment = os.environ.copy()
+        environment["SCRUB_TEST_SECRET"] = secret
+        command = [
+            "bash", str(scrubber), "--dirs", str(artifacts), str(source_profiles),
+            "--", "SCRUB_TEST_SECRET",
+        ]
+        detected = subprocess.run(
+            command, env=environment, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True,
+        )
+        if detected.returncode != 1:
+            raise AssertionError(
+                f"Secret scrub should fail after deleting detected leaks: {detected.stdout}"
+            )
+        remaining = [str(path) for path in leaked_files if path.exists()]
+        if remaining:
+            raise AssertionError(f"Secret-bearing artifact files were not removed: {remaining}")
+        if not clean_file.is_file() or secret in detected.stdout:
+            raise AssertionError("Scrubber removed clean data or exposed the secret in its output.")
+
+        clean = subprocess.run(
+            command, env=environment, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True,
+        )
+        if clean.returncode != 0 or not clean_file.is_file():
+            raise AssertionError(f"Clean artifact scan did not pass: {clean.stdout}")
+
+        # An unreadable scanner must not be interpreted as 'no matches'.
+        failing_bin = root / "failing-bin"
+        failing_bin.mkdir()
+        fake_grep = failing_bin / "grep"
+        fake_grep.write_text("#!/usr/bin/env bash\nexit 2\n", encoding="utf-8")
+        fake_grep.chmod(0o755)
+        failing_artifact = artifacts / "scanner-error.txt"
+        failing_artifact.write_text("artifact data\n", encoding="utf-8")
+        failing_environment = environment.copy()
+        failing_environment["PATH"] = f"{failing_bin}{os.pathsep}{environment['PATH']}"
+        failed_scan = subprocess.run(
+            command, env=failing_environment, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True,
+        )
+        if failed_scan.returncode == 0 or not failing_artifact.is_file():
+            raise AssertionError(
+                "Scanner errors must fail closed and must not permit artifact upload."
+            )
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
@@ -440,6 +528,8 @@ def main() -> int:
         print("CI gate self-tests passed.")
         test_diagnostics_wrapper_pipe()
         print("Diagnostics wrapper pipe self-test passed.")
+        test_scrub_check_secrets()
+        print("Credential scrubber leak-detection and fail-closed self-tests passed.")
     except (AssertionError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"::error::Tooling self-test failed: {error}", file=sys.stderr)
         return 1
