@@ -121,6 +121,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Validate Gradle project configuration
@@ -184,6 +185,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
       - name: Run Full Architecture and Lint Gates
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
@@ -242,6 +244,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Calculate impacted module tasks
@@ -303,6 +306,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
           FULL_VALIDATION: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
         shell: bash
         run: |
@@ -362,6 +366,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       # Both release flavors are minified; PR validation does not require signing secrets.
@@ -423,6 +428,7 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64  }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{  secrets.GOOGLE_SERVICES_JSON_PROD_BASE64  }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
 
       - name: Compile all module instrumented test source sets
