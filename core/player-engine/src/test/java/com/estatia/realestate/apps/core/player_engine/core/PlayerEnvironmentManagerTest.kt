@@ -77,6 +77,7 @@ class PlayerEnvironmentManagerTest {
 
     @After
     fun tearDown() {
+        manager.stop()
         Dispatchers.resetMain()
         unmockkAll()
     }
