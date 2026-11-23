@@ -34,15 +34,14 @@ android {
 
 dependencies {
     constraints {
-        // Guava 33.7.2 fixes CVE-2026-102554; 33.8.0 also includes further
-        // hardening and keeps the app above the older Guava vulnerability ranges.
+        // Android must use Guava's Android flavor. 33.8.0 includes the security
+        // fixes required for CVE-2023-2976, CVE-2020-8908 and CVE-2026-102554.
         implementation("com.google.guava:guava") {
             version {
-                strictly("[33.8.0-jre,)")
+                strictly("33.8.0-android")
             }
             because(
-                "CVE-2023-2976/CVE-2020-8908 and CVE-2026-102554 affect older Guava " +
-                    "releases; keep the runtime graph at Guava 33.8.0 or newer."
+                "Keep Android runtime variants on the patched Guava 33.8.0 Android artifact."
             )
         }
     }

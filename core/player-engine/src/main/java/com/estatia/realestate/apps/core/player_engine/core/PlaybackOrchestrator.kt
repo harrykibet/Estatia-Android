@@ -46,6 +46,23 @@ class PlaybackOrchestrator @Inject constructor(
     var activeMediaId: String? = null
         private set
 
+    private data class PlayRequest(
+        val mediaId: String,
+        val uri: MediaReference,
+        val mediaType: MediaType,
+        val matchScore: Float,
+        val title: String?,
+        val artist: String?
+    )
+
+    // True only when playback was paused by a transient focus loss and should resume on regain.
+    private var resumeOnFocusGain = false
+    private var duckedPlayer: ExoPlayer? = null
+    private var preDuckVolume = 1f
+
+    // The last request that reached play(); kept across a pool reclaim so playback can resume.
+    private var lastRequest: PlayRequest? = null
+
     suspend fun play(
         mediaId: String,
         uri: MediaReference,
@@ -55,6 +72,8 @@ class PlaybackOrchestrator @Inject constructor(
         artist: String?
     ) = withContext(playerDispatcher) {
         Confinement.checkMainThread()
+        resumeOnFocusGain = false
+        restoreVolume()
         val forceLegacy = decoderPolicy.shouldForceLegacy(mediaId)
         val managed = pool.getOrCreate(mediaId, uri, mediaType, matchScore, forceLegacy, title, artist)
         val environment = environmentCoordinator.environment.value
@@ -74,6 +93,7 @@ class PlaybackOrchestrator @Inject constructor(
         managed.player.play()
         
         activeMediaId = mediaId
+        lastRequest = PlayRequest(mediaId, uri, mediaType, matchScore, title, artist)
         streamingPipeline.warm(mediaId, uri, WarmPriority.VISIBLE)
     }
 
@@ -97,7 +117,51 @@ class PlaybackOrchestrator @Inject constructor(
 
     fun pauseCurrentPlayer() {
         Confinement.checkMainThread()
+        // Any explicit pause cancels a pending focus-based resume.
+        resumeOnFocusGain = false
         activeMediaId?.let { pool.get(it)?.player?.pause() }
+    }
+
+    /**
+     * Pauses because audio focus was lost. With [resumeWhenGained] (transient loss) playback
+     * resumes on [resumeAfterFocusGain], but only if it was actually playing: a video the user
+     * had paused must not start itself when focus returns.
+     */
+    fun pauseForFocusLoss(resumeWhenGained: Boolean) {
+        Confinement.checkMainThread()
+        val wasPlaying = isCurrentlyPlaying()
+        pauseCurrentPlayer()
+        resumeOnFocusGain = resumeWhenGained && wasPlaying
+    }
+
+    fun resumeAfterFocusGain() {
+        Confinement.checkMainThread()
+        restoreVolume()
+        if (resumeOnFocusGain) {
+            resumeOnFocusGain = false
+            resumeCurrentPlayer()
+        }
+    }
+
+    /** Lowers the active player's volume while another app speaks over us. */
+    fun duck() {
+        Confinement.checkMainThread()
+        val player = activeMediaId?.let { pool.get(it)?.player } ?: return
+        if (duckedPlayer == null) {
+            duckedPlayer = player
+            preDuckVolume = player.volume
+        }
+        player.volume = preDuckVolume * DUCK_VOLUME_FACTOR
+    }
+
+    fun unduck() {
+        Confinement.checkMainThread()
+        restoreVolume()
+    }
+
+    private fun restoreVolume() {
+        duckedPlayer?.volume = preDuckVolume
+        duckedPlayer = null
     }
 
     fun resumeCurrentPlayer() {
@@ -109,6 +173,27 @@ class PlaybackOrchestrator @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Called after the pool released every player (background reclaim). The active media no
+     * longer has a player, so [activeMediaId] must not keep pointing at it; [lastRequest] is
+     * retained so [restoreLastPlayback] can rebuild it.
+     */
+    fun onPoolReleased() {
+        Confinement.checkMainThread()
+        activeMediaId = null
+    }
+
+    /**
+     * Re-creates the player for the last played media after a reclaim. No-op (returns false)
+     * when there is nothing to restore or the media still has a player.
+     */
+    suspend fun restoreLastPlayback(): Boolean {
+        val request = lastRequest ?: return false
+        if (pool.get(request.mediaId) != null) return false
+        play(request.mediaId, request.uri, request.mediaType, request.matchScore, request.title, request.artist)
+        return true
     }
 
     fun isCurrentlyPlaying(): Boolean {
@@ -177,6 +262,10 @@ class PlaybackOrchestrator @Inject constructor(
 
     internal fun clearAttachedPlayers() {
         attachedPlayers.clear()
+    }
+
+    private companion object {
+        const val DUCK_VOLUME_FACTOR = 0.2f
     }
 
     val debugAttachedPlayersCount: Int

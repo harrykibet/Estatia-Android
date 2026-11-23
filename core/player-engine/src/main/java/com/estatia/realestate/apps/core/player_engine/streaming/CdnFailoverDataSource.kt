@@ -9,6 +9,7 @@ import androidx.core.net.toUri
 import com.estatia.realestate.apps.core.architecture.annotations.Identity
 import com.estatia.realestate.apps.core.common.interfaces.ILogger
 import com.estatia.realestate.apps.core.model.cdn.CdnEndpoint
+import com.estatia.realestate.apps.core.model.system.NetworkState
 import java.io.IOException
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 
@@ -17,6 +18,9 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
  * It intercepts requests to Estatia internal domains and routes them to the healthiest CDN.
  * If a request fails, it reports the failure to [CdnHealthMonitor], selects an alternative CDN,
  * and retries the request transparently.
+ *
+ * Failures that are explained by the device being offline are not attributed to the CDN:
+ * they are propagated unchanged, without penalising the endpoint or attempting a failover.
  */
 // Justification: Required for low-level Media3 playback orchestration.
 @UnstableApi
@@ -25,7 +29,8 @@ class CdnFailoverDataSource(
     private val baseDataSource: DataSource,
     private val cdnSelector: CdnSelector,
     private val healthMonitor: CdnHealthMonitor,
-    private val logger: ILogger
+    private val logger: ILogger,
+    private val networkState: () -> NetworkState = { NetworkState.Connected }
 ) : DataSource {
 
     override fun addTransferListener(transferListener: TransferListener) {
@@ -46,6 +51,11 @@ class CdnFailoverDataSource(
         return try {
             baseDataSource.open(dataSpec.withUri(resolvedUri))
         } catch (e: IOException) {
+            if (!CdnFailureAttribution.isCdnAtFault(e, networkState())) {
+                // Offline: switching CDN cannot help and the endpoint is not to blame.
+                logger.w("CDN", "Load failed while offline; not attributing to ${currentCdn.baseUrl}")
+                throw e
+            }
             logger.w("CDN", "Segment load failure on ${currentCdn.baseUrl}. Attempting failover for $originalUri")
             
             // 1. Report failure to trigger circuit breaker
@@ -102,14 +112,16 @@ class CdnFailoverDataSourceFactory(
     private val baseFactory: DataSource.Factory,
     private val cdnSelector: CdnSelector,
     private val healthMonitor: CdnHealthMonitor,
-    private val logger: ILogger
+    private val logger: ILogger,
+    private val networkState: () -> NetworkState = { NetworkState.Connected }
 ) : DataSource.Factory {
     override fun createDataSource(): DataSource {
         return CdnFailoverDataSource(
             baseFactory.createDataSource(),
             cdnSelector,
             healthMonitor,
-            logger
+            logger,
+            networkState
         )
     }
 }

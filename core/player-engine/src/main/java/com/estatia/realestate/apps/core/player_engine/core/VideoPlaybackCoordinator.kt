@@ -59,7 +59,13 @@ class VideoPlaybackCoordinator @Inject constructor(
     ) {
         Confinement.checkMainThread()
         
-        if (playerController.activeMediaId == mediaId) return
+        if (playerController.activeMediaId == mediaId) {
+            // Back on the page that is already playing (e.g. a quick swipe away and back):
+            // the pending job for the page we left must not start that video over this one.
+            playJob?.cancel()
+            preloadJob?.cancel()
+            return
+        }
         
         // Fling Heuristic: detect rapid flicking
         val now = clock()
@@ -169,11 +175,18 @@ class VideoPlaybackCoordinator @Inject constructor(
 
     fun isMediaActive(mediaId: String): Boolean = playerController.isMediaActive(mediaId)
 
-    fun retry(scope: CoroutineScope, mediaId: String, uri: MediaReference) {
+    fun retry(
+        scope: CoroutineScope,
+        mediaId: String,
+        uri: MediaReference,
+        matchScore: Float = 0.5f,
+        title: String? = null,
+        artist: String? = null
+    ) {
         Confinement.checkMainThread()
         playJob?.cancel()
         playJob = scope.launch {
-            playerController.play(mediaId, uri, MediaType.VOD)
+            playerController.play(mediaId, uri, MediaType.VOD, matchScore, title, artist)
         }
     }
 
@@ -186,3 +199,4 @@ class VideoPlaybackCoordinator @Inject constructor(
         consecutiveFastScrolls = 0
     }
 }
+

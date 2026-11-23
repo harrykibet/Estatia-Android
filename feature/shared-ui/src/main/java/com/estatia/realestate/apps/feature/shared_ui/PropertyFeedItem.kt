@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.estatia.realestate.apps.core.model.property.ListingUiModel
 import com.estatia.realestate.apps.core.player_ui.screens.PlaybackErrorView
+import com.estatia.realestate.apps.core.player_ui.screens.PlaybackLowBandwidthView
+import com.estatia.realestate.apps.core.player_ui.screens.PlaybackReconnectingView
 import com.estatia.realestate.apps.core.player_ui.state.PlayerUiState
 
 @UiComponent
@@ -54,6 +56,14 @@ fun PropertyFeedItem(
                         modifier = Modifier.align(Alignment.Center),
                         color = Color.White
                     )
+                }
+
+                PlayerUiState.Reconnecting -> {
+                    PlaybackReconnectingView(modifier = Modifier.align(Alignment.Center))
+                }
+
+                PlayerUiState.LowBandwidth -> {
+                    PlaybackLowBandwidthView(modifier = Modifier.align(Alignment.TopCenter))
                 }
 
                 is PlayerUiState.Error -> {

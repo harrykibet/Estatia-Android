@@ -174,4 +174,21 @@ class VideoPlaybackCoordinatorTest {
         advanceTimeBy(1000.milliseconds)
         coVerify(exactly = 0) { playerController.play(any(), any(), any(), any(), any()) }
     }
+
+    @Test
+    fun `swiping back to the playing page cancels the pending play for the page left`() = testScope.runTest {
+        val uri = MediaReference("http://test.com")
+        every { playerController.activeMediaId } returns "video_A"
+
+        // Swipe A -> B: B's play is scheduled behind the debounce...
+        every { playerController.activeMediaId } returns "video_A"
+        coordinator.onPageVisible(this, "video_B", uri, 1.0f, emptyList(), emptyList())
+        advanceTimeBy(50.milliseconds)
+
+        // ...then back to A (still the active media) before it fires.
+        coordinator.onPageVisible(this, "video_A", uri, 1.0f, emptyList(), emptyList())
+        advanceTimeBy(1000.milliseconds)
+
+        coVerify(exactly = 0) { playerController.play("video_B", any(), any(), any(), any(), any()) }
+    }
 }

@@ -120,8 +120,9 @@ class PlayerPoolSafetyTest {
         
         pool.updatePinnedIds(setOf("visible_1", "visible_2"))
         
-        pool.getOrCreate("new_speculative", uri, MediaType.VOD)
+        val result = pool.prewarm("new_speculative", uri, MediaType.VOD, urgent = false)
         
+        assertEquals(PrewarmResult.Rejected, result)
         assertEquals(2, pool.debugPlayerCount)
         assertNotNull(pool.get("visible_1"))
         assertNotNull(pool.get("visible_2"))

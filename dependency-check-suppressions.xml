@@ -93,7 +93,7 @@
             affected Guava API/type names. Suppress only the three Guava CVEs
             reported against this exact Crashlytics PURL and version. The app's
             resolved Guava dependency remains independently pinned and verified
-            at 33.8.0-jre or newer in both release runtime graphs.
+            at Guava 33.8.0-android in both release runtime graphs.
         ]]></notes>
         <packageUrl>pkg:maven/com.google.firebase/firebase-crashlytics@21.1.0</packageUrl>
         <vulnerabilityName regex="true">^(?:CVE-2023-2976|CVE-2018-10237|CVE-2020-8908)$</vulnerabilityName>

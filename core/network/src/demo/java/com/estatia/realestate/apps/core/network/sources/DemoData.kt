@@ -18,8 +18,9 @@ object DemoData {
             bathrooms = 4,
             areaSize = 450.0,
             imageUrl = listOf("https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=1000"),
-            directVideoUrls = listOf("https://vjs.zencdn.net/v/oceans.mp4"),
-            hlsUrl = listOf("https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8"),
+            // Reuse the existing ExoPlayer test asset instead of the unstable Oceans/HLS pair.
+            directVideoUrls = listOf("https://storage.googleapis.com/exoplayer-test-media-0/BigBuckBunny_320x180.mp4"),
+            hlsUrl = null,
             video = true,
             ownerName = "Harry Kemboi",
             ownerId = "demo_user"
