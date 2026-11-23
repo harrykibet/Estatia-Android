@@ -60,7 +60,8 @@ jobs:
     if: >-
       ${{ needs.change-scope.outputs.baseline_changed == 'true' &&
       (github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft &&
+      (github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !github.event.pull_request.draft &&
       (github.event.action != 'synchronize' ||
       contains(github.event.pull_request.labels.*.name, 'ci:profile')))) }}
     name: ${{ matrix.variant }} release profile generation and packaging
@@ -343,17 +344,22 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Scrub artifacts for credential material
+        id: scrub-artifacts
         if: always()
         shell: bash
         env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_EMAIL || '' }}
           BASELINE_PROFILE_TEST_PASSWORD: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_PASSWORD || '' }}
         run: |
           bash ./.github/scripts/scrub-check-secrets.sh \
-            --dirs "$RUNNER_TEMP/baseline-profile-validation" "$RUNNER_TEMP/gradle-ci-diagnostics" \
-            -- BASELINE_PROFILE_TEST_PASSWORD
+            --dirs \
+              "app/src/${{ matrix.flavor }}Release/generated/baselineProfiles" \
+              "$RUNNER_TEMP/baseline-profile-validation" \
+              "$RUNNER_TEMP/gradle-ci-diagnostics" \
+            -- BASELINE_PROFILE_TEST_EMAIL BASELINE_PROFILE_TEST_PASSWORD
 
       - name: Upload generated profiles and validation reports
-        if: always()
+        if: ${{ always() && steps.scrub-artifacts.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: baseline-profile-validation-${{ matrix.flavor }}-${{ github.run_id }}
