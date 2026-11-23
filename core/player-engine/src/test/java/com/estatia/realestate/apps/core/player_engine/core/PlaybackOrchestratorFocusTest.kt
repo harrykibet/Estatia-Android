@@ -45,10 +45,9 @@ class PlaybackOrchestratorFocusTest {
         player = mockk(relaxed = true)
         val exo = player
         val managed = mockk<ManagedPlayer>(relaxed = true) { every { player } returns exo }
-        val pool = mockk<PlayerPool>(relaxed = true) {
-            io.mockk.coEvery { getOrCreate(any(), any(), any(), any(), any(), any(), any()) } returns managed
-            every { get("m1") } returns managed
-        }
+        val pool = mockk<PlayerPool>(relaxed = true)
+        io.mockk.coEvery { pool.getOrCreate(any(), any(), any(), any(), any(), any(), any()) } returns managed
+        every { pool.get("m1") } returns managed
         val env = mockk<com.estatia.realestate.apps.core.player_engine.utils.EnvironmentCoordinator>(relaxed = true) {
             every { environment } returns MutableStateFlow(
                 EnvironmentState(isMetered = false, shouldThrottlePerformance = false, estimatedThroughputBps = 1_000_000)
