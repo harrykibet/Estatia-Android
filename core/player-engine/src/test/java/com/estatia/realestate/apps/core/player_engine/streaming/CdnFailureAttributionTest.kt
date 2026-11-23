@@ -1,10 +1,9 @@
 package com.estatia.realestate.apps.core.player_engine.streaming
 
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import com.estatia.realestate.apps.core.model.system.NetworkState
-import io.mockk.every
-import io.mockk.mockk
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,8 +55,13 @@ class CdnFailureAttributionTest {
     }
 
     private fun httpError(code: Int): HttpDataSource.InvalidResponseCodeException {
-        val response = mockk<HttpDataSource.InvalidResponseCodeException>(relaxed = true)
-        every { response.responseCode } returns code
-        return response
+        return HttpDataSource.InvalidResponseCodeException(
+            code,
+            "test",
+            null,
+            emptyMap(),
+            DataSpec.Builder().setUri("https://cdn.example.test/media").build(),
+            ByteArray(0)
+        )
     }
 }
