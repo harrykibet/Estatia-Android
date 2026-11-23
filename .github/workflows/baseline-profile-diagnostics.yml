@@ -166,18 +166,16 @@ jobs:
         run: |
           set -euo pipefail
           task=":app:generate${{ matrix.variant }}ReleaseBaselineProfile"
-          gradle_test_args=()
           if [[ "${{ matrix.flavor }}" == "prod" ]]; then
+            # benchmark/build.gradle.kts reads these from the environment (not -P flags).
             [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" && -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
               echo "::error::Production benchmark credentials are required."
               exit 1
             }
-            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestEmail=${BASELINE_PROFILE_TEST_EMAIL}")
-            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestPassword=${BASELINE_PROFILE_TEST_PASSWORD}")
           fi
           mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
           bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
-            ./gradlew "$task" "${gradle_test_args[@]}" --no-configuration-cache --stacktrace --console=plain \
+            ./gradlew "$task" --no-configuration-cache --stacktrace --console=plain \
             2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
@@ -332,6 +330,16 @@ jobs:
             echo "The authenticated profile validates live Firebase Auth and Firestore paths."
             echo "Storage SDK upload/download is validated separately against the Firebase Storage Emulator."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Scrub artifacts for credential material
+        if: always()
+        shell: bash
+        env:
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_PASSWORD || '' }}
+        run: |
+          bash ./.github/scripts/scrub-check-secrets.sh \
+            --dirs "$RUNNER_TEMP/baseline-profile-validation" "$RUNNER_TEMP/gradle-ci-diagnostics" \
+            -- BASELINE_PROFILE_TEST_PASSWORD
 
       - name: Upload generated profiles and validation reports
         if: always()
