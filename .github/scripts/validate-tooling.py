@@ -20,7 +20,7 @@ def changed_paths(base: str, head: str) -> list[str]:
     if not base or not head or set(base) == {"0"}:
         raise ValueError("A valid base and head commit are required.")
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACDMRT", "-z", base, head],
+        ["git", "diff", "--name-only", "--no-renames", "--diff-filter=ACDMRT", "-z", base, head],
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -212,8 +212,7 @@ def _assert_full_scope(label: str, actual: dict) -> None:
     expected = {"source_changed": "true", "gradle_changed": "true",
                 "architecture_changed": "true", "release_changed": "true",
                 "unknown_changed": "true", "baseline_changed": "true",
-                "firebase_changed": "true", "docs_only": "false",
-                "compile_only_allowed": "false"}
+                "firebase_changed": "true", "docs_only": "false"}
     mismatches = {k: (v, actual.get(k)) for k, v in expected.items() if actual.get(k) != v}
     if mismatches:
         raise AssertionError(f"Fail-open case {label} did not retain full scope: {mismatches}")
@@ -278,6 +277,97 @@ def test_change_scope_fail_open() -> None:
             raise AssertionError(f"Shallow-checkout case misclassified a docs change: {shallow_scope}")
 
 
+def _commit_all(cwd: Path, message: str) -> str:
+    _run_git(["add", "-A"], cwd)
+    _run_git(["commit", "--quiet", "--allow-empty", "-m", message], cwd)
+    return _run_git(["rev-parse", "HEAD"], cwd)
+
+
+def _init_repo(path: Path) -> None:
+    _run_git(["init", "--quiet", "-b", "main"], path)
+    _run_git(["config", "user.name", "Estatia CI"], path)
+    _run_git(["config", "user.email", "ci@example.invalid"], path)
+
+
+def _classify(classifier: Path, cwd: Path, base: str, head: str, event: str = "pull_request") -> dict:
+    output_file = cwd / "scope.out"
+    output_file.write_text("", encoding="utf-8")
+    env = os.environ.copy()
+    env["GITHUB_OUTPUT"] = str(output_file)
+    subprocess.run(
+        ["bash", str(classifier), event, base, head],
+        cwd=cwd, env=env, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    return _parse_outputs(output_file)
+
+
+def test_change_scope_renames_and_diverged_base() -> None:
+    """A moved source file must stay visible; main moving on must not inflate scope."""
+    classifier = ROOT / ".github" / "scripts" / "detect-change-scope.sh"
+
+    with tempfile.TemporaryDirectory(prefix="estatia-scope-rename-") as temporary:
+        repo = Path(temporary)
+        _init_repo(repo)
+        source = repo / "feature" / "a" / "src" / "main" / "java" / "Foo.kt"
+        source.parent.mkdir(parents=True)
+        source.write_text("// original source\n" * 30, encoding="utf-8")
+        base = _commit_all(repo, "base")
+
+        # Rename detection would list only docs/Foo.md and classify this as docs-only.
+        (repo / "docs").mkdir()
+        _run_git(["mv", "feature/a/src/main/java/Foo.kt", "docs/Foo.md"], repo)
+        head = _commit_all(repo, "move source into docs")
+        scope = _classify(classifier, repo, base, head)
+        if scope.get("docs_only") != "false" or scope.get("source_changed") != "true":
+            raise AssertionError(f"Rename out of source hid the deleted source file: {scope}")
+
+    with tempfile.TemporaryDirectory(prefix="estatia-scope-diverged-") as temporary:
+        repo = Path(temporary)
+        _init_repo(repo)
+        (repo / "seed").write_text("base\n", encoding="utf-8")
+        branch_point = _commit_all(repo, "branch point")
+
+        _run_git(["checkout", "--quiet", "-b", "feature"], repo)
+        (repo / "README.md").write_text("docs only change\n", encoding="utf-8")
+        feature_head = _commit_all(repo, "docs change on the feature branch")
+
+        _run_git(["checkout", "--quiet", "main"], repo)
+        unrelated = repo / "core" / "x" / "src" / "main" / "java" / "Unrelated.kt"
+        unrelated.parent.mkdir(parents=True)
+        unrelated.write_text("// landed on main after the branch point\n", encoding="utf-8")
+        main_tip = _commit_all(repo, "unrelated source change on main")
+        if main_tip == branch_point:
+            raise AssertionError("Test setup failed: main did not advance.")
+
+        scope = _classify(classifier, repo, main_tip, feature_head)
+        if scope.get("docs_only") != "true" or scope.get("source_changed") != "false":
+            raise AssertionError(
+                "A docs-only PR was inflated by unrelated changes that landed on main: " f"{scope}"
+            )
+
+
+def test_ci_gate() -> None:
+    """The aggregate gate passes only on success/skipped and fails closed otherwise."""
+    gate = ROOT / ".github" / "scripts" / "ci-gate.py"
+    cases = [
+        ("all-success", {"a": {"result": "success"}, "b": {"result": "skipped"}}, 0),
+        ("failure", {"a": {"result": "success"}, "b": {"result": "failure"}}, 1),
+        ("cancelled", {"a": {"result": "cancelled"}}, 1),
+        ("missing-result", {"a": {}}, 1),
+        ("empty", {}, 1),
+    ]
+    for label, needs, expected in cases:
+        env = os.environ.copy()
+        env["CI_JOB_RESULTS"] = json.dumps(needs)
+        code = subprocess.run(
+            [sys.executable, str(gate)], env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        ).returncode
+        if code != expected:
+            raise AssertionError(f"CI gate case {label}: expected exit {expected}, got {code}")
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
@@ -317,9 +407,12 @@ def main() -> int:
     try:
         test_change_scope_classifier()
         test_change_scope_fail_open()
-        print("Change-scope classifier self-tests passed (14 path categories, fail-open and shallow-checkout cases).")
-    except (AssertionError, OSError, subprocess.CalledProcessError) as error:
-        print(f"::error::Change-scope classifier self-test failed: {error}", file=sys.stderr)
+        test_change_scope_renames_and_diverged_base()
+        print("Change-scope classifier self-tests passed (path categories, fail-open, shallow checkout, renames, diverged base).")
+        test_ci_gate()
+        print("CI gate self-tests passed.")
+    except (AssertionError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        print(f"::error::Tooling self-test failed: {error}", file=sys.stderr)
         return 1
 
     print(f"Tooling validation passed: {len(selected)} changed tooling/configuration file(s).")
