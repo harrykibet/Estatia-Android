@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # scope variables are read through indirect expansion
 set -euo pipefail
 
 event_name="${1:-}"
@@ -6,27 +7,33 @@ base_sha="${2:-}"
 head_sha="${3:-}"
 output_file="${GITHUB_OUTPUT:-/dev/null}"
 
-write_outputs() {
-  {
-    echo "docs_only=$1"
-    echo "docs_changed=$2"
-    echo "tooling_only=$3"
-    echo "tooling_changed=$4"
-    echo "source_changed=$5"
-    echo "gradle_changed=$6"
-    echo "architecture_changed=$7"
-    echo "release_changed=$8"
-    echo "smoke_changed=$9"
-    echo "unknown_changed=${10}"
-    echo "module_gradle_changed=${11}"
-    echo "baseline_changed=${12}"
-    echo "firebase_changed=${13}"
-    echo "compile_only_allowed=${14}"
-  } >> "$output_file"
+# Output keys are emitted by name from this single list, so adding a scope can never
+# silently shift positional arguments in three places. The same-named shell variables
+# below hold the values.
+scope_keys=(
+  docs_only docs_changed tooling_only tooling_changed source_changed gradle_changed
+  architecture_changed release_changed smoke_changed unknown_changed
+  module_gradle_changed baseline_changed firebase_changed compile_only_allowed
+)
+
+emit_scope() {
+  local key
+  for key in "${scope_keys[@]}"; do
+    printf '%s=%s\n' "$key" "${!key}"
+  done >> "$output_file"
+}
+
+set_full_scope() {
+  docs_only=false; docs_changed=false; tooling_only=false; tooling_changed=false
+  source_changed=true; gradle_changed=true; architecture_changed=true
+  release_changed=true; smoke_changed=true; unknown_changed=true
+  module_gradle_changed=true; baseline_changed=true; firebase_changed=true
+  compile_only_allowed=false
 }
 
 write_full_scope() {
-  write_outputs false false false false true true true true true true true true true false
+  set_full_scope
+  emit_scope
   echo "Unable to classify this event or diff safely; retaining full verification."
 }
 
@@ -67,8 +74,27 @@ if [[ -z "$base_sha" || -z "$head_sha" || "$base_sha" =~ ^0+$ ]] ||
   exit 0
 fi
 
+# Compare against the merge base, not the base branch tip: when main has moved since
+# the branch point, a tip-to-head diff contains the inverse of unrelated main changes
+# and inflates the scope. A shallow checkout may lack the history needed, so deepen
+# once; if no merge base can be found, fall back to the tip (over-classifies, safe).
+compare_base="$base_sha"
+merge_base="$(git merge-base "$base_sha" "$head_sha" 2>/dev/null || true)"
+if [[ -z "$merge_base" && "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+  git fetch --no-tags --quiet --deepen=200 origin "$head_sha" "$base_sha" 2>/dev/null || true
+  merge_base="$(git merge-base "$base_sha" "$head_sha" 2>/dev/null || true)"
+fi
+if [[ -n "$merge_base" ]]; then
+  compare_base="$merge_base"
+else
+  echo "::notice::No merge base available; comparing against the base tip (scope may be over-estimated)."
+fi
+
+# --no-renames reports a move as delete + add. With rename detection only the new path
+# is listed, so a source file moved to docs/ (or between modules) would hide the
+# deletion from the owning module and could classify as documentation-only.
 diff_file="$(mktemp)"
-if ! git diff --name-only --diff-filter=ACDMRT -z "$base_sha" "$head_sha" > "$diff_file"; then
+if ! git diff --name-only --no-renames --diff-filter=ACDMRT -z "$compare_base" "$head_sha" > "$diff_file"; then
   rm -f "$diff_file"
   write_full_scope
   exit 0
@@ -166,7 +192,7 @@ for path in "${changed_files[@]}"; do
   esac
 
   case "$path" in
-    benchmark/src/*|benchmark/build.gradle.kts|app/build.gradle.kts|app/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/main/*EstatiaApplication.kt|app/src/main/*MainActivity.kt|app/src/demoRelease/generated/baselineProfiles/*|app/src/prodRelease/generated/baselineProfiles/*|feature/home/src/main/*HomeScreen.kt|feature/shared-ui/src/main/*PropertyFeedScreen.kt|core/player-engine/src/main/*Player*.kt|core/player-ui/src/main/*Player*.kt|build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt|gradle/libs.versions.toml|.github/scripts/prepare-google-services.sh|.github/scripts/run-gradle-with-diagnostics.sh|.github/workflows/baseline-profile-diagnostics.yml)
+    benchmark/src/*|benchmark/build.gradle.kts|app/build.gradle.kts|app/proguard-rules.pro|app/src/main/AndroidManifest.xml|app/src/main/*EstatiaApplication.kt|app/src/main/*MainActivity.kt|app/src/demoRelease/generated/baselineProfiles/*|app/src/prodRelease/generated/baselineProfiles/*|feature/home/src/main/*HomeScreen.kt|feature/shared-ui/src/main/*PropertyFeedScreen.kt|core/player-engine/src/main/*Player*.kt|core/player-ui/src/main/*Player*.kt|build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt|gradle/libs.versions.toml|.github/scripts/prepare-google-services.sh|.github/scripts/run-gradle-with-diagnostics.sh|.github/scripts/scrub-check-secrets.sh|.github/workflows/baseline-profile-diagnostics.yml)
       baseline_changed=true
       ;;
   esac
@@ -219,11 +245,12 @@ if [[ "$source_changed" == "true" && "$compile_only_files" == "true" && \
   compile_only_allowed=true
 fi
 
-write_outputs "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" \
-  "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed" \
-  "$baseline_changed" "$firebase_changed" "$compile_only_allowed"
+emit_scope
 
 printf 'Changed paths (%s):\n' "${#changed_files[@]}"
 printf '  %s\n' "${changed_files[@]}"
-printf 'Scope: docs_only=%s docs_changed=%s tooling_only=%s tooling_changed=%s source_changed=%s gradle_changed=%s architecture_changed=%s release_changed=%s smoke_changed=%s unknown_changed=%s module_gradle_changed=%s baseline_changed=%s firebase_changed=%s compile_only_allowed=%s\n' \
-  "$docs_only" "$docs_changed" "$tooling_only" "$tooling_changed" "$source_changed" "$gradle_changed" "$architecture_changed" "$release_changed" "$smoke_changed" "$unknown_changed" "$module_gradle_changed" "$baseline_changed" "$firebase_changed" "$compile_only_allowed"
+printf 'Scope (compared against %s):' "${compare_base:0:12}"
+for key in "${scope_keys[@]}"; do
+  printf ' %s=%s' "$key" "${!key}"
+done
+printf '\n'

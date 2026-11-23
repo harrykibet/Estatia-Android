@@ -6,13 +6,17 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened, ready_for_review ]
+  push:
+    branches: [ "main" ]
   merge_group:
     types: [ checks_requested ]
     branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
-  group: baseline-profile-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  # A push to a PR that will not generate profiles (no ci:profile label) is skipped and
+  # gets its own group so it cannot cancel an in-flight generation run for the same PR.
+  group: baseline-profile-diagnostics-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:profile') && 'skip' || 'run' }}
   cancel-in-progress: true
 
 permissions:
@@ -36,25 +40,30 @@ jobs:
       baseline_changed: ${{ steps.classify.outputs.baseline_changed }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Classify relevant changes
         id: classify
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: bash ./.github/scripts/detect-change-scope.sh "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA"
 
   variant-baseline-profile:
     needs: [ change-scope ]
-    # Heavy tier: skip draft PRs; it runs once the PR is marked ready for review
-    # (and on every later push), and on merge_group / dispatch.
-    # Production profile generation uses a live benchmark account. Dependabot
-    # pull_request workflows intentionally receive no repository secrets; the
-    # PR's minified release gate still validates both packaged variants.
-    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && github.event.pull_request.user.login != 'dependabot[bot]' }}
+    # Profile generation takes 30-45 minutes and its output is not committed on a PR, so
+    # on a PR it only proves the pipeline still works. Run it when the PR is opened,
+    # reopened or marked ready (never for drafts), or on every push when the PR carries
+    # the `ci:profile` label. It always runs on pushes to main, dispatch and merge_group.
+    if: >-
+      ${{ needs.change-scope.outputs.baseline_changed == 'true' &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !github.event.pull_request.draft &&
+      (github.event.action != 'synchronize' ||
+      contains(github.event.pull_request.labels.*.name, 'ci:profile')))) }}
     name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
@@ -69,16 +78,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
 
@@ -169,18 +178,16 @@ jobs:
         run: |
           set -euo pipefail
           task=":app:generate${{ matrix.variant }}ReleaseBaselineProfile"
-          gradle_test_args=()
           if [[ "${{ matrix.flavor }}" == "prod" ]]; then
+            # benchmark/build.gradle.kts reads these from the environment (not -P flags).
             [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" && -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
               echo "::error::Production benchmark credentials are required."
               exit 1
             }
-            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestEmail=${BASELINE_PROFILE_TEST_EMAIL}")
-            gradle_test_args+=("-Pandroid.testInstrumentationRunnerArguments.baselineProfileTestPassword=${BASELINE_PROFILE_TEST_PASSWORD}")
           fi
           mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
           bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
-            ./gradlew "$task" "${gradle_test_args[@]}" --no-configuration-cache --stacktrace --console=plain \
+            ./gradlew "$task" --no-configuration-cache --stacktrace --console=plain \
             2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
@@ -336,9 +343,24 @@ jobs:
             echo "Storage SDK upload/download is validated separately against the Firebase Storage Emulator."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload generated profiles and validation reports
+      - name: Scrub artifacts for credential material
+        id: scrub-artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        shell: bash
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_EMAIL || '' }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_PASSWORD || '' }}
+        run: |
+          bash ./.github/scripts/scrub-check-secrets.sh \
+            --dirs \
+              "app/src/${{ matrix.flavor }}Release/generated/baselineProfiles" \
+              "$RUNNER_TEMP/baseline-profile-validation" \
+              "$RUNNER_TEMP/gradle-ci-diagnostics" \
+            -- BASELINE_PROFILE_TEST_EMAIL BASELINE_PROFILE_TEST_PASSWORD
+
+      - name: Upload generated profiles and validation reports
+        if: ${{ always() && steps.scrub-artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: baseline-profile-validation-${{ matrix.flavor }}-${{ github.run_id }}
           path: |
@@ -357,7 +379,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Checkout gate script
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           sparse-checkout: .github/scripts
       - name: Verify all executed checks completed successfully

@@ -56,7 +56,8 @@ class ModuleGraphPlugin : Plugin<Project> {
                         "$impactBase...$impactHead"
                     }
                     val diffOutput = try {
-                        ProcessBuilder("git", "diff", "--name-only", diffReference)
+                        // --no-renames lists both sides of a move so the module a file left is still impacted.
+                        ProcessBuilder("git", "diff", "--name-only", "--no-renames", diffReference)
                             .start().inputStream.bufferedReader().readText().lines().filter { it.isNotBlank() }
                     } catch (error: Exception) {
                         logger.warn("Could not calculate impacted paths from '$diffReference': ${error.message}")
