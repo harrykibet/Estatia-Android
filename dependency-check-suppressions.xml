@@ -141,7 +141,7 @@
             name. Keep this suppression limited to the exact three Java artifacts
             and the 1.67.0 release reported by this dependency scan.
         ]]></notes>
-        <packageUrl regex="true">^pkg:maven/io\\.opentelemetry/opentelemetry-(api|common|context)@1\\.67\\.0$</packageUrl>
+        <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-(api|common|context)@1\.67\.0$</packageUrl>
         <vulnerabilityName>CVE-2026-54285</vulnerabilityName>
     </suppress>
 </suppressions>
