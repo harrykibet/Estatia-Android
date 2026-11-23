@@ -17,13 +17,16 @@ from pathlib import Path
 ROOT = Path.cwd().resolve()
 
 
-def changed_paths(base: str, head: str) -> list[str]:
+def changed_paths(base: str, head: str, cwd: Path | None = None) -> list[str]:
     if not base or not head or set(base) == {"0"}:
         raise ValueError("A valid base and head commit are required.")
     # Match detect-change-scope.sh: classify only changes introduced since the
     # common ancestor, not unrelated changes that arrived on the base branch later.
+    # The optional cwd also lets the self-tests exercise isolated temporary repos.
+    repository = cwd or ROOT
     merge_base = subprocess.run(
         ["git", "merge-base", base, head],
+        cwd=repository,
         check=True,
         stdout=subprocess.PIPE,
         text=True,
@@ -32,6 +35,7 @@ def changed_paths(base: str, head: str) -> list[str]:
         raise ValueError("A merge base could not be found for the supplied commits.")
     result = subprocess.run(
         ["git", "diff", "--name-only", "--no-renames", "--diff-filter=ACDMRT", "-z", merge_base, head],
+        cwd=repository,
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -360,7 +364,7 @@ def test_change_scope_renames_and_diverged_base() -> None:
 
         # The tooling validator must classify the exact same diverged range as the
         # shared classifier, rather than including changes introduced on main.
-        validation_paths = changed_paths(main_tip, feature_head)
+        validation_paths = changed_paths(main_tip, feature_head, cwd=repo)
         if validation_paths != ["README.md"]:
             raise AssertionError(
                 "Tooling validation included unrelated changes from main: "
