@@ -309,34 +309,74 @@ class BaselineProfileGenerator {
             description = "Home property feed gesture surface",
         )
 
-        // VerticalPager advances from page zero with an upward swipe. Verify
-        // the page tag changes rather than relying on an accessibility scroll event.
-        val firstPage = waitFor(
+        // Use coordinate-based drags with an explicit duration. UiObject2.swipe()
+        // derives its path from accessibility bounds and has intermittently left
+        // the pager on the original page while the same journey passed elsewhere.
+        swipeFeedPage(
             device = device,
-            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
-            description = "First Home property page",
+            sourceTag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            targetTag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
+            direction = Direction.UP,
+            sourceDescription = "First Home property page",
+            targetDescription = "Second Home property page after advancing the feed",
         )
-        // Match ScrollBenchmark: keep the gesture away from the embedded media
-        // player's edge controls so the parent VerticalPager receives the swipe.
-        firstPage.setGestureMargin(device.displayWidth / 5)
-        firstPage.swipe(Direction.UP, FEED_PAGE_SWIPE_PERCENT)
+        swipeFeedPage(
+            device = device,
+            sourceTag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
+            targetTag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
+            direction = Direction.DOWN,
+            sourceDescription = "Second Home property page before returning",
+            targetDescription = "Home feed after returning to the first property",
+        )
+        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+    }
 
-        val secondPage = waitFor(
-            device = device,
-            tag = ScreenTestTags.PROPERTY_FEED_PAGE_1,
-            description = "Second Home property page after advancing the feed",
-        )
-        // The return gesture is dispatched through a different UiObject2.
-        // Apply the same margin here so embedded media controls cannot intercept it.
-        secondPage.setGestureMargin(device.displayWidth / 5)
-        secondPage.swipe(Direction.DOWN, FEED_PAGE_SWIPE_PERCENT)
+    /**
+     * Sends a real screen-coordinate drag and verifies the pager changed pages.
+     *
+     * A failed gesture is retried with the same bounded motion; the destination
+     * tag remains mandatory, so retries cannot turn a non-moving pager into a
+     * successful benchmark journey.
+     */
+    private fun swipeFeedPage(
+        device: UiDevice,
+        sourceTag: String,
+        targetTag: String,
+        direction: Direction,
+        sourceDescription: String,
+        targetDescription: String,
+    ) {
+        repeat(FEED_PAGE_SWIPE_ATTEMPTS) {
+            waitFor(
+                device = device,
+                tag = sourceTag,
+                description = sourceDescription,
+            )
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+
+            val centerX = device.displayWidth / 2
+            val upperY = (device.displayHeight * FEED_SWIPE_UPPER_FRACTION).toInt()
+            val lowerY = (device.displayHeight * FEED_SWIPE_LOWER_FRACTION).toInt()
+            val startY = if (direction == Direction.UP) lowerY else upperY
+            val endY = if (direction == Direction.UP) upperY else lowerY
+
+            device.swipe(centerX, startY, centerX, endY, FEED_PAGE_SWIPE_STEPS)
+            if (
+                device.wait(
+                    Until.findObject(By.res(targetTag)),
+                    FEED_PAGE_TRANSITION_TIMEOUT_MS,
+                ) != null
+            ) {
+                return
+            }
+        }
 
         waitFor(
             device = device,
-            tag = ScreenTestTags.PROPERTY_FEED_PAGE_0,
-            description = "Home feed after returning to the first property",
+            tag = targetTag,
+            description = targetDescription,
+            timeoutMs = UI_TIMEOUT_MS,
         )
-        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
     }
 
     // =========================================================================
@@ -666,7 +706,11 @@ class BaselineProfileGenerator {
 
         const val PROPERTY_SWIPE_PERCENT = 1.0f
 
-        const val FEED_PAGE_SWIPE_PERCENT = 0.70f
+        const val FEED_PAGE_SWIPE_ATTEMPTS = 2
+        const val FEED_PAGE_SWIPE_STEPS = 50
+        const val FEED_PAGE_TRANSITION_TIMEOUT_MS = 3_000L
+        const val FEED_SWIPE_UPPER_FRACTION = 0.25f
+        const val FEED_SWIPE_LOWER_FRACTION = 0.75f
     }
 }
 
