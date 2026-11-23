@@ -54,7 +54,7 @@ jobs:
     # Production profile generation uses a live benchmark account. Dependabot
     # pull_request workflows intentionally receive no repository secrets; the
     # PR's minified release gate still validates both packaged variants.
-    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && github.actor != 'dependabot[bot]' }}
+    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && github.event.pull_request.user.login != 'dependabot[bot]' }}
     name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
