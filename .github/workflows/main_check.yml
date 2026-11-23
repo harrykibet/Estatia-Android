@@ -341,7 +341,7 @@ jobs:
 
   instrumented-tests:
     needs: [ change-scope, selective-verification ]
-    if: ${{ always() && ((needs.change-scope.outputs.smoke_changed == 'true' && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true')) || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && ((needs.change-scope.outputs.smoke_changed == 'true' && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true')) || github.event_name == 'workflow_dispatch') }}
     name: Targeted UI Smoke or Full Device Fleet
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -411,7 +411,7 @@ jobs:
 
   build-release:
     needs: [ change-scope, gradle-configuration-validation, lint, selective-verification ]
-    if: ${{ always() && (needs.change-scope.outputs.release_changed == 'true' || github.event_name == 'workflow_dispatch') && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.lint.result == 'success' || needs.lint.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true') || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && (needs.change-scope.outputs.release_changed == 'true' || github.event_name == 'workflow_dispatch') && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.lint.result == 'success' || needs.lint.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true') || github.event_name == 'workflow_dispatch') }}
     name: Release Build
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -503,6 +503,8 @@ jobs:
       - unit-tests
       - instrumented-tests
       - build-release
+    # always(), not !cancelled(): the gate must still run and fail closed when a run is
+    # cancelled or an upstream job failed; heavy jobs above use !cancelled() instead.
     if: ${{ always() }}
     steps:
       - name: Checkout gate script

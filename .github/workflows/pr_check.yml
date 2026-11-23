@@ -3,7 +3,7 @@ name: PR Check (High Maturity)
 on:
   pull_request:
     branches: [ "main" ]
-    types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   merge_group:
     types: [ checks_requested ]
     branches: [ "main" ]
@@ -336,7 +336,7 @@ jobs:
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{ always() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true')) }}
+    if: ${{ !cancelled() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true')) }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -400,7 +400,7 @@ jobs:
       GRADLE_CI_KOTLIN_PARALLEL: "false"
       GRADLE_CI_SAMPLE_SECONDS: 30
 
-    if: ${{ always() && needs.change-scope.outputs.smoke_changed == 'true' && (needs.change-scope.outputs.compile_only_allowed != 'true' || github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci:compile-only')) && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
+    if: ${{ !cancelled() && needs.change-scope.outputs.smoke_changed == 'true' && (needs.change-scope.outputs.compile_only_allowed != 'true' || github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci:compile-only')) && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -467,6 +467,8 @@ jobs:
       - selective-verification
       - release-r8-validation
       - smoke-test
+    # always(), not !cancelled(): the gate must still run and fail closed when a run is
+    # cancelled or an upstream job failed; heavy jobs above use !cancelled() instead.
     if: ${{ always() }}
     steps:
       - name: Checkout gate script

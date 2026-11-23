@@ -6,13 +6,17 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened, ready_for_review ]
+  push:
+    branches: [ "main" ]
   merge_group:
     types: [ checks_requested ]
     branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
-  group: baseline-profile-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  # A push to a PR that will not generate profiles (no ci:profile label) is skipped and
+  # gets its own group so it cannot cancel an in-flight generation run for the same PR.
+  group: baseline-profile-diagnostics-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'synchronize' && !contains(github.event.pull_request.labels.*.name, 'ci:profile') && 'skip' || 'run' }}
   cancel-in-progress: true
 
 permissions:
@@ -43,15 +47,22 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: bash ./.github/scripts/detect-change-scope.sh "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA"
 
   variant-baseline-profile:
     needs: [ change-scope ]
-    # Heavy tier: skip draft PRs; it runs once the PR is marked ready for review
-    # (and on every later push), and on merge_group / dispatch.
-    if: ${{ needs.change-scope.outputs.baseline_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    # Profile generation takes 30-45 minutes and its output is not committed on a PR, so
+    # on a PR it only proves the pipeline still works. Run it when the PR is opened,
+    # reopened or marked ready (never for drafts), or on every push when the PR carries
+    # the `ci:profile` label. It always runs on pushes to main, dispatch and merge_group.
+    if: >-
+      ${{ needs.change-scope.outputs.baseline_changed == 'true' &&
+      (github.event_name != 'pull_request' ||
+      (!github.event.pull_request.draft &&
+      (github.event.action != 'synchronize' ||
+      contains(github.event.pull_request.labels.*.name, 'ci:profile')))) }}
     name: ${{ matrix.variant }} release profile generation and packaging
     runs-on: ubuntu-24.04
     timeout-minutes: 120
