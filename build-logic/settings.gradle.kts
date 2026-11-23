@@ -2,7 +2,6 @@
 
 pluginManagement {
     repositories {
-        gradlePluginPortal()
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -10,12 +9,14 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven { url = uri("https://maven-central-eu.storage-download.googleapis.com/maven2/") }
+        gradlePluginPortal()
+        mavenCentral()
     }
 }
 
 dependencyResolutionManagement {
     repositories {
-        gradlePluginPortal()
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -23,6 +24,8 @@ dependencyResolutionManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
+        maven { url = uri("https://maven-central-eu.storage-download.googleapis.com/maven2/") }
+        gradlePluginPortal()
         mavenCentral()
     }
     versionCatalogs {

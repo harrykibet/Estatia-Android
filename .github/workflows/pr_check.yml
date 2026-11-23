@@ -3,7 +3,7 @@ name: PR Check (High Maturity)
 on:
   pull_request:
     branches: [ "main" ]
-    types: [ opened, synchronize, reopened, ready_for_review ]
+    types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
   merge_group:
     types: [ checks_requested ]
     branches: [ "main" ]
@@ -20,15 +20,123 @@ env:
   CI: true
 
 jobs:
+  change-scope:
+    name: Classify changed files
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      docs_changed: ${{ steps.classify.outputs.docs_changed }}
+      tooling_only: ${{ steps.classify.outputs.tooling_only }}
+      tooling_changed: ${{ steps.classify.outputs.tooling_changed }}
+      source_changed: ${{ steps.classify.outputs.source_changed }}
+      gradle_changed: ${{ steps.classify.outputs.gradle_changed }}
+      architecture_changed: ${{ steps.classify.outputs.architecture_changed }}
+      release_changed: ${{ steps.classify.outputs.release_changed }}
+      smoke_changed: ${{ steps.classify.outputs.smoke_changed }}
+      unknown_changed: ${{ steps.classify.outputs.unknown_changed }}
+      module_gradle_changed: ${{ steps.classify.outputs.module_gradle_changed }}
+      baseline_changed: ${{ steps.classify.outputs.baseline_changed }}
+      firebase_changed: ${{ steps.classify.outputs.firebase_changed }}
+      compile_only_allowed: ${{ steps.classify.outputs.compile_only_allowed }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Detect documentation-only changes
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: bash ./.github/scripts/detect-change-scope.sh "$EVENT_NAME" "$BASE_SHA" "$HEAD_SHA"
+
+  documentation-validation:
+    name: Documentation and issue-form validation
+    runs-on: ubuntu-latest
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.docs_changed == 'true' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate changed Markdown and GitHub issue forms
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: python3 ./.github/scripts/validate-documentation.py "$BASE_SHA" "$HEAD_SHA"
+
+  tooling-validation:
+    name: Script and workflow syntax validation
+    runs-on: ubuntu-latest
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.tooling_changed == 'true' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install --no-install-recommends -y shellcheck
+          fi
+          shellcheck --version
+
+      - name: Validate changed scripts and configuration
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: python3 ./.github/scripts/validate-tooling.py "$BASE_SHA" "$HEAD_SHA"
+
+  gradle-configuration-validation:
+    name: Gradle configuration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.gradle_changed == 'true' && needs.change-scope.outputs.architecture_changed != 'true' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Prepare Firebase configuration
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
+      - name: Validate Gradle project configuration
+        run: |
+          chmod +x ./gradlew
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh gradle-configuration ./gradlew help --no-configuration-cache --stacktrace --console=plain
+
   architecture-gate:
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.architecture_changed == 'true' }}
     name: Level 0 - Architecture & Policy
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    outputs:
-      impact_tasks: ${{  steps.impact.outputs.tasks  }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -45,7 +153,7 @@ jobs:
           echo "MAIN_BASELINE_PATH=$baseline_path" >> "$GITHUB_ENV"
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -79,44 +187,15 @@ jobs:
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
       - name: Run Full Architecture and Lint Gates
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh architecture-lint ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --console=plain --warning-mode all
 
       - name: Test Build Logic Convention Plugins
         if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain
-
-      - name: Calculate Impacted Verification Tasks
-        id: impact
-        shell: bash
-        run: |
-          set -euo pipefail
-          changed_files="$(git diff --name-only origin/main...HEAD)"
-          if [[ -z "$changed_files" ]]; then
-            echo "tasks=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! grep -Eq '^(app/|core/|feature/|lint/|benchmark/|build-logic/|buildSrc/|build.gradle.kts$|settings.gradle.kts$|gradle/|gradle.properties$)' <<< "$changed_files"; then
-            echo "No source or build-logic files changed; skipping impacted Gradle tasks."
-            echo "tasks=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
-          TASKS="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
-
-          # A root build/dependency change can map to the selector's broad fallback.
-          # Keep PR feedback bounded; the merge-group run performs the exhaustive checks.
-          if [[ "$TASKS" == "test lint" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            TASKS=":app:compileDemoDebugKotlin"
-          fi
-
-          echo "tasks=$TASKS" >> "$GITHUB_OUTPUT"
-          echo "Selected impacted tasks: ${TASKS:-none}"
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh convention-tests ./gradlew -p build-logic :convention:test --no-configuration-cache --stacktrace --console=plain --warning-mode all
 
       - name: Upload Lint Diagnostic Reports
         if: ${{  always() && github.event_name != 'pull_request'  }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lint-diagnostics
           path: |
@@ -127,7 +206,69 @@ jobs:
 
       - name: Upload Gradle resource diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-resource-${{ github.run_number }}-${{ github.job }}
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  impact-analysis:
+    name: Calculate affected module verification tasks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [ change-scope ]
+    if: ${{ needs.change-scope.outputs.source_changed == 'true' || needs.change-scope.outputs.module_gradle_changed == 'true' }}
+    outputs:
+      impact_tasks: ${{ steps.impact.outputs.tasks }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Firebase configuration for impact analysis
+        env:
+          GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
+          GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+        run: bash ./.github/scripts/prepare-google-services.sh demo prod
+
+      - name: Calculate impacted module tasks
+        id: impact
+        env:
+          ESTATIA_IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'origin/main' }}
+          ESTATIA_IMPACT_HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          ESTATIA_COMPILE_ONLY: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:compile-only') && needs.change-scope.outputs.compile_only_allowed == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh impact-calculation ./gradlew calculateImpact --no-configuration-cache --console=plain | tee impact_output.txt
+          tasks="$(sed -n 's/^IMPACT_TASKS=//p' impact_output.txt | tail -n 1)"
+          if [[ -z "$tasks" ]]; then
+            echo "::error::Source changes did not resolve to any verification tasks."
+            exit 1
+          fi
+          if [[ "$tasks" == "test lint" ]]; then
+            echo "::warning::Impact analysis selected the conservative full unit-test/lint fallback."
+          fi
+          echo "tasks=$tasks" >> "$GITHUB_OUTPUT"
+          echo "Selected impacted tasks: $tasks"
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: gradle-resource-${{ github.run_number }}-${{ github.job }}
           path: ${{ runner.temp }}/gradle-ci-diagnostics/
@@ -138,14 +279,14 @@ jobs:
     name: Level 1 - Impacted Verification
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [ architecture-gate ]
-    if: ${{  needs.architecture-gate.outputs.impact_tasks != ''  }}
+    needs: [ impact-analysis ]
+    if: ${{ needs.impact-analysis.outputs.impact_tasks != '' }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -173,19 +314,15 @@ jobs:
 
       - name: Run Impacted Tasks and Coverage Ratchet
         env:
-          IMPACT_TASKS: ${{  needs.architecture-gate.outputs.impact_tasks  }}
-          FULL_VALIDATION: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+          IMPACT_TASKS: ${{  needs.impact-analysis.outputs.impact_tasks  }}
         shell: bash
         run: |
           read -r -a tasks <<< "$IMPACT_TASKS"
-          if [[ "$FULL_VALIDATION" == "true" ]]; then
-            tasks+=(jacocoProdDebugVerification)
-          fi
           bash ./.github/scripts/run-gradle-with-diagnostics.sh impacted-verification ./gradlew "${tasks[@]}" --no-configuration-cache --stacktrace --console=plain
 
       - name: Upload Gradle resource diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gradle-resource-${{ github.run_number }}-${{ github.job }}
           path: ${{ runner.temp }}/gradle-ci-diagnostics/
@@ -193,18 +330,19 @@ jobs:
           retention-days: 5
 
   release-r8-validation:
+    needs: [ change-scope, gradle-configuration-validation, architecture-gate, selective-verification ]
     name: Level 3 - Minified Release (R8 / Protobuf)
     runs-on: ubuntu-latest
     timeout-minutes: 75
     env:
       GRADLE_CI_MAX_WORKERS: 2
-    if: ${{  github.event_name != 'pull_request' || !github.event.pull_request.draft  }}
+    if: ${{ always() && needs.change-scope.outputs.release_changed == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.gradle-configuration-validation.result == 'success' || needs.gradle-configuration-validation.result == 'skipped') && (needs.architecture-gate.result == 'success' || needs.architecture-gate.result == 'skipped') && (needs.selective-verification.result == 'success' || (needs.change-scope.outputs.source_changed != 'true' && needs.change-scope.outputs.module_gradle_changed != 'true')) }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -242,7 +380,7 @@ jobs:
 
       - name: Upload Gradle resource diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gradle-resource-${{ github.run_number }}-${{ github.job }}
           path: ${{ runner.temp }}/gradle-ci-diagnostics/
@@ -252,17 +390,23 @@ jobs:
   smoke-test:
     name: Level 2 - Smoke UI (Pixel 2)
     runs-on: ubuntu-24.04
-    needs: [ selective-verification ]
+    needs: [ change-scope, selective-verification ]
     timeout-minutes: 75
     env:
-      GRADLE_CI_MAX_WORKERS: 2
-    if: ${{  (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.selective-verification.result == 'success'  }}
+      GRADLE_CI_MAX_WORKERS: 1
+      GRADLE_CI_GRADLE_XMX: 4608m
+      GRADLE_CI_KOTLIN_XMX: 1536m
+      GRADLE_CI_PARALLEL: "false"
+      GRADLE_CI_KOTLIN_PARALLEL: "false"
+      GRADLE_CI_SAMPLE_SECONDS: 30
+
+    if: ${{ always() && needs.change-scope.outputs.smoke_changed == 'true' && (needs.change-scope.outputs.compile_only_allowed != 'true' || github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci:compile-only')) && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (needs.selective-verification.result == 'success' || needs.change-scope.outputs.source_changed != 'true') }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: 17
           distribution: temurin
@@ -303,9 +447,33 @@ jobs:
 
       - name: Upload Gradle resource diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gradle-resource-${{ github.run_number }}-${{ github.job }}
           path: ${{ runner.temp }}/gradle-ci-diagnostics/
           if-no-files-found: ignore
           retention-days: 5
+
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs:
+      - change-scope
+      - documentation-validation
+      - tooling-validation
+      - gradle-configuration-validation
+      - architecture-gate
+      - impact-analysis
+      - selective-verification
+      - release-r8-validation
+      - smoke-test
+    if: ${{ always() }}
+    steps:
+      - name: Checkout gate script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Verify all executed checks completed successfully
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci-gate.py

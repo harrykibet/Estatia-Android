@@ -1,3 +1,6 @@
+import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.variant.LibraryAndroidComponentsExtension
+import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.testing.AbstractTestTask
 
 plugins {
@@ -29,14 +32,24 @@ android {
         // 🏗️ Canary Policy: abortOnError is false because we WANT to produce a report with violations.
         abortOnError = false
         
-        // 🧪 Regression Enforcement: Structured reports for high-fidelity verification (Law034).
-        textReport = true
-        textOutput = file("build/reports/lint-results-demoDebug.txt")
-        xmlReport = true
-        xmlOutput = file("build/reports/lint-results-demoDebug.xml")
-        
+        // Lint always emits its standard reports. The XML report is consumed below
+        // through the Variant Artifact API instead of the deprecated lint DSL flags.
         checkDependencies = false
         checkTestSources = true
+    }
+}
+
+// Preserve the stable report location used by governance tests while consuming
+// AGP's public variant artifact instead of the deprecated lint output properties.
+extensions.configure<LibraryAndroidComponentsExtension>("androidComponents") {
+    onVariants(selector().all()) { variant ->
+        if (variant.name == "demoDebug") {
+            tasks.register<Copy>("stageDemoDebugLintXmlReport") {
+                from(variant.artifacts.get(SingleArtifact.LINT_XML_REPORT))
+                into(layout.buildDirectory.dir("intermediates/canary-lint-reports/demoDebug"))
+                rename { "lint-results-demoDebug.xml" }
+            }
+        }
     }
 }
 

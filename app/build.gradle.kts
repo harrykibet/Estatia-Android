@@ -2,8 +2,19 @@ plugins {
     alias(libs.plugins.estatia.android.application)
 }
 
+val firebaseEmulatorIntegration =
+    providers.gradleProperty("firebaseEmulatorIntegration").orNull?.toBoolean() ?: false
+
 android {
     namespace = "com.estatia.realestate.apps"
+
+    defaultConfig {
+        buildConfigField(
+            "boolean",
+            "FIREBASE_EMULATOR_INTEGRATION",
+            firebaseEmulatorIntegration.toString(),
+        )
+    }
 }
 
  dokka {
@@ -22,6 +33,20 @@ android {
  }
 
 dependencies {
+    constraints {
+        // Guava 33.7.2 fixes CVE-2026-102554; 33.8.0 also includes further
+        // hardening and keeps the app above the older Guava vulnerability ranges.
+        implementation("com.google.guava:guava") {
+            version {
+                strictly("[33.8.0-jre,)")
+            }
+            because(
+                "CVE-2023-2976/CVE-2020-8908 and CVE-2026-102554 affect older Guava " +
+                    "releases; keep the runtime graph at Guava 33.8.0 or newer."
+            )
+        }
+    }
+
     implementation(libs.bundles.android)
     implementation(libs.core.splashscreen)
 
@@ -53,6 +78,10 @@ dependencies {
     implementation(libs.androidx.compose.material3.windowSizeClass)
 
     androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(platform(libs.firebase.bom))
+    androidTestImplementation(libs.firebase.auth)
+    androidTestImplementation(libs.firebase.firestore)
+    androidTestImplementation(libs.firebase.storage)
     // Keep AndroidJUnitRunner and its test-storage implementation on the instrumentation APK classpath.
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.monitor)

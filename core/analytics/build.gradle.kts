@@ -18,6 +18,4 @@ dependencies {
     implementation(libs.prometheus.metrics.annotations)
     implementation(libs.bundles.firebase)
     implementation(projects.core.common)
-    api(libs.protobufJava)
-    testImplementation(libs.protobufJava)
 }

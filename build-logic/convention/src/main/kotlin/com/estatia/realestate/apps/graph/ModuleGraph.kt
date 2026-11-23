@@ -109,9 +109,9 @@ object ModuleGraphExtractor {
         // 2. Identify directly affected modules
         val directlyAffected = mutableSetOf<String>()
         diffFiles.forEach { path ->
+            // Do not require the changed leaf to exist: deleted files still affect
+            // their owning module and must not silently disappear from the impact set.
             val file = File(rootDir, path)
-            if (!file.exists()) return@forEach
-
             var dir = file.parentFile
             while (dir != null && dir != rootDir) {
                 val buildFile = File(dir, "build.gradle.kts")
@@ -163,11 +163,11 @@ abstract class GenerateModuleGraphsTask : DefaultTask() {
         }.toSet()
 
         val bin = dotBinary.orNull
-        val hasDot = bin?.let { b ->
-            runCatching { ProcessBuilder(b, "-V").start().waitFor() == 0 }.getOrDefault(false)
-        } ?: false
+        val usableDotBinary = bin?.takeIf { candidate ->
+            runCatching { ProcessBuilder(candidate, "-V").start().waitFor() == 0 }.getOrDefault(false)
+        }
 
-        if (bin != null && !hasDot) {
+        if (bin != null && usableDotBinary == null) {
             logger.warn("[GRAPHVIZ_NOT_FOUND] '$bin' not usable — PNG generation skipped.")
         }
 
@@ -194,9 +194,9 @@ abstract class GenerateModuleGraphsTask : DefaultTask() {
                     }
                 w.println("}")
             }
-            if (hasDot && bin != null) {
+            if (usableDotBinary != null) {
                 val png = File(target.absolutePath.removeSuffix(".gv") + ".png")
-                val proc = ProcessBuilder(bin, "-Tpng", target.absolutePath, "-o", png.absolutePath)
+                val proc = ProcessBuilder(usableDotBinary, "-Tpng", target.absolutePath, "-o", png.absolutePath)
                     .redirectErrorStream(true).start()
                 val exit = proc.waitFor()
                 if (exit != 0) {

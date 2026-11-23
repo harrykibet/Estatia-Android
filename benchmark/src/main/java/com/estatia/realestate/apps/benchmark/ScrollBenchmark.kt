@@ -37,7 +37,7 @@ class ScrollBenchmark {
         // Require Estatia's actual property feed before collecting frame timings.
         // A different scrollable surface (or no loaded feed) must not produce a
         // misleadingly successful benchmark.
-        val feedList = requireNotNull(
+        requireNotNull(
             device.wait(
                 Until.findObject(By.res(PROPERTY_FEED_RESOURCE_ID)),
                 FEED_TIMEOUT_MS,
@@ -46,14 +46,44 @@ class ScrollBenchmark {
             "Estatia's PropertyFeed did not appear within ${FEED_TIMEOUT_MS / 1_000}s after cold startup."
         }
 
-        feedList.setGestureMargin(device.displayWidth / 5)
-        feedList.fling(Direction.DOWN)
+        val firstPage = requireNotNull(
+            device.wait(
+                Until.findObject(By.res(FIRST_PAGE_RESOURCE_ID)),
+                FEED_TIMEOUT_MS,
+            ),
+        ) {
+            "The first PropertyFeed page did not appear after cold startup."
+        }
+        firstPage.setGestureMargin(device.displayWidth / 5)
+        firstPage.swipe(Direction.UP, FEED_PAGE_SWIPE_PERCENT)
+
+        val secondPage = requireNotNull(
+            device.wait(
+                Until.findObject(By.res(SECOND_PAGE_RESOURCE_ID)),
+                FEED_TIMEOUT_MS,
+            ),
+        ) {
+            "The second PropertyFeed page did not appear after the upward swipe. " +
+                "The benchmark account must contain at least two readable listings."
+        }
+        secondPage.swipe(Direction.DOWN, FEED_PAGE_SWIPE_PERCENT)
+
+        requireNotNull(
+            device.wait(
+                Until.findObject(By.res(FIRST_PAGE_RESOURCE_ID)),
+                FEED_TIMEOUT_MS,
+            ),
+        ) {
+            "The PropertyFeed did not return to its first page after the downward swipe."
+        }
         device.waitForIdle()
-        feedList.fling(Direction.UP)
     }
 
     private companion object {
         const val PROPERTY_FEED_RESOURCE_ID = "PropertyFeed"
+        const val FIRST_PAGE_RESOURCE_ID = "PropertyFeedPage_0"
+        const val SECOND_PAGE_RESOURCE_ID = "PropertyFeedPage_1"
         const val FEED_TIMEOUT_MS = 15_000L
+        const val FEED_PAGE_SWIPE_PERCENT = 0.70f
     }
 }

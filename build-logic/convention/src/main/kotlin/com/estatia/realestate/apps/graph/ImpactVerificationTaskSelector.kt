@@ -24,15 +24,23 @@ internal object ImpactVerificationTaskSelector {
         projectPath: String,
         pluginIds: Set<String>,
         registeredTaskNames: Set<String>,
-        changedFiles: List<String> = emptyList()
+        changedFiles: List<String> = emptyList(),
+        compileOnly: Boolean = false
     ): List<String> {
         val candidateTasks = when {
             "com.android.test" in pluginIds -> listOf("assemble")
-            pluginIds.any { it in androidApplicationPlugins } ->
-                debugVariantsForChangedFiles(changedFiles).flatMap { variant ->
-                    listOf("lint$variant", "test${variant}UnitTest")
+            pluginIds.any { it in androidApplicationPlugins } -> {
+                val variants = debugVariantsForChangedFiles(changedFiles)
+                if (compileOnly) {
+                    variants.map { "assemble$it" }
+                } else {
+                    variants.flatMap { variant ->
+                        listOf("lint$variant", "test${variant}UnitTest")
+                    }
                 }
-            pluginIds.any { it in jvmPlugins } -> listOf("test")
+            }
+            pluginIds.any { it in jvmPlugins } ->
+                if (compileOnly) listOf("classes") else listOf("test")
             else -> emptyList()
         }
 

@@ -1,27 +1,19 @@
-import com.estatia.realestate.apps.libs
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.exclude
 
 /**
- * Protobuf runtime compatibility policy for the Android application.
+ * Keeps obsolete pre-Lite protobuf artifacts off Android runtime classpaths.
  *
- * Firebase's generated lite messages can run against the full protobuf-java
- * runtime, which is also required by OpenTelemetry's generated OTLP messages.
- * Keep one protobuf runtime on the Android runtime classpath to avoid duplicate
- * com.google.protobuf classes.
+ * Firebase's generated Lite messages require their matching
+ * protolite-well-known-types classes. Do not redirect protobuf-javalite to
+ * protobuf-java or exclude Firebase's Lite well-known types.
  */
 class AndroidProtoliteConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
         with(target) {
-            configurations.all {
-                // Remove legacy/alternate runtimes so Firebase and OTLP resolve
-                // against one compatible protobuf implementation.
+            configurations.configureEach {
                 exclude(group = "com.google.protobuf", module = "protobuf-lite")
-                exclude(group = "com.google.firebase", module = "protolite-well-known-types")
-                resolutionStrategy {
-                    force(libs.findLibrary("protobufJava").get())
-                }
             }
         }
     }

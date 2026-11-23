@@ -2,6 +2,8 @@ name: Dependency Security Scan
 
 on:
   pull_request:
+    branches: [ "main" ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
@@ -11,20 +13,20 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: dependency-security-${{  github.event.pull_request.number || github.ref  }}
-  cancel-in-progress: ${{  github.event_name == 'pull_request'  }}
+  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   dependency-change-detection:
     name: Detect Dependency Changes
     runs-on: ubuntu-latest
     outputs:
-      dependencies: ${{  steps.filter.outputs.dependencies  }}
+      dependencies: ${{ steps.filter.outputs.dependencies }}
     steps:
       - name: Check Dependency-Related Paths
-        if: ${{  github.event_name == 'pull_request'  }}
+        if: ${{ github.event_name == 'pull_request' }}
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             dependencies:
@@ -40,65 +42,267 @@ jobs:
               - '*.gradle.kts'
               - '.github/dependabot.yml'
               - '.github/dependabot.yaml'
+              - '.github/workflows/security.yml'
+              - '.github/scripts/owasp-dependency-check.init.gradle'
+              - '.github/scripts/run-gradle-with-diagnostics.sh'
+              - 'dependency-check-suppressions.xml'
 
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
     needs: [ dependency-change-detection ]
-    if: ${{  github.event_name != 'pull_request' || needs.dependency-change-detection.outputs.dependencies == 'true'  }}
+    # Dependency analysis is part of the heavy tier: skip drafts, run when
+    # the PR becomes ready, and rerun on every later push that changes
+    # dependency-related inputs. Scheduled/manual runs remain exhaustive.
+    if: ${{ github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.dependency-change-detection.outputs.dependencies == 'true') }}
     timeout-minutes: 45
+    env:
+      GRADLE_CI_MAX_WORKERS: 1
+      GRADLE_CI_GRADLE_XMX: 5g
+      GRADLE_CI_KOTLIN_XMX: 1536m
+      GRADLE_CI_PARALLEL: "false"
+      GRADLE_CI_KOTLIN_PARALLEL: "false"
+      GRADLE_CI_SAMPLE_SECONDS: 30
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Prepare Android local.properties
+        shell: bash
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
       - name: Restore Dependency-Check database cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/dependency-check-data
           key: owasp-dependency-check-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             owasp-dependency-check-${{ runner.os }}-
 
-      - name: Run OWASP Dependency Check with NVD API
+      - name: Verify Kotlin Gradle plugin is patched in build logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/kotlin-gradle-plugin-dependency.txt"
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh security-kotlin-plugin-insight \
+            ./gradlew -p build-logic :convention:dependencyInsight \
+            --configuration compileClasspath \
+            --dependency org.jetbrains.kotlin:kotlin-gradle-plugin \
+            --no-configuration-cache --console=plain | tee "$report"
+          if ! grep -Fq "org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21" "$report"; then
+            echo "::error::The build-logic classpath must resolve the patched Kotlin Gradle plugin 2.4.21."
+            exit 1
+          fi
+
+      - name: Verify Guava is patched in both release variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in demo prod; do
+            report="$RUNNER_TEMP/guava-${variant}-dependency.txt"
+            bash ./.github/scripts/run-gradle-with-diagnostics.sh "security-guava-${variant}-insight" \
+              ./gradlew :app:dependencyInsight \
+              --configuration "${variant}ReleaseRuntimeClasspath" \
+              --dependency com.google.guava:guava \
+              --no-configuration-cache --console=plain | tee "$report"
+          done
+
+          python3 - "$RUNNER_TEMP/guava-demo-dependency.txt" "$RUNNER_TEMP/guava-prod-dependency.txt" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          minimum = (33, 8, 0)
+          pattern = re.compile(
+              r"com\.google\.guava:guava:"
+              r"(\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?)"
+              r"(?:\s*->\s*(\d+\.\d+\.\d+(?:-[A-Za-z0-9_.-]+)?))?"
+          )
+
+          for report in map(Path, sys.argv[1:]):
+              resolved = []
+              for line in report.read_text(encoding="utf-8").splitlines():
+                  match = pattern.search(line)
+                  if match:
+                      resolved.append(match.group(2) or match.group(1))
+
+              if not resolved:
+                  raise SystemExit(
+                      f"::error::{report.name}: Guava was not found in the inspected release runtime graph."
+                  )
+
+              parsed = []
+              for value in resolved:
+                  version = re.match(r"(\d+)\.(\d+)\.(\d+)", value)
+                  if version is None:
+                      raise SystemExit(
+                          f"::error::{report.name}: unable to parse selected Guava version {value!r}."
+                      )
+                  parsed.append((value, tuple(map(int, version.groups()))))
+
+              vulnerable = [value for value, parts in parsed if parts < minimum]
+              if vulnerable:
+                  raise SystemExit(
+                      f"::error::{report.name}: Guava below 33.8.0 detected: {', '.join(vulnerable)}"
+                  )
+
+              versions = ", ".join(sorted({value for value, _ in parsed}))
+              print(f"{report.stem}: resolved patched Guava version(s): {versions}")
+          PY
+
+      - name: Run OWASP Dependency Check against resolved Gradle dependencies
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          ODC_DATA_DIRECTORY: ${{ runner.temp }}/dependency-check-data
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p "$RUNNER_TEMP/dependency-check-data" "$GITHUB_WORKSPACE/reports"
 
-          if [[ -n "${NVD_API_KEY:-}" ]]; then
-            nvd_api_args=(--nvdApiKey "$NVD_API_KEY" --nvdApiDelay 3500)
-            echo "NVD API authentication is configured."
-          elif [[ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
-            nvd_api_args=()
-            echo "::warning::NVD_API_KEY is not available to fork pull requests; scanning will use unauthenticated NVD access."
+          if [[ -z "${NVD_API_KEY:-}" ]]; then
+            if [[ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+              echo "::warning::NVD_API_KEY is not available to fork pull requests; Dependency-Check will use unauthenticated NVD access."
+            else
+              echo "::error::The repository secret NVD_API_KEY is required for this repository's Dependency-Check scan."
+              exit 1
+            fi
           else
-            echo "::error::The repository secret NVD_API_KEY is required for this repository's Dependency-Check scan."
-            exit 1
+            echo "NVD API authentication is configured."
           fi
 
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --volume "$GITHUB_WORKSPACE:/src" \
-            --volume "$RUNNER_TEMP/dependency-check-data:/usr/share/dependency-check/data" \
-            --volume "$GITHUB_WORKSPACE/reports:/report" \
-            owasp/dependency-check:13.0.0 \
-            --project Estatia \
-            --scan /src \
-            --format HTML \
-            --out /report \
-            --nvdValidForHours 4 \
-            --exclude "/src/.git/**" \
-            --exclude "/src/.gradle/**" \
-            --exclude "/src/**/build/**" \
-            "${nvd_api_args[@]}"
+          chmod +x ./gradlew
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh owasp-dependency-check \
+            ./gradlew \
+            --init-script .github/scripts/owasp-dependency-check.init.gradle \
+            :app:dependencyCheckAnalyze \
+            --no-configuration-cache --stacktrace --console=plain
+
+      - name: Inspect bundled Crashlytics classes related to Guava advisories
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find "$HOME/.gradle/caches" -type f -name 'scotty-minified.jar' -print)
+          if [[ ${#jars[@]} -eq 0 ]]; then
+            echo "::warning::Crashlytics scotty-minified.jar was not present in the Gradle cache for direct inspection."
+            exit 0
+          fi
+
+          for jar in "${jars[@]}"; do
+            echo "Inspecting ${jar#"$HOME/.gradle/"}"
+            python3 - "$jar" <<'PY'
+          import sys
+          import zipfile
+
+          tokens = (
+              b"FileBackedOutputStream",
+              b"createTempDir",
+              b"AtomicDoubleArray",
+              b"CompactHashMap",
+              b"CompactHashSet",
+              b"MapMakerInternalMap",
+          )
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              matches = []
+              guava_paths = []
+              for entry in archive.infolist():
+                  if entry.filename.endswith(".class"):
+                      data = archive.read(entry)
+                      found = [token.decode() for token in tokens if token in data]
+                      if "com/google/common/" in entry.filename:
+                          guava_paths.append(entry.filename)
+                      if found:
+                          matches.append((entry.filename, found))
+              print(f"Guava namespace class entries: {len(guava_paths)}")
+              for name in guava_paths[:100]:
+                  print(f"  GUAVA_CLASS {name}")
+              print(f"Classes containing affected API/type names: {len(matches)}")
+              for name, found in matches[:100]:
+                  print(f"  API_REFERENCE {name}: {', '.join(found)}")
+          PY
+          done
+
+      - name: Verify Dependency-Check scanned the Gradle dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          report_path = Path("reports/dependency-check-report.json")
+          if not report_path.is_file():
+              raise SystemExit(
+                  "::error::Dependency-Check did not generate its JSON dependency inventory."
+              )
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          dependencies = report.get("dependencies")
+          if not isinstance(dependencies, list):
+              raise SystemExit(
+                  "::error::Dependency-Check JSON has no dependencies array; refusing an empty scan."
+              )
+
+          identified = [
+              dependency for dependency in dependencies
+              if isinstance(dependency, dict)
+              and (
+                  dependency.get("fileName")
+                  or dependency.get("packages")
+                  or dependency.get("identifiers")
+              )
+          ]
+          print(f"Dependency-Check inventory entries: {len(identified)}")
+          if len(identified) < 25:
+              raise SystemExit(
+                  "::error::Dependency-Check found fewer than 25 dependency entries. "
+                  "The Gradle dependency graph may not have been scanned."
+              )
+          print("Resolved Gradle dependency inventory validation passed.")
+          PY
 
       - name: Upload report
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-report
           path: reports
           if-no-files-found: warn
+
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gradle-resource-${{ github.run_number }}-dependency-check
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  ci-gate:
+    name: Dependency Security Gate
+    runs-on: ubuntu-latest
+    needs:
+      - dependency-change-detection
+      - dependency-check
+    if: ${{ always() }}
+    steps:
+      - name: Checkout gate script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Verify all executed checks completed successfully
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci-gate.py

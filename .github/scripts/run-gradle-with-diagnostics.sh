@@ -33,10 +33,19 @@ gradle_xmx="${GRADLE_CI_GRADLE_XMX:-5g}"
 kotlin_xmx="${GRADLE_CI_KOTLIN_XMX:-2g}"
 gradle_metaspace="${GRADLE_CI_GRADLE_METASPACE:-1g}"
 kotlin_metaspace="${GRADLE_CI_KOTLIN_METASPACE:-768m}"
+gradle_parallel="${GRADLE_CI_PARALLEL:-true}"
+kotlin_parallel="${GRADLE_CI_KOTLIN_PARALLEL:-true}"
 for setting in gradle_xmx kotlin_xmx gradle_metaspace kotlin_metaspace; do
   value="${!setting}"
   if [[ ! "$value" =~ ^[1-9][0-9]*[mMgG]$ ]]; then
     echo "::error::$setting must be a positive JVM memory size such as 2g or 768m (received: $value)." >&2
+    exit 64
+  fi
+done
+for setting in gradle_parallel kotlin_parallel; do
+  value="${!setting}"
+  if [[ "$value" != "true" && "$value" != "false" ]]; then
+    echo "::error::$setting must be true or false (received: $value)." >&2
     exit 64
   fi
 done
@@ -141,6 +150,41 @@ snapshot() {
   } >> "$resource_log" 2>&1
 }
 
+stream_snapshot() {
+  local total_kb available_kb swap_free_kb
+  local cgroup_path cgroup_dir current_bytes peak_bytes max_bytes oom_events
+  local memory_psi cpu_psi io_psi loadavg top_rss timestamp current_mib peak_mib
+  total_kb="$(awk '$1 == "MemTotal:" { print $2; exit }' /proc/meminfo 2>/dev/null || printf '0')"
+  available_kb="$(awk '$1 == "MemAvailable:" { print $2; exit }' /proc/meminfo 2>/dev/null || printf '0')"
+  swap_free_kb="$(awk '$1 == "SwapFree:" { print $2; exit }' /proc/meminfo 2>/dev/null || printf '0')"
+  current_bytes=NA; peak_bytes=NA; max_bytes=NA; oom_events=NA
+  cgroup_path="$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup 2>/dev/null)"
+  cgroup_dir="/sys/fs/cgroup$cgroup_path"
+  if [[ -n "$cgroup_path" && -d "$cgroup_dir" ]]; then
+    [[ -r "$cgroup_dir/memory.current" ]] && current_bytes="$(cat "$cgroup_dir/memory.current")"
+    [[ -r "$cgroup_dir/memory.peak" ]] && peak_bytes="$(cat "$cgroup_dir/memory.peak")"
+    [[ -r "$cgroup_dir/memory.max" ]] && max_bytes="$(cat "$cgroup_dir/memory.max")"
+    if [[ -r "$cgroup_dir/memory.events" ]]; then
+      oom_events="$(awk '$1 == "oom" || $1 == "oom_kill" || $1 == "high" || $1 == "max" { printf "%s=%s,", $1, $2 }' "$cgroup_dir/memory.events" | sed 's/,$//')"
+    fi
+  fi
+  memory_psi=NA; cpu_psi=NA; io_psi=NA
+  if [[ -r /proc/pressure/memory ]]; then
+    memory_psi="$(awk '/^some / { for (i=2;i<=NF;i++) if ($i ~ /^avg10=/) some=$i } /^full / { for (i=2;i<=NF;i++) if ($i ~ /^avg10=/) full=$i } END { print some "/" full }' /proc/pressure/memory)"
+  fi
+  if [[ -r /proc/pressure/cpu ]]; then cpu_psi="$(awk '/^some / { for (i=2;i<=NF;i++) if ($i ~ /^avg10=/) { print $i; exit } }' /proc/pressure/cpu)"; fi
+  if [[ -r /proc/pressure/io ]]; then io_psi="$(awk '/^some / { for (i=2;i<=NF;i++) if ($i ~ /^avg10=/) { print $i; exit } }' /proc/pressure/io)"; fi
+  loadavg="$(awk '{ print $1 "," $2 "," $3 }' /proc/loadavg 2>/dev/null || printf 'NA')"
+  top_rss="$(ps -eo rss,comm --sort=-rss 2>/dev/null | awk 'NR > 1 && NR <= 6 { printf "%s:%sMiB,", $2, int($1/1024) }' | sed 's/,$//')"
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  current_mib=NA; peak_mib=NA
+  if [[ "$current_bytes" =~ ^[0-9]+$ ]]; then current_mib="$((current_bytes / 1048576))"; fi
+  if [[ "$peak_bytes" =~ ^[0-9]+$ ]]; then peak_mib="$((peak_bytes / 1048576))"; fi
+  printf '[ci-resource] utc=%s label=%s available_mib=%s total_mib=%s swap_free_mib=%s cgroup_current_mib=%s cgroup_peak_mib=%s cgroup_max=%s memory_events="%s" memory_psi_avg10="%s" cpu_psi_avg10="%s" io_psi_avg10="%s" loadavg="%s" top_rss="%s"\n' \
+    "$timestamp" "$label" "$((available_kb / 1024))" "$((total_kb / 1024))" "$((swap_free_kb / 1024))" \
+    "$current_mib" "$peak_mib" "$max_bytes" "$oom_events" "$memory_psi" "$cpu_psi" "$io_psi" "$loadavg" "$top_rss"
+}
+
 monitor_pid=""
 gradle_pid=""
 last_jvm_snapshot=0
@@ -162,6 +206,7 @@ handle_signal() {
   fi
   stop_monitor
   snapshot "terminated-by-SIG$signal"
+  stream_snapshot "terminated-by-SIG$signal"
   exit "$exit_code"
 }
 
@@ -171,6 +216,7 @@ trap 'handle_signal TERM 143' TERM
 {
   printf 'Gradle diagnostic label: %s\n' "$label"
   printf 'Gradle worker cap: %s\n' "$max_workers"
+  printf 'Gradle parallel: %s | Kotlin parallel: %s\n' "$gradle_parallel" "$kotlin_parallel"
   printf 'Resource sample interval: %s seconds\n' "$sample_seconds"
   printf 'Resource log: %s\n' "$resource_log"
 } | tee -a "$resource_log"
@@ -178,20 +224,24 @@ trap 'handle_signal TERM 143' TERM
 (
   while true; do
     snapshot "periodic"
+    stream_snapshot "periodic"
     sleep "$sample_seconds"
   done
-) >/dev/null 2>&1 &
+) &
 monitor_pid=$!
 
 # Override the large developer-machine heap only for this CI invocation. The Kotlin
 # daemon is capped separately because it has an independent JVM and memory space.
 gradle_jvmargs="-Xmx$gradle_xmx -XX:MaxMetaspaceSize=$gradle_metaspace -Dfile.encoding=UTF-8 -XX:+UseG1GC"
 kotlin_jvmargs="-Xmx$kotlin_xmx -XX:MaxMetaspaceSize=$kotlin_metaspace"
-# Retain parallel project execution while limiting workers and compiler JVMs.
+# Keep JVM and task concurrency settings identical across Gradle invocations in one CI job.
+# This avoids retaining a developer-heap daemon beside a separately capped daemon.
 set -- "$gradle_executable" \
   "--max-workers=$max_workers" \
   "-Dorg.gradle.jvmargs=$gradle_jvmargs" \
+  "-Dorg.gradle.parallel=$gradle_parallel" \
   "-Pkotlin.daemon.jvmargs=$kotlin_jvmargs" \
+  "-Pkotlin.parallel.tasks.in.project=$kotlin_parallel" \
   "$@"
 
 "$@" &
@@ -202,6 +252,7 @@ gradle_pid=""
 
 stop_monitor
 snapshot "final-gradle-exit-$gradle_status"
+stream_snapshot "final-gradle-exit-$gradle_status"
 
 printf 'Gradle diagnostic wrapper completed with exit code %s.\n' "$gradle_status"
 exit "$gradle_status"

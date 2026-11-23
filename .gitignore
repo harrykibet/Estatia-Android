@@ -37,6 +37,7 @@ app/build/
 /.cxx/
 
 # Misc
+ksp_*.txt
 dependencies_tree.txt
 dependency_tree.txt
 java_pid4268.hprof

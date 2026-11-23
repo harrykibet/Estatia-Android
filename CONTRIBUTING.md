@@ -67,14 +67,28 @@ Documentation-only changes do not need Android compilation, architecture tests, 
 
 When a documentation change also modifies executable scripts, GitHub Actions workflows, build configuration, or application source, run the relevant checks for those files as well.
 
-### Application, build, or architecture changes
+### Scripts and GitHub automation
 
-For Kotlin/Java source, Android resources, Gradle build logic, or architecture-affecting configuration, run the authoritative architecture contract:
+For shell scripts, Python helpers, GitHub Actions workflows, or automation configuration, run lightweight syntax checks:
 
-```bash
-./gradlew verifyArchitecture
-```
+    bash -n path/to/script.sh
+    python3 -m py_compile path/to/script.py
 
+The PR workflow also runs .github/scripts/validate-tooling.py on changed tooling/configuration files. It checks shell syntax, Python parsing, and supported YAML/JSON/XML/TOML files. ShellCheck warnings are added when ShellCheck is available.
+
+### Ordinary application and module changes
+
+For a Kotlin/Java source fix or a change contained within one module, run the narrowest useful verification. Estatia's Gradle calculateImpact task identifies the owning module and downstream consumers, then selects available compile/lint/unit-test tasks. You can inspect its output with:
+
+    ./gradlew calculateImpact
+
+Run the selected tasks printed as IMPACT_TASKS=.... A syntax error such as a missing brace should be caught by the affected module's compilation or unit-test task; it does not by itself require a full release build or device fleet.
+
+### Gradle configuration and global architecture changes
+
+Module-level Gradle edits receive a Gradle configuration check and impacted module compile/lint/unit-test tasks. Root build configuration and build logic may select the global path. Run the authoritative architecture contract for root build configuration, build logic, architecture enforcement, module boundaries, or other global policy changes:
+
+    ./gradlew verifyArchitecture
 Other useful checks for code changes include:
 
 ```bash

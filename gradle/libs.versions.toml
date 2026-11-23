@@ -1,6 +1,6 @@
 [versions]
 
-androidGradlePlugin = "9.4.0"
+androidGradlePlugin = "9.4.1"
 androidTools = "32.4.0"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.8.0"
@@ -19,10 +19,13 @@ androidx-navigation = "2.9.8"
 androidx-recyclerview = "1.4.0"
 androidx-room = "2.8.4"
 androidx-security-crypto = "1.1.0"
+tink = "1.24.0"
 androidx-swiperefreshlayout = "1.2.0"
 androidx-test-core = "1.7.0"
 androidx-test-espresso = "3.7.0"
 androidx-test-ext-junit = "1.3.0"
+androidx-test-runner = "1.7.0"
+androidx-test-monitor = "1.8.0"
 androidx-test-uiautomator = "2.4.0"
 androidx-compose-ui-test = "1.12.0"
 androidx-viewpager2 = "1.1.0"
@@ -32,7 +35,7 @@ bouncy-prov = "1.87"
 compose-bom =  "2026.08.00"
 credentialManager = "1.6.0"
 dokka = "2.2.0"
-firebase-bom = "34.18.0"
+firebase-bom = "35.2.0"
 firebaseCrashlyticsPlugin = "3.0.8"
 firebasePerfPlugin = "2.0.2"
 google-android-material = "1.14.0"
@@ -51,9 +54,9 @@ google-mlkit-image-labeling = "17.0.9"
 google-mlkit-text-recognition = "16.0.1"
 junit-junit = "4.13.2"
 junit-jupiter = "6.1.3"
-kotlin = "2.4.10"
+kotlin = "2.4.21"
 kotest = "6.2.4"
-ksp = "2.3.11"
+ksp = "2.3.12"
 leakcanary = "3.0-alpha-9"
 maps-compose = "8.5.0"
 mockk = "1.14.11"
@@ -61,8 +64,8 @@ moduleGraph = "2.9.1"
 okhttp3 = "5.5.0"
 retrofit2 = "3.0.0"
 truth = "1.4.5"
-benchmarkMacroJunit4 = "1.4.1"
-baselineprofile = "1.4.1"
+benchmarkMacroJunit4 = "1.5.0"
+baselineprofile = "1.5.0"
 profileinstaller = "1.4.1"
 jacoco = "0.8.15"
 sonarqube = "7.4.0.8496"
@@ -85,11 +88,12 @@ kotlin-compile-testing = "1.6.0"
 accompanist = "0.37.3"
 glide = "5.0.9"
 googleServices = "4.5.0"
-guava = "33.7.1-jre"
+guava = "33.8.0-jre"
 mapsPlatformSecrets = "2.0.1"
-micrometer = "1.17.1"
-protobufJava = "3.25.5"
+micrometer = "1.18.0"
+prometheusMetrics = "1.7.0"
 retrofitSerialization = "1.0.0"
+robolectric = "4.17"
 
 [plugins]
 
@@ -223,13 +227,10 @@ analytics = [
     "metrics-performance",
     "play-services-appset",
     "opentelemetry-api",
-    "opentelemetry-exporter-otlp",
     "micrometer-core",
     "micrometer-registry-prometheus",
     "micrometer-registry-otlp",
     "conscrypt-openjdk-uber",
-    "protobufJava",
-    "opentelemetry-sdk"
 ]
 
 play = [
@@ -305,7 +306,6 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 androidx-dataStore = { group = "androidx.datastore", name = "datastore", version.ref = "androidxDataStore" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 protobuf-kotlin-lite = { group = "com.google.protobuf", name = "protobuf-kotlin-lite", version.ref = "protobuf" }
-protobufJava = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "protobufJava" }
 protobuf-protoc = { group = "com.google.protobuf", name = "protoc", version.ref = "protobuf" }
 protobuf-javalite = { group = "com.google.protobuf", name = "protobuf-javalite", version.ref = "protobuf" }
 
@@ -329,8 +329,8 @@ androidx-compose-material3-adaptive-layout = { group = "androidx.compose.materia
 androidx-compose-material3-adaptive-navigation = { group = "androidx.compose.material3.adaptive", name = "adaptive-navigation"}
 androidx-compose-material3-windowSizeClass = { group = "androidx.compose.material3", name = "material3-window-size-class" }
 androidx-compose-material3-navigationSuite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
-google-accompanist = { group = "com.google.accompanist", name = "accompanist-pager", version.ref = "accompanist" }
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
+google-accompanist = { group = "com.google.accompanist", name = "accompanist-pager", version.ref = "accompanist" }
 
 # Lifecycle
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidx-lifecycle" }
@@ -379,6 +379,8 @@ glide-compiler = { group = "com.github.bumptech.glide", name = "compiler", versi
 
 # Testing
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidx-test-runner" }
+androidx-test-monitor = { group = "androidx.test", name = "monitor", version.ref = "androidx-test-monitor" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidx-test-espresso" }
 core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "androidx-arch-core" }
 espresso-intents = { group = "androidx.test.espresso", name = "espresso-intents", version.ref = "androidx-test-espresso" }
@@ -393,12 +395,13 @@ androidx-test-core-ktx = { group = "androidx.test", name = "core-ktx", version.r
 androidx-tracing = { group = "androidx.tracing", name = "tracing", version.ref = "androidx-tracing" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 junit-vintage-engine = { group = "org.junit.vintage", name = "junit-vintage-engine", version.ref = "junit-vintage" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 amplify-core = { group = "com.amplifyframework", name = "aws-core", version.ref = "amplify" }
 amplify-api = { group = "com.amplifyframework", name = "aws-api", version.ref = "amplify" }
+amplify-analytics = { group = "com.amplifyframework", name = "aws-analytics-pinpoint", version.ref = "amplify" }
 amplify-auth = { group = "com.amplifyframework", name = "aws-auth-cognito", version.ref = "amplify" }
 amplify-storage = { group = "com.amplifyframework", name = "aws-storage-s3", version.ref = "amplify" }
-amplify-analytics = { group = "com.amplifyframework", name = "aws-analytics-pinpoint", version.ref = "amplify" }
 amplify-logging = { group = "com.amplifyframework", name = "aws-logging-cloudwatch", version.ref = "amplify" }
 aws-appconfig = { group = "aws.sdk.kotlin", name = "appconfigdata", version.ref = "aws-sdk-kotlin-appconfigdata" }
 android-desugarJdkLibs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "androidDesugarJdkLibs" }
@@ -450,6 +453,7 @@ media3-exoplayer-workmanager = { group = "androidx.media3", name = "media3-exopl
 
 # Security
 security-crypto-ktx = { group = "androidx.security", name = "security-crypto-ktx", version.ref = "androidx-security-crypto" }
+tink-android = { group = "com.google.crypto.tink", name = "tink-android", version.ref = "tink" }
 bcprov-jdk18on = {group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncy-prov"}
 bcpkix-jdk18on = {group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncy-kix"}
 androidx-credential-manager = { group = "androidx.credentials",name = "credentials", version.ref = "credentialManager" }
@@ -476,10 +480,9 @@ caffeine = "com.github.ben-manes.caffeine:caffeine:3.2.4"
 
 # Analytics and Perfomance
 opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.65.0"
-opentelemetry-sdk = "io.opentelemetry:opentelemetry-sdk:1.34.1"
-opentelemetry-exporter-otlp = "io.opentelemetry:opentelemetry-exporter-otlp:1.65.0"
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
+prometheus-metrics-annotations = { group = "io.prometheus", name = "prometheus-metrics-annotations", version.ref = "prometheusMetrics" }
 micrometer-registry-otlp = { module = "io.micrometer:micrometer-registry-otlp", version.ref = "micrometer" }
 conscrypt-openjdk-uber = "org.conscrypt:conscrypt-openjdk-uber:2.6.3"
 metrics-performance = { group = "androidx.metrics", name = "metrics-performance", version.ref = "androidx-metrics" }

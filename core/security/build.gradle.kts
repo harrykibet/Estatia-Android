@@ -22,6 +22,8 @@ dependencies {
     implementation(libs.material)
 
     implementation(libs.security.crypto.ktx)
+    // AndroidX Security Crypto 1.1.0 brings Tink 1.8.x transitively; pin the fixed Android runtime.
+    implementation(libs.tink.android)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
 

@@ -1,3 +1,4 @@
+import androidx.baselineprofile.gradle.consumer.BaselineProfileConsumerExtension
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import com.android.build.api.artifact.SingleArtifact
@@ -17,6 +18,13 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
         pluginManager.apply("com.android.application")
         pluginManager.apply("androidx.baselineprofile")
+
+        // Keep Demo and Prod release profiles separate and versioned with source.
+        // Startup and full journey rules are generated into each variant's source set.
+        extensions.configure<BaselineProfileConsumerExtension>("baselineProfile") {
+            mergeIntoMain = false
+            saveInSrc = true
+        }
         pluginManager.apply("com.estatia.realestate.apps.android.hilt")
         pluginManager.apply("com.estatia.realestate.apps.android.config")
         pluginManager.apply("com.estatia.realestate.apps.android.protolite")

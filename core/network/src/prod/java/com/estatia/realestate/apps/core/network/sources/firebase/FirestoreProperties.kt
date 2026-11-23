@@ -29,6 +29,7 @@ import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDataso
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
@@ -200,20 +201,30 @@ internal class FirestoreProperties @Inject constructor(
             }
 
 
-            val property = snapshot.toObject(PropertyEntityModel::class.java)
-                ?: throw DatabaseException.InvalidData(
-                    "Unable to parse property"
-                )
+            val property = snapshot.data?.let { fields ->
+                FirestorePropertyMapper.toEntity(snapshot.id, fields)
+            } ?: throw DatabaseException.InvalidData(
+                "Unable to parse property"
+            )
 
-            // Try to fetch contact info if available (gated by rules)
-            val contactSnapshot = database.collection(PROPERTIES)
-                .document(propertyId)
-                .collection(CONTACT)
-                .document("info")
-                .get()
-                .await()
+            // Contact information is separately gated. A user may be allowed to
+            // read the public property but not its contact document.
+            val contactInfo = try {
+                database.collection(PROPERTIES)
+                    .document(propertyId)
+                    .collection(CONTACT)
+                    .document("info")
+                    .get()
+                    .await()
+                    .toObject(PropertyContactEntity::class.java)
+            } catch (exception: FirebaseFirestoreException) {
+                if (exception.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    throw exception
+                }
 
-            val contactInfo = contactSnapshot.toObject(PropertyContactEntity::class.java)
+                metricsTracker.incrementCounter("network.properties.contact_read_denied")
+                null
+            }
 
             property.copy(contact = contactInfo)
         }
@@ -240,7 +251,11 @@ internal class FirestoreProperties @Inject constructor(
                         .whereIn(FieldPath.documentId(), chunk)
                         .get()
                         .await()
-                        .documents.mapNotNull { it.toObject(PropertyEntityModel::class.java) }
+                        .documents.mapNotNull { document ->
+                            document.data?.let { fields ->
+                                FirestorePropertyMapper.toEntity(document.id, fields)
+                            }
+                        }
                 }
             } else {
                 emptyList()
@@ -378,7 +393,7 @@ internal class FirestoreProperties @Inject constructor(
 
                         if(cursor != null)
                             it.startAfter(
-                                cursor.createdAt,
+                                FirestorePropertyMapper.toFirestoreCursorValue(cursor),
                                 cursor.documentId
                             )
                         else
@@ -393,10 +408,10 @@ internal class FirestoreProperties @Inject constructor(
 
 
             val properties =
-                snapshot.documents.mapNotNull {
-                    it.toObject(
-                        PropertyEntityModel::class.java
-                    )
+                snapshot.documents.mapNotNull { document ->
+                    document.data?.let { fields ->
+                        FirestorePropertyMapper.toEntity(document.id, fields)
+                    }
                 }
 
 
@@ -408,13 +423,9 @@ internal class FirestoreProperties @Inject constructor(
                 properties = properties,
                 cursor =
                     last?.let {
-                        PropertyCursor(
-                            createdAt =
-                                it.getLong(
-                                    FirestoreFields.CREATED_AT
-                                ) ?: 0L,
-                            documentId =
-                                it.id
+                        FirestorePropertyMapper.toCursor(
+                            documentId = it.id,
+                            rawCreatedAt = it.get(FirestoreFields.CREATED_AT),
                         )
                     }
             )

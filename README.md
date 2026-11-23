@@ -155,37 +155,37 @@ Engineered for:
 
 For contributors and engineers seeking deeper technical insights:
 
-* [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — Full system architecture, module responsibilities, data flow, concurrency, and scalability.
-* [ENGINEERING.md](./docs/ENGINEERING.md) — Coding standards, testing, performance, security, CI/CD, and developer guidelines.
-* [CI/CD strategy](./docs/CICD.md) — Pipeline tiers, verification commands, and workflow operations.
+* [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — module responsibilities, boundaries, and data flow.
+* [ENGINEERING.md](./docs/ENGINEERING.md) — coding standards, testing, performance, and security.
+* [CI/CD strategy](./docs/CICD.md) — path-aware verification tiers and operational commands.
 
 ## Community and Participation
 
-Please review these project policies before contributing or reporting a problem:
+Please review these policies before contributing or reporting a problem:
 
-* [Code of Conduct](./CODE_OF_CONDUCT.md) — expectations for respectful participation and private conduct reporting.
-* [Contributing Guide](./CONTRIBUTING.md) — development setup, architecture expectations, verification commands, and pull request process.
-* [Support](./SUPPORT.md) — where to ask questions and how to report reproducible problems.
-* [Security Policy](./SECURITY.md) — private vulnerability reporting and supported versions.
-* [Accessibility Guidelines](./ACCESSIBILITY.md) — accessibility expectations for user-facing changes.
-* [Issue templates](./.github/ISSUE_TEMPLATE/) and [Pull Request template](./.github/PULL_REQUEST_TEMPLATE.md) — structured reporting and review information.
+* [Code of Conduct](./CODE_OF_CONDUCT.md)
+* [Contributing Guide](./CONTRIBUTING.md)
+* [Support](./SUPPORT.md)
+* [Security Policy](./SECURITY.md)
+* [Accessibility Guidelines](./ACCESSIBILITY.md)
+* [Issue templates](./.github/ISSUE_TEMPLATE/) and [Pull Request template](./.github/PULL_REQUEST_TEMPLATE.md)
 
 ### Verification Contract
 
-For changes to application source, build logic, or architecture, run the authoritative architecture gate:
+Verification is selected by change impact; a full Android build is not the default for every edit.
 
-```bash
-./gradlew verifyArchitecture
-```
+* Documentation changes receive Markdown, relative-link, code-fence, and issue-form validation.
+* Scripts and GitHub automation receive shell/Python syntax and supported configuration parsing.
+* Ordinary Kotlin/Android changes use Gradle impact analysis to select module compile, lint, and unit-test tasks.
+* Module Gradle files receive project-configuration validation.
+* Global build logic and architecture enforcement changes receive the full architecture gate.
+* R8 release, UI smoke, Firebase emulator, and Baseline Profile checks run only for their relevant change areas.
 
-This Android build gate is not required for documentation-only changes. For docs-only pull requests, validate Markdown formatting and links, review code examples for accuracy, and validate structured YAML such as GitHub issue forms. Android compilation, instrumentation, release/R8, and mutation checks are not needed unless the change also affects application code, build logic, or executable automation.
+Run the global architecture gate locally when changing root build configuration, build logic, architecture enforcement, module boundaries, or shared project policy:
 
-This task aggregates:
-- **Lint**: Semantic implementation checks.
-- **Konsist**: Global structural invariants.
-- **KSP**: Compiler-level contract enforcement.
-- **Canary**: Heartbeat and regression verification.
-- **Graph**: Dependency boundary validation.
+    ./gradlew verifyArchitecture
+
+This gate includes lint, structural invariants, compiler-level architecture contracts, canary checks, and dependency-boundary validation.
 
 ---
 
