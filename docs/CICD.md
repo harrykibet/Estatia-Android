@@ -78,7 +78,7 @@ A push to main uses the same change classification. Ordinary source edits run im
 
 ### Tier 3: Nightly and manual exhaustive verification
 
-Nightly and manual workflows retain the broad regression, chaos, coverage, benchmark, security, baseline-profile, and architecture audits. This keeps expensive fleet-level verification available without making every small PR pay for it.
+Nightly and manual workflows retain the broad regression, chaos, coverage, benchmark, security, baseline-profile, and architecture audits. This keeps expensive fleet-level verification available without making every small PR pay for it. The nightly workflow serializes scheduled and manual runs without cancelling an active exhaustive run, caps the architecture/coverage Gradle workload at one worker, and publishes a final job-result summary. Test, benchmark, quality, and security reports are uploaded even when their producing step fails, with explicit 7- or 14-day retention; live Gradle resource diagnostics remain available for five days. Nightly Dependency-Check uses the shared Gradle init script to scan both Demo and Production release runtime dependency graphs, restores its NVD database cache, requires the configured NVD API key, and validates the generated JSON inventory before treating the scan as complete.
 
 ## 📱 Supported Hardware Fleet (GMD)
 
