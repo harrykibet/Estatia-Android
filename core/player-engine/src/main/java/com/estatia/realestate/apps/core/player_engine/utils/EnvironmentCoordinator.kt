@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +57,13 @@ class EnvironmentCoordinator @Inject constructor(
 
     val environment: StateFlow<EnvironmentState> = _environment.asStateFlow()
 
-    private val _meteredConnectionDetected = MutableSharedFlow<Unit>(replay = 0)
+    private val _meteredConnectionDetected = MutableSharedFlow<Unit>(
+        replay = 0,
+        // tryEmit on an unbuffered flow fails whenever someone is collecting, so the event
+        // would be dropped exactly when a listener exists.
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val meteredConnectionDetected = _meteredConnectionDetected.asSharedFlow()
 
     private var job: Job? = null

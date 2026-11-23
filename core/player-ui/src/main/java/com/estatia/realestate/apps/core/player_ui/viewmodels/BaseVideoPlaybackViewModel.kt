@@ -176,7 +176,14 @@ abstract class BaseVideoPlaybackViewModel(
 
     fun retry() {
         val context = lastMediaContext ?: return
-        coordinator.retry(viewModelScope, context.mediaId, context.uri)
+        coordinator.retry(
+            viewModelScope,
+            context.mediaId,
+            context.uri,
+            context.matchScore,
+            context.title,
+            context.artist
+        )
     }
 
     suspend fun getPlayer(mediaId: String, uri: MediaReference, mediaType: MediaType, matchScore: Float): Player =

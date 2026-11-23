@@ -37,7 +37,9 @@ class NetworkRecoveryCoordinator @Inject constructor(
         Confinement.checkMainThread()
         engineScope.launch(playerDispatcher) {
             networkStateProvider.observe().collect { state ->
-                if (state is NetworkState.Connected) {
+                // PoorConnection is still a usable network: waiting for a full "Connected"
+                // would leave players parked in Reconnecting indefinitely on such networks.
+                if (state is NetworkState.Connected || state is NetworkState.PoorConnection) {
                     pool.forEachPlayer { player, _ ->
                         val mediaId = pool.getMediaId(player)
                         if (mediaId != null) {
@@ -55,12 +57,12 @@ class NetworkRecoveryCoordinator @Inject constructor(
 
     /**
      * Returns true if the specified [PlaybackException] is caused by a network issue.
+     * Server-side failures (bad HTTP status, cleartext policy) are deliberately excluded:
+     * they are not fixed by connectivity returning, so they must surface as errors.
      */
     fun isNetworkError(error: PlaybackException): Boolean {
         return error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
     }
 
     /**

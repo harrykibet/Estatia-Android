@@ -23,6 +23,7 @@ import com.estatia.realestate.apps.core.player_engine.streaming.ICacheSizingPoli
 import com.estatia.realestate.apps.core.player_engine.streaming.AdaptiveCacheSizingPolicy
 import com.estatia.realestate.apps.core.common.interfaces.IDeviceUtils
 import com.estatia.realestate.apps.core.network.di.PlaybackClient
+import com.estatia.realestate.apps.core.network.interfaces.INetworkStateProvider
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -86,7 +87,8 @@ object StreamingModule {
         deviceUtils: IDeviceUtils,
         cdnSelector: CdnSelector,
         healthMonitor: CdnHealthMonitor,
-        logger: ILogger
+        logger: ILogger,
+        networkStateProvider: INetworkStateProvider
     ): DataSource.Factory {
         val caps = mutableListOf<String>()
         if (deviceUtils.supportsAV1()) caps.add("av1")
@@ -103,7 +105,13 @@ object StreamingModule {
 
         // 🏎️ High-Integrity Failover: Wrap the network factory in a failover decorator
         // that handles segment-level CDN switching.
-        return CdnFailoverDataSourceFactory(baseFactory, cdnSelector, healthMonitor, logger)
+        return CdnFailoverDataSourceFactory(
+            baseFactory,
+            cdnSelector,
+            healthMonitor,
+            logger,
+            networkState = { networkStateProvider.current() }
+        )
     }
 
     @Provides

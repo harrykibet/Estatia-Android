@@ -8,7 +8,9 @@ import com.estatia.realestate.apps.core.model.property.MediaType
 import com.estatia.realestate.apps.core.player_engine.utils.EnvironmentCoordinator
 import com.estatia.realestate.apps.core.model.player.EnvironmentState
 import io.mockk.coVerify
+import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.slot
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
@@ -118,5 +120,76 @@ class PlayerManagerTest {
 
         verify { orchestrator.pauseCurrentPlayer() }
         verify { audioFocusManager.abandon() }
+    }
+
+    @Test
+    fun `foreground after a reclaim rebuilds playback instead of resuming a dead player`() = testScope.runTest {
+        val backgrounded = slot<suspend () -> Unit>()
+        val foregrounded = slot<suspend () -> Unit>()
+        val reclaimed = slot<suspend () -> Unit>()
+        verify { environmentManager.start(capture(backgrounded), capture(foregrounded), capture(reclaimed)) }
+
+        every { orchestrator.isCurrentlyPlaying() } returns true
+        coEvery { orchestrator.restoreLastPlayback() } returns true
+
+        backgrounded.captured.invoke()
+        reclaimed.captured.invoke()
+        foregrounded.captured.invoke()
+
+        verify { orchestrator.onPoolReleased() }
+        coVerify { orchestrator.restoreLastPlayback() }
+        verify(exactly = 0) { orchestrator.resumeCurrentPlayer() }
+        verify { audioFocusManager.request() }
+    }
+
+    @Test
+    fun `foreground without a reclaim resumes the paused player and re-requests focus`() = testScope.runTest {
+        val backgrounded = slot<suspend () -> Unit>()
+        val foregrounded = slot<suspend () -> Unit>()
+        verify { environmentManager.start(capture(backgrounded), capture(foregrounded), any()) }
+
+        every { orchestrator.isCurrentlyPlaying() } returns true
+        coEvery { orchestrator.restoreLastPlayback() } returns false
+
+        backgrounded.captured.invoke()
+        foregrounded.captured.invoke()
+
+        verify { orchestrator.resumeCurrentPlayer() }
+        verify { audioFocusManager.request() }
+    }
+
+    @Test
+    fun `foreground does not resume playback that was not playing before`() = testScope.runTest {
+        val backgrounded = slot<suspend () -> Unit>()
+        val foregrounded = slot<suspend () -> Unit>()
+        verify { environmentManager.start(capture(backgrounded), capture(foregrounded), any()) }
+
+        every { orchestrator.isCurrentlyPlaying() } returns false
+
+        backgrounded.captured.invoke()
+        foregrounded.captured.invoke()
+
+        verify(exactly = 0) { orchestrator.resumeCurrentPlayer() }
+        coVerify(exactly = 0) { orchestrator.restoreLastPlayback() }
+    }
+
+    @Test
+    fun `focus callbacks are wired to the matching orchestrator operations`() = testScope.runTest {
+        val onLost = slot<(Boolean) -> Unit>()
+        val onGained = slot<() -> Unit>()
+        val onDuck = slot<() -> Unit>()
+        val onUnduck = slot<() -> Unit>()
+        verify { audioFocusManager.setCallbacks(capture(onLost), capture(onGained), capture(onDuck), capture(onUnduck)) }
+
+        onLost.captured(false)
+        verify { orchestrator.pauseForFocusLoss(true) }
+        onLost.captured(true)
+        verify { orchestrator.pauseForFocusLoss(false) }
+        onDuck.captured()
+        verify { orchestrator.duck() }
+        onGained.captured()
+        verify { orchestrator.resumeAfterFocusGain() }
+        onUnduck.captured()
+        verify { orchestrator.unduck() }
     }
 }

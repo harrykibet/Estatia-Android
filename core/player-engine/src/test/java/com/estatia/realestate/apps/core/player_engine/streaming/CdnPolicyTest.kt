@@ -99,4 +99,60 @@ class CdnPolicyTest {
         // Then
         assertEquals(endpoints[0], selected)
     }
+
+    @Test
+    fun `metered network random fallback never picks an open-circuit endpoint`() = runTest {
+        // Given: the random index is mocked to 0, which would be the open endpoint
+        // if the circuit state were ignored.
+        environmentFlow.value = environmentFlow.value.copy(isMetered = true)
+        val snapshot = mapOf(
+            endpoints[0].baseUrl to CdnHealth(null, 3, 0, testClock.currentTimeMillis() + 10000)
+        )
+
+        // When
+        val selected = policy.select(endpoints, snapshot)
+
+        // Then
+        assertEquals(endpoints[1], selected)
+    }
+
+    @Test
+    fun `throttled device random fallback never picks an open-circuit endpoint`() = runTest {
+        environmentFlow.value = environmentFlow.value.copy(shouldThrottlePerformance = true)
+        val snapshot = mapOf(
+            endpoints[0].baseUrl to CdnHealth(null, 3, 0, testClock.currentTimeMillis() + 10000)
+        )
+
+        val selected = policy.select(endpoints, snapshot)
+
+        assertEquals(endpoints[1], selected)
+    }
+
+    @Test
+    fun `metered network with every circuit open still returns an endpoint`() = runTest {
+        environmentFlow.value = environmentFlow.value.copy(isMetered = true)
+        val snapshot = mapOf(
+            endpoints[0].baseUrl to CdnHealth(null, 3, 0, testClock.currentTimeMillis() + 10000),
+            endpoints[1].baseUrl to CdnHealth(null, 3, 0, testClock.currentTimeMillis() + 10000)
+        )
+
+        val selected = policy.select(endpoints, snapshot)
+
+        // Falls back to the full list rather than failing; index 0 is mocked.
+        assertEquals(endpoints[0], selected)
+    }
+
+    @Test
+    fun `scored fallback after all circuits clear returns to latency based choice`() = runTest {
+        val snapshot = mapOf(
+            // Circuit already expired (open-until is in the past), so it is eligible again.
+            endpoints[0].baseUrl to CdnHealth(latencyMs = 20, 3, 0, testClock.currentTimeMillis() - 1),
+            endpoints[1].baseUrl to CdnHealth(latencyMs = 90, 0, 0, null)
+        )
+
+        val selected = policy.select(endpoints, snapshot)
+
+        // 20 + 3*250 = 770 vs 90 -> endpoint B still wins on the failure penalty.
+        assertEquals(endpoints[1], selected)
+    }
 }

@@ -87,6 +87,14 @@ interface IPlayerManager {
     fun observeState(mediaId: String): Flow<PlaybackStateReducer.State>
 
     /**
+     * Returns a [Flow] of the [Player] currently backing [mediaId] (`null` when none).
+     *
+     * Emits again whenever the pool replaces, evicts or reclaims that player, so UI holding a
+     * player reference can follow it instead of keeping a released or recycled instance.
+     */
+    fun observePlayer(mediaId: String): Flow<Player?>
+
+    /**
      * Releases all managed players and stops background orchestration services.
      */
     fun shutdown()
