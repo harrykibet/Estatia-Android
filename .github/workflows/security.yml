@@ -166,7 +166,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           ODC_DATA_DIRECTORY: ${{ runner.temp }}/dependency-check-data
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          PR_ACTOR: ${{ github.actor }}
+          PR_ACTOR: ${{ github.event.pull_request.user.login || github.actor }}
         shell: bash
         run: |
           set -euo pipefail
