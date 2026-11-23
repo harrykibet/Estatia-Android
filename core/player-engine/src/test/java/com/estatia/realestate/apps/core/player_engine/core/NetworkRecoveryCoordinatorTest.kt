@@ -2,6 +2,7 @@ package com.estatia.realestate.apps.core.player_engine.core
 
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -21,7 +22,9 @@ class NetworkRecoveryCoordinatorTest {
         playerDispatcher = dispatcher
     )
 
-    private fun error(code: Int) = PlaybackException("test", null, code)
+    private fun error(code: Int) = mockk<PlaybackException> {
+        every { errorCode } returns code
+    }
 
     @Test
     fun `connection failures and timeouts are network errors`() {
