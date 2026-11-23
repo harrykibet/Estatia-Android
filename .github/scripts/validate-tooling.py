@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -212,7 +213,8 @@ def _assert_full_scope(label: str, actual: dict) -> None:
     expected = {"source_changed": "true", "gradle_changed": "true",
                 "architecture_changed": "true", "release_changed": "true",
                 "unknown_changed": "true", "baseline_changed": "true",
-                "firebase_changed": "true", "docs_only": "false"}
+                "firebase_changed": "true", "docs_only": "false",
+                "compile_only_allowed": "false"}
     mismatches = {k: (v, actual.get(k)) for k, v in expected.items() if actual.get(k) != v}
     if mismatches:
         raise AssertionError(f"Fail-open case {label} did not retain full scope: {mismatches}")
@@ -368,6 +370,31 @@ def test_ci_gate() -> None:
             raise AssertionError(f"CI gate case {label}: expected exit {expected}, got {code}")
 
 
+def test_diagnostics_wrapper_pipe() -> None:
+    """The resource sampler must not hold the output pipe open after Gradle exits."""
+    wrapper = ROOT / ".github" / "scripts" / "run-gradle-with-diagnostics.sh"
+    with tempfile.TemporaryDirectory(prefix="estatia-wrapper-") as temporary:
+        root = Path(temporary)
+        fake = root / "gradlew"
+        fake.write_text("#!/usr/bin/env bash\necho fake-gradle\nsleep 1\n", encoding="utf-8")
+        fake.chmod(0o755)
+        env = os.environ.copy()
+        env.update({"RUNNER_TEMP": str(root / "runner"), "GRADLE_CI_SAMPLE_SECONDS": "30"})
+        env.pop("GITHUB_STEP_SUMMARY", None)
+        started = time.monotonic()
+        # communicate() waits for EOF on the pipe, exactly like `| tee` does.
+        process = subprocess.Popen(
+            ["bash", str(wrapper), "pipe-test", "./gradlew", "build"],
+            cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        output, _ = process.communicate(timeout=120)
+        elapsed = time.monotonic() - started
+        if process.returncode != 0 or "fake-gradle" not in output:
+            raise AssertionError(f"Wrapper did not pass Gradle through: {output}")
+        if elapsed > 15:
+            raise AssertionError(f"Wrapper held the output pipe open for {elapsed:.1f}s after Gradle exited.")
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
@@ -411,6 +438,8 @@ def main() -> int:
         print("Change-scope classifier self-tests passed (path categories, fail-open, shallow checkout, renames, diverged base).")
         test_ci_gate()
         print("CI gate self-tests passed.")
+        test_diagnostics_wrapper_pipe()
+        print("Diagnostics wrapper pipe self-test passed.")
     except (AssertionError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"::error::Tooling self-test failed: {error}", file=sys.stderr)
         return 1
