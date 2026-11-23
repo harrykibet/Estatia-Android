@@ -166,14 +166,15 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
           ODC_DATA_DIRECTORY: ${{ runner.temp }}/dependency-check-data
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          PR_ACTOR: ${{ github.event.pull_request.user.login || github.actor }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/dependency-check-data" "$GITHUB_WORKSPACE/reports"
 
           if [[ -z "${NVD_API_KEY:-}" ]]; then
-            if [[ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
-              echo "::warning::NVD_API_KEY is not available to fork pull requests; Dependency-Check will use unauthenticated NVD access."
+            if [[ "$PR_HEAD_REPO" != "$GITHUB_REPOSITORY" || "$PR_ACTOR" == "dependabot[bot]" ]]; then
+              echo "::warning::NVD_API_KEY is unavailable to fork or Dependabot pull requests; Dependency-Check will use unauthenticated NVD access."
             else
               echo "::error::The repository secret NVD_API_KEY is required for this repository's Dependency-Check scan."
               exit 1

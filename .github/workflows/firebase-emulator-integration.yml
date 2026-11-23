@@ -86,6 +86,7 @@ jobs:
       - name: Prepare production Firebase application configuration
         env:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
+          ALLOW_CI_FIREBASE_CONFIG_FALLBACK: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
 
       - name: Resolve Firebase project ID for emulator namespace

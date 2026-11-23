@@ -32,13 +32,58 @@ prepare_flavor() {
       ;;
   esac
 
-  if [[ -z "$encoded" ]]; then
-    echo "::error::Required GitHub Actions secret $secret_name is not set."
-    exit 1
-  fi
-
   temp_file="$(mktemp)"
-  if ! printf '%s' "$encoded" | base64 --decode > "$temp_file"; then
+  if [[ -z "$encoded" ]]; then
+    if [[ "${ALLOW_CI_FIREBASE_CONFIG_FALLBACK:-false}" != "true" ]]; then
+      rm -f "$temp_file"
+      echo "::error::Required GitHub Actions secret $secret_name is not set."
+      exit 1
+    fi
+
+    # Dependabot pull_request workflows do not receive repository secrets.
+    # Use Firebase's demo-project namespace so CLI/emulator use is isolated
+    # from production and cannot silently target a live Firebase project.
+    local ci_project_id ci_app_id
+    ci_project_id="demo-estatia-ci-${flavor}"
+    if [[ "$flavor" == "demo" ]]; then
+      ci_app_id="1:123456789012:android:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    else
+      ci_app_id="1:123456789012:android:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    fi
+
+    cat > "$temp_file" <<JSON
+{
+  "project_info": {
+    "project_number": "123456789012",
+    "project_id": "$ci_project_id",
+    "storage_bucket": "$ci_project_id.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "$ci_app_id",
+        "android_client_info": {
+          "package_name": "$expected_package"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUMMYCIKEY000000000000000000000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+JSON
+    echo "::notice::Using isolated $ci_project_id Firebase configuration because repository secrets are unavailable."
+  elif ! printf '%s' "$encoded" | base64 --decode > "$temp_file"; then
     rm -f "$temp_file"
     echo "::error::$secret_name is not valid base64."
     exit 1
