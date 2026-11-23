@@ -6,6 +6,10 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Policy
 import com.estatia.realestate.apps.core.model.system.NetworkState
 import java.io.IOException
 
+/** Pure HTTP status policy, separated from Android-backed Media3 exception construction. */
+internal fun isCdnHttpStatusAtFault(responseCode: Int): Boolean =
+    responseCode >= 500 || responseCode == 408 || responseCode == 429
+
 /**
  * Decides whether a failed load should count against a CDN endpoint's health.
  *
@@ -29,7 +33,7 @@ object CdnFailureAttribution {
         // media is missing or forbidden, and counting it would trip the circuit breaker for
         // every video served from that endpoint after three bad links.
         if (error is HttpDataSource.InvalidResponseCodeException) {
-            return error.responseCode >= 500 || error.responseCode == 408 || error.responseCode == 429
+            return isCdnHttpStatusAtFault(error.responseCode)
         }
         return networkState !is NetworkState.NoInternet
     }
