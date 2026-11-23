@@ -58,15 +58,6 @@
         <vulnerabilityName regex="true">^CVE-(2020-22475|2022-39349)$</vulnerabilityName>
     </suppress>
 
-    <suppress>
-        <notes><![CDATA[
-            CVE-2026-54285 affects the OpenTelemetry JavaScript Node.js client
-            (@opentelemetry/core), not these OpenTelemetry Java Maven artifacts.
-            Match only the exact three Java PURLs and release from this report.
-        ]]></notes>
-        <packageUrl regex="true">^pkg:maven/io\.opentelemetry/opentelemetry-(api|common|context)@1\.65\.0$</packageUrl>
-        <vulnerabilityName>CVE-2026-54285</vulnerabilityName>
-    </suppress>
 
     <suppress>
         <notes><![CDATA[
