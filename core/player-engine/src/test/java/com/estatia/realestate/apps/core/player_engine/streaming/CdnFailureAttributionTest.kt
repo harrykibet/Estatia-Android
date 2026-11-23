@@ -1,8 +1,6 @@
 package com.estatia.realestate.apps.core.player_engine.streaming
 
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.HttpDataSource
 import com.estatia.realestate.apps.core.model.system.NetworkState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -33,35 +31,21 @@ class CdnFailureAttributionTest {
 
     @Test
     fun `http error response is attributed to the CDN even if connectivity reads offline`() {
-        // Receiving any HTTP response proves the device reached the endpoint, so a stale
-        // "offline" reading must not hide a genuine server-side failure.
-        val response = httpError(503)
-
-        assertTrue(CdnFailureAttribution.isCdnAtFault(response, NetworkState.NoInternet))
+        // Receiving an HTTP response proves the endpoint was reachable, even if connectivity is stale.
+        assertTrue(isCdnHttpStatusAtFault(503))
     }
 
     @Test
     fun `client errors are about the media, not the CDN`() {
         listOf(400, 401, 403, 404, 410).forEach { code ->
-            assertFalse("HTTP $code", CdnFailureAttribution.isCdnAtFault(httpError(code), NetworkState.Connected))
+            assertFalse("HTTP $code", isCdnHttpStatusAtFault(code))
         }
     }
 
     @Test
     fun `server errors timeouts and throttling are attributed to the CDN`() {
         listOf(500, 502, 503, 408, 429).forEach { code ->
-            assertTrue("HTTP $code", CdnFailureAttribution.isCdnAtFault(httpError(code), NetworkState.Connected))
+            assertTrue("HTTP $code", isCdnHttpStatusAtFault(code))
         }
-    }
-
-    private fun httpError(code: Int): HttpDataSource.InvalidResponseCodeException {
-        return HttpDataSource.InvalidResponseCodeException(
-            code,
-            "test",
-            null,
-            emptyMap(),
-            DataSpec.Builder().setUri("https://cdn.example.test/media").build(),
-            ByteArray(0)
-        )
     }
 }
