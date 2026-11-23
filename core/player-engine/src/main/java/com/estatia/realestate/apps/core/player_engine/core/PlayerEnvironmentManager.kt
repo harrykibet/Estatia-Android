@@ -36,6 +36,7 @@ class PlayerEnvironmentManager @Inject constructor(
     private var activeMediaId: String? = null
     private var pinnedIds: Set<String> = emptySet()
     private var graceJob: Job? = null
+    private var observationJob: Job? = null
     private var wasEffectivelyBackgrounded = false
 
     fun start(
@@ -44,8 +45,9 @@ class PlayerEnvironmentManager @Inject constructor(
         onResourcesReclaimed: suspend () -> Unit = {}
     ) {
         Confinement.checkMainThread()
+        observationJob?.cancel()
         environmentCoordinator.start(engineScope)
-        engineScope.launch(playerDispatcher) {
+        observationJob = engineScope.launch(playerDispatcher) {
             environmentCoordinator.environment.collect { env ->
                 // 1. React to app visibility and interactivity changes
                 val isEffectivelyBackgrounded = !env.isAppVisible || !env.isInteractive
@@ -101,6 +103,10 @@ class PlayerEnvironmentManager @Inject constructor(
 
     fun stop() {
         Confinement.checkMainThread()
+        observationJob?.cancel()
+        observationJob = null
+        graceJob?.cancel()
+        graceJob = null
         environmentCoordinator.stop()
     }
 
