@@ -13,6 +13,16 @@ android {
         minSdk = 28
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Credentials for the production baseline-profile account come from the
+        // environment, never from -P command-line properties: argv is visible to every
+        // process on the runner and is echoed by Gradle diagnostics.
+        providers.environmentVariable("BASELINE_PROFILE_TEST_EMAIL").orNull?.let {
+            testInstrumentationRunnerArguments["baselineProfileTestEmail"] = it
+        }
+        providers.environmentVariable("BASELINE_PROFILE_TEST_PASSWORD").orNull?.let {
+            testInstrumentationRunnerArguments["baselineProfileTestPassword"] = it
+        }
     }
 
     targetProjectPath = ":app"

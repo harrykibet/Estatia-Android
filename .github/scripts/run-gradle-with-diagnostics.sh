@@ -191,6 +191,9 @@ last_jvm_snapshot=0
 
 stop_monitor() {
   if [[ -n "$monitor_pid" ]]; then
+    # Kill the sampler's in-flight `sleep` first. Killing only the subshell leaves that
+    # child holding this script's stdout open, so `| tee` would wait out the interval.
+    pkill -P "$monitor_pid" 2>/dev/null || true
     kill "$monitor_pid" 2>/dev/null || true
     wait "$monitor_pid" 2>/dev/null || true
     monitor_pid=""
