@@ -147,13 +147,13 @@ jobs:
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
-      # Test reports can contain the account identity or submitted UI text; never
-      # upload them until both configured credentials have been scanned and scrubbed.
+      # Test reports can contain submitted UI text; never upload them until the account
+      # password has been scanned for and scrubbed. The account email is an identifier that
+      # legitimately appears in UI-test logcat output, so it is not treated as a secret here.
       - name: Scrub baseline-profile artifacts for credential material
         id: scrub-baseline-artifacts
         if: always()
         env:
-          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
           BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
         shell: bash
         run: |
@@ -164,7 +164,7 @@ jobs:
               benchmark/build/reports/androidTests/connected \
               benchmark/build/outputs/androidTest-results \
               "$RUNNER_TEMP/gradle-ci-diagnostics" \
-            -- BASELINE_PROFILE_TEST_EMAIL BASELINE_PROFILE_TEST_PASSWORD
+            -- BASELINE_PROFILE_TEST_PASSWORD
       # Preserve the XML/HTML that explains failures inside generateBaselineProfile.
       - name: Upload baseline profile instrumentation reports
         if: ${{ always() && steps.scrub-baseline-artifacts.outcome == 'success' }}
@@ -276,12 +276,19 @@ jobs:
           BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
+          # Only Macrobenchmark rules run here; BaselineProfile generation has its own job.
+          # targetPackageName is normally supplied by the Baseline Profile plugin's generate
+          # task, which this direct connected-test task bypasses, so it is passed explicitly.
           echo "::warning::EMULATOR is suppressed for this hosted AVD only; timings are regression signals, not physical-device performance measurements."
           bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-benchmarks \
             ./gradlew :benchmark:connectedProdBenchmarkAndroidTest \
-            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile,Macrobenchmark \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.targetPackageName=com.estatia.realestate.apps \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
             --no-configuration-cache --stacktrace --console=plain
+      - name: Summarize failed instrumentation tests
+        if: failure()
+        run: python3 ./.github/scripts/summarize-instrumentation-failures.py benchmark/build/outputs/androidTest-results
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
@@ -289,7 +296,6 @@ jobs:
         id: scrub-benchmark-artifacts
         if: always()
         env:
-          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
           BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
         shell: bash
         run: |
@@ -299,7 +305,7 @@ jobs:
               benchmark/build/reports/androidTests/connected \
               benchmark/build/outputs/androidTest-results \
               "$RUNNER_TEMP/gradle-ci-diagnostics" \
-            -- BASELINE_PROFILE_TEST_EMAIL BASELINE_PROFILE_TEST_PASSWORD
+            -- BASELINE_PROFILE_TEST_PASSWORD
       - name: Upload benchmark measurements and instrumentation reports
         if: ${{ always() && steps.scrub-benchmark-artifacts.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
