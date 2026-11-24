@@ -321,7 +321,7 @@ jobs:
           retention-days: 5
 
   quality-metrics:
-    name: Code Quality & Mutation Testing
+    name: Architecture, Lint & Coverage Audit
     runs-on: ubuntu-latest
     timeout-minutes: 100
     env:
