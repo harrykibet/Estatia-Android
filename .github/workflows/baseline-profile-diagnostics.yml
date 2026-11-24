@@ -187,7 +187,9 @@ jobs:
           fi
           mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
           bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
-            ./gradlew "$task" --no-configuration-cache --stacktrace --console=plain \
+            ./gradlew "$task" \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
+            --no-configuration-cache --stacktrace --console=plain \
             2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
