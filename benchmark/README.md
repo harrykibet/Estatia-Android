@@ -21,6 +21,8 @@ Run the production macrobenchmarks against a connected Android device or emulato
 
 The benchmark module targets the app's `prodBenchmark` build variant. The device must be connected through ADB and support AndroidX Macrobenchmark (API 29 or newer). The Nightly workflow provisions a Pixel 6 API 31 emulator, waits for Android boot completion, runs the connected-device tasks, and stops the emulator even if a task fails.
 
+Baseline Profile generation and performance measurement are intentionally different modes. Baseline Profile generation uses `-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile` so emulator runs execute profile-generation tests without running the Macrobenchmark measurement tests. The nightly hosted-emulator macrobenchmark invocation explicitly enables both rule types and suppresses only AndroidX's `EMULATOR` error. This keeps the smoke/regression path executable, but emulator timings are not representative physical-device measurements and must not be used as release-performance claims. Use a supported physical device for authoritative startup/frame-timing comparisons.
+
 To generate variant-specific Baseline and Startup Profiles for both app environments:
 ```bash
 ./gradlew :app:generateDemoReleaseBaselineProfile :app:generateProdReleaseBaselineProfile
