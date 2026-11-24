@@ -78,7 +78,7 @@ A push to main uses the same change classification. Ordinary source edits run im
 
 ### Tier 3: Nightly and manual exhaustive verification
 
-Nightly and manual workflows retain the broad regression, chaos, coverage, benchmark, security, baseline-profile, and architecture audits. This keeps expensive fleet-level verification available without making every small PR pay for it. The nightly workflow serializes scheduled and manual runs without cancelling an active exhaustive run, caps the architecture/coverage Gradle workload at one worker, and publishes a final job-result summary. Test, benchmark, quality, and security reports are uploaded even when their producing step fails, with explicit 7- or 14-day retention; live Gradle resource diagnostics remain available for five days. Nightly Dependency-Check uses the shared Gradle init script to scan both Demo and Production release runtime dependency graphs, restores its NVD database cache, requires the configured NVD API key, and validates the generated JSON inventory before treating the scan as complete.
+Nightly and manual workflows retain the broad regression, chaos, coverage, benchmark, security, baseline-profile, and architecture audits. This keeps expensive fleet-level verification available without making every small PR pay for it. The nightly workflow serializes scheduled and manual runs without cancelling an active exhaustive run, caps the architecture/coverage Gradle workload at one worker, and publishes a final job-result summary. Test, benchmark, quality, and security reports are uploaded even when their producing step fails, with explicit 7- or 14-day retention; live Gradle resource diagnostics remain available for five days. Nightly Dependency-Check uses the shared Gradle init script to scan both Demo and Production release runtime dependency graphs, restores its NVD database cache, requires the configured NVD API key, and validates the generated JSON inventory before treating the scan as complete. Baseline-profile tasks pass only the `BaselineProfile` rule type so emulator runs do not execute device-only macrobenchmark measurements. The hosted-emulator performance lane explicitly suppresses only AndroidX's `EMULATOR` guard and labels its outputs as regression signals; authoritative performance comparisons still require a physical device. Both production instrumentation jobs validate the dedicated benchmark account secrets before provisioning an emulator and scrub uploaded test/diagnostic artifacts for credential material.
 
 ## 📱 Supported Hardware Fleet (GMD)
 
@@ -131,6 +131,8 @@ The current GitHub Actions workflows consume these repository secrets:
 - `KEY_ALIAS`: Plain-text private-key alias inside the keystore.
 - `KEY_PASSWORD`: Plain-text password that unlocks the aliased private key.
 - `NVD_API_KEY`: NVD API key used by the dependency vulnerability scans.
+- `BASELINE_PROFILE_TEST_EMAIL`: Dedicated, verified production Firebase benchmark account email used by authenticated Baseline Profile and nightly macrobenchmark instrumentation.
+- `BASELINE_PROFILE_TEST_PASSWORD`: Password for the dedicated production Firebase benchmark account. Its account must satisfy the phone-verification and Firestore fixture requirements documented in `benchmark/README.md`.
 
 The nightly Baseline Profile job uses the automatically provided `GITHUB_TOKEN` with job-scoped `contents: write`, `pull-requests: write`, and `issues: write` permissions. No separate `CI_PUSH_TOKEN` is required by that job.
 
