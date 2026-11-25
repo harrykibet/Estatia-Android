@@ -321,8 +321,91 @@ jobs:
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.targetPackageName=com.estatia.realestate.apps \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
-            -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.benchmark.StartupBenchmark,com.estatia.realestate.apps.benchmark.ScrollBenchmark \
+            -Pandroid.testInstrumentationRunnerArguments.package=com.estatia.realestate.apps.benchmark \
             --no-configuration-cache --stacktrace --console=plain
+      - name: Verify startup and feed-scroll benchmark coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          result_root = Path("benchmark/build/outputs/androidTest-results/connected")
+          xml_reports = sorted(result_root.rglob("TEST-*.xml"))
+          if not xml_reports:
+              raise SystemExit(
+                  "::error::Macrobenchmark instrumentation produced no JUnit XML reports."
+              )
+
+          observed = {}
+          for report_path in xml_reports:
+              root = ET.parse(report_path).getroot()
+              for testcase in root.findall(".//testcase"):
+                  class_name = testcase.attrib.get("classname", "")
+                  method_name = testcase.attrib.get("name", "")
+                  if class_name and method_name:
+                      observed.setdefault(class_name, set()).add(method_name)
+                  if testcase.find("failure") is not None or testcase.find("error") is not None:
+                      raise SystemExit(
+                          f"::error::Macrobenchmark test failed: {class_name}#{method_name}"
+                      )
+                  if testcase.find("skipped") is not None:
+                      raise SystemExit(
+                          f"::error::Macrobenchmark test was skipped: {class_name}#{method_name}"
+                      )
+
+          required = {
+              "com.estatia.realestate.apps.benchmark.StartupBenchmark": {
+                  "startupCold", "startupWarm", "startupHot"
+              },
+              "com.estatia.realestate.apps.benchmark.ScrollBenchmark": {
+                  "scrollFeed"
+              },
+          }
+          missing = []
+          for class_name, methods in required.items():
+              absent = methods - observed.get(class_name, set())
+              if absent:
+                  missing.append(f"{class_name}: {', '.join(sorted(absent))}")
+          if missing:
+              raise SystemExit(
+                  "::error::Required benchmark test cases did not execute: "
+                  + "; ".join(missing)
+              )
+
+          data_root = Path(
+              "benchmark/build/outputs/connected_android_test_additional_output/"
+              "prodBenchmarkRelease/connected"
+          )
+          data_files = sorted(data_root.rglob("*benchmarkData.json"))
+          if not data_files:
+              raise SystemExit(
+                  "::error::Macrobenchmark produced no benchmarkData.json metrics files."
+              )
+
+          measured = set()
+          for data_path in data_files:
+              payload = json.loads(data_path.read_text(encoding="utf-8"))
+              for benchmark in payload.get("benchmarks", []):
+                  name = benchmark.get("name")
+                  if name:
+                      measured.add(name)
+
+          expected_metrics = {"startupCold", "startupWarm", "startupHot", "scrollFeed"}
+          missing_metrics = expected_metrics - measured
+          if missing_metrics:
+              raise SystemExit(
+                  "::error::Macrobenchmark metrics are missing: "
+                  + ", ".join(sorted(missing_metrics))
+              )
+
+          for class_name, methods in required.items():
+              print(f"{class_name}: {', '.join(sorted(methods))}")
+          print("Verified Macrobenchmark metrics: " + ", ".join(sorted(expected_metrics)))
+          PY
       - name: Summarize failed instrumentation tests
         if: failure()
         run: python3 ./.github/scripts/summarize-instrumentation-failures.py benchmark/build/outputs/androidTest-results
