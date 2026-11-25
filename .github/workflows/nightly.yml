@@ -147,6 +147,17 @@ jobs:
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
+      # UiAutomator logcat can record text entered into password fields. Do not retain
+      # raw logcat files as artifacts; the JUnit XML and HTML reports remain available.
+      - name: Remove raw instrumentation logcat files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          results_dir="benchmark/build/outputs/androidTest-results"
+          if [[ -d "$results_dir" ]]; then
+            find "$results_dir" -type f -name 'logcat-*.txt' -delete
+          fi
       # Test reports can contain submitted UI text; never upload them until the account
       # password has been scanned for and scrubbed. The account email is an identifier that
       # legitimately appears in UI-test logcat output, so it is not treated as a secret here.
@@ -269,6 +280,11 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-binary-purity ./gradlew auditReleaseSymbols --no-configuration-cache --stacktrace --console=plain
       - name: Start Connected Android Emulator
+        env:
+          # Android 14+ preserves compilation state across Macrobenchmark iterations.
+          ANDROID_EMULATOR_API_LEVEL: "34"
+          ANDROID_EMULATOR_AVD_NAME: estatia-pixel6-api34
+          ANDROID_EMULATOR_DEVICE: pixel_6
         run: bash ./.github/scripts/start-connected-android-emulator.sh
       - name: Run Startup & Scroll Benchmarks
         env:
@@ -285,6 +301,7 @@ jobs:
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.targetPackageName=com.estatia.realestate.apps \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
+            -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.benchmark.StartupBenchmark,com.estatia.realestate.apps.benchmark.ScrollBenchmark \
             --no-configuration-cache --stacktrace --console=plain
       - name: Summarize failed instrumentation tests
         if: failure()
