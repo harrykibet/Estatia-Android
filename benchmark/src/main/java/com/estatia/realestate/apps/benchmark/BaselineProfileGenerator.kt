@@ -45,7 +45,7 @@ class BaselineProfileGenerator {
     @Test
     fun generateStartup() = run {
         val setupDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        prepareProductionBenchmarkSession(setupDevice)
+        BenchmarkAuthentication.prepareProductionSession(setupDevice)
         baselineProfileRule.collect(
             packageName = BenchmarkTargetPackage.requirePackageName(),
             includeInStartupProfile = true,
@@ -82,7 +82,7 @@ class BaselineProfileGenerator {
     @Test
     fun generateCriticalUserJourneys() = run {
         val setupDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        prepareProductionBenchmarkSession(setupDevice)
+        BenchmarkAuthentication.prepareProductionSession(setupDevice)
         baselineProfileRule.collect(
             packageName = BenchmarkTargetPackage.requirePackageName(),
             includeInStartupProfile = false,
@@ -141,85 +141,106 @@ class BaselineProfileGenerator {
     /**
      * Establish a real Firebase session for Prod before Macrobenchmark records.
      * Demo continues to use its deterministic demo identity.
+     *
+     * Shared with ScrollBenchmark so both benchmark lanes start from the same
+     * authenticated production state rather than assuming a pre-existing login.
      */
-    private fun prepareProductionBenchmarkSession(device: UiDevice) {
-        val packageName = BenchmarkTargetPackage.requirePackageName()
-        if (packageName.endsWith(".demo")) return
+    internal object BenchmarkAuthentication {
+        private const val BENCHMARK_TEST_EMAIL_ARGUMENT = "baselineProfileTestEmail"
+        private const val BENCHMARK_TEST_PASSWORD_ARGUMENT = "baselineProfileTestPassword"
+        private const val SESSION_RESTORE_TIMEOUT_MS = 20_000L
+        private const val LOGIN_SCREEN_TIMEOUT_MS = 30_000L
+        private const val AUTHENTICATION_TIMEOUT_MS = 60_000L
+        private const val UI_IDLE_TIMEOUT_MS = 5_000L
 
-        val arguments = InstrumentationRegistry.getArguments()
-        val email = arguments.getString(BENCHMARK_TEST_EMAIL_ARGUMENT).orEmpty()
-        val password = arguments.getString(BENCHMARK_TEST_PASSWORD_ARGUMENT).orEmpty()
-        check(email.isNotBlank() && password.isNotBlank()) {
-            "Production profile generation requires BASELINE_PROFILE_TEST_EMAIL and " +
-                "BASELINE_PROFILE_TEST_PASSWORD GitHub Actions secrets."
-        }
+        fun prepareProductionSession(device: UiDevice) {
+            val packageName = BenchmarkTargetPackage.requirePackageName()
+            if (packageName.endsWith(".demo")) return
 
-        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
-        val launchIntent = checkNotNull(
-            targetContext.packageManager.getLaunchIntentForPackage(packageName),
-        ) {
-            "Could not resolve the Prod application launch Activity for $packageName."
-        }.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        }
+            val arguments = InstrumentationRegistry.getArguments()
+            val email = arguments.getString(BENCHMARK_TEST_EMAIL_ARGUMENT).orEmpty()
+            val password = arguments.getString(BENCHMARK_TEST_PASSWORD_ARGUMENT).orEmpty()
+            check(email.isNotBlank() && password.isNotBlank()) {
+                "Production benchmarks require BASELINE_PROFILE_TEST_EMAIL and " +
+                    "BASELINE_PROFILE_TEST_PASSWORD GitHub Actions secrets."
+            }
 
-        device.pressHome()
-        targetContext.startActivity(launchIntent)
+            val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+            val launchIntent = checkNotNull(
+                targetContext.packageManager.getLaunchIntentForPackage(packageName),
+            ) {
+                "Could not resolve the Prod application launch Activity for $packageName."
+            }.apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
 
-        var homeNavigation = device.wait(
-            Until.findObject(By.res(NavigationTestTags.HOME)),
-            SESSION_RESTORE_TIMEOUT_MS,
-        )
-        if (homeNavigation == null) {
-            val emailField = device.wait(
-                Until.findObject(By.res(ScreenTestTags.LOGIN_EMAIL_FIELD)),
-                LOGIN_SCREEN_TIMEOUT_MS,
-            ) ?: throw AssertionError(
-                "Prod exposed neither authenticated Home navigation nor the login email field. " +
-                    "Inspect Firebase initialization and app startup diagnostics."
-            )
-            val passwordField = waitFor(
-                device = device,
-                tag = ScreenTestTags.LOGIN_PASSWORD_FIELD,
-                description = "Production benchmark login password field",
-                timeoutMs = LOGIN_SCREEN_TIMEOUT_MS,
-            )
-            emailField.text = email
-            passwordField.text = password
+            device.pressHome()
+            targetContext.startActivity(launchIntent)
 
-            // UiObject2.setText() updates the fields through accessibility actions.
-            // Do not press Back here: when the IME is not visible, Back exits the
-            // unauthenticated root Activity and backgrounds the app before login.
-            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
-            waitFor(
-                device = device,
-                tag = ScreenTestTags.LOGIN_BUTTON,
-                description = "Production benchmark login button after entering credentials",
-                timeoutMs = LOGIN_SCREEN_TIMEOUT_MS,
-            ).click()
-            homeNavigation = device.wait(
+            var homeNavigation = device.wait(
                 Until.findObject(By.res(NavigationTestTags.HOME)),
-                AUTHENTICATION_TIMEOUT_MS,
+                SESSION_RESTORE_TIMEOUT_MS,
             )
+            if (homeNavigation == null) {
+                val emailField = device.wait(
+                    Until.findObject(By.res(ScreenTestTags.LOGIN_EMAIL_FIELD)),
+                    LOGIN_SCREEN_TIMEOUT_MS,
+                ) ?: throw AssertionError(
+                    "Prod exposed neither authenticated Home navigation nor the login email field. " +
+                        "Inspect Firebase initialization and app startup diagnostics."
+                )
+                val passwordField = requireUiObject(
+                    device = device,
+                    tag = ScreenTestTags.LOGIN_PASSWORD_FIELD,
+                    description = "Production benchmark login password field",
+                )
+                emailField.text = email
+                passwordField.text = password
+
+                // UiObject2.setText() updates the fields through accessibility actions.
+                // Do not press Back here: the unauthenticated root Activity must stay active.
+                device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+                requireUiObject(
+                    device = device,
+                    tag = ScreenTestTags.LOGIN_BUTTON,
+                    description = "Production benchmark login button after entering credentials",
+                ).click()
+                homeNavigation = device.wait(
+                    Until.findObject(By.res(NavigationTestTags.HOME)),
+                    AUTHENTICATION_TIMEOUT_MS,
+                )
+            }
+
+            checkNotNull(homeNavigation) {
+                "Firebase benchmark sign-in did not reach authenticated Home. Confirm the account " +
+                    "has a verified email, completed Estatia's required phone-verification step, " +
+                    "and has a matching Firestore user document with readable Home property data. " +
+                    "Credentials are excluded from diagnostics."
+            }
+            requireUiObject(
+                device = device,
+                tag = ScreenTestTags.PROPERTY_FEED,
+                description = "Home property feed after Firebase benchmark authentication",
+            )
+            device.waitForIdle(UI_IDLE_TIMEOUT_MS)
+
+            // Persist the authenticated session, then let each benchmark launch the app itself.
+            device.executeShellCommand("am force-stop $packageName")
+            device.pressHome()
         }
 
-        checkNotNull(homeNavigation) {
-            "Firebase benchmark sign-in did not reach authenticated Home. Confirm the account " +
-                "has a verified email, completed Estatia's required phone-verification step, " +
-                "and has a matching Firestore user document with readable Home property data. " +
-                "Credentials are excluded from diagnostics."
+        private fun requireUiObject(
+            device: UiDevice,
+            tag: String,
+            description: String,
+        ): UiObject2 = checkNotNull(
+            device.wait(
+                Until.findObject(By.res(tag)),
+                LOGIN_SCREEN_TIMEOUT_MS,
+            ),
+        ) {
+            "Required authentication UI was not found: $description (resource ID: $tag)."
         }
-        waitFor(
-            device = device,
-            tag = ScreenTestTags.PROPERTY_FEED,
-            description = "Home property feed after Firebase benchmark authentication",
-            timeoutMs = AUTHENTICATION_TIMEOUT_MS,
-        )
-        device.waitForIdle(UI_IDLE_TIMEOUT_MS)
-
-        // Keep login outside the collected profile, but measure the persisted session on cold launch.
-        device.executeShellCommand("am force-stop $packageName")
-        device.pressHome()
     }
 
     /**
@@ -693,10 +714,6 @@ class BaselineProfileGenerator {
 
     private companion object {
         const val AUTHENTICATION_TIMEOUT_MS = 60_000L
-        const val SESSION_RESTORE_TIMEOUT_MS = 20_000L
-        const val LOGIN_SCREEN_TIMEOUT_MS = 30_000L
-        const val BENCHMARK_TEST_EMAIL_ARGUMENT = "baselineProfileTestEmail"
-        const val BENCHMARK_TEST_PASSWORD_ARGUMENT = "baselineProfileTestPassword"
 
         const val UI_TIMEOUT_MS = 15_000L
 
