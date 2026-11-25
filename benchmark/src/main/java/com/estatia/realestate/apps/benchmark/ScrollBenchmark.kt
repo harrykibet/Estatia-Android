@@ -4,9 +4,9 @@ import androidx.benchmark.macro.FrameTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
+import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
@@ -36,7 +36,7 @@ class ScrollBenchmark {
             val setupDevice = UiDevice.getInstance(
                 InstrumentationRegistry.getInstrumentation(),
             )
-            BaselineProfileGenerator.BenchmarkAuthentication.prepareProductionSession(setupDevice)
+            BenchmarkAuthentication.prepareProductionSession(setupDevice)
             pressHome()
             startActivityAndWait()
         }
@@ -50,7 +50,7 @@ class ScrollBenchmark {
                 FEED_TIMEOUT_MS,
             ),
         ) {
-            "Estatia's PropertyFeed did not appear within ${FEED_TIMEOUT_MS / 1_000}s after cold startup."
+            "Estatia's PropertyFeed did not appear within ${FEED_TIMEOUT_MS / 1_000}s after app launch."
         }
 
         val firstPage = requireNotNull(
