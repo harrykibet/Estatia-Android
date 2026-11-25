@@ -86,10 +86,6 @@ jobs:
       GRADLE_CI_PARALLEL: "false"
       GRADLE_CI_KOTLIN_PARALLEL: "false"
       GRADLE_CI_SAMPLE_SECONDS: 30
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -132,6 +128,7 @@ jobs:
       - name: Start Connected Android Emulator
         run: bash ./.github/scripts/start-connected-android-emulator.sh
       - name: Generate Baseline Profile
+        id: generate-baseline-profile
         env:
           BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
           BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
@@ -143,10 +140,16 @@ jobs:
             ./gradlew :app:generateBaselineProfile \
             -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
             --no-configuration-cache --stacktrace --console=plain
-      # Release the emulator before the GitHub API call for PR creation/update.
+      # Release the emulator before validating and uploading generated profiles.
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
+      # Firebase client configuration is materialized from repository secrets for
+      # the build only; remove it before any generated outputs are packaged.
+      - name: Remove generated Firebase configuration
+        if: always()
+        shell: bash
+        run: rm -f app/src/demo/google-services.json app/src/prod/google-services.json
       # UiAutomator logcat can record text entered into password fields. Do not retain
       # raw logcat files as artifacts; the JUnit XML and HTML reports remain available.
       - name: Remove raw instrumentation logcat files
@@ -190,20 +193,34 @@ jobs:
             benchmark/build/outputs/androidTest-results/**
           if-no-files-found: ignore
           retention-days: 14
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
+      - name: Verify generated Baseline Profiles
+        id: verify-generated-baseline-profiles
+        if: ${{ always() && steps.generate-baseline-profile.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for flavor in demoRelease prodRelease; do
+            for profile in baseline-prof.txt startup-prof.txt; do
+              path="app/src/$flavor/generated/baselineProfiles/$profile"
+              if [[ ! -s "$path" ]]; then
+                echo "::error::Expected generated baseline profile is missing or empty: $path"
+                exit 1
+              fi
+            done
+          done
+          echo "Both baseline and startup profiles were generated for Demo and Prod."
+      - name: Upload generated Baseline Profiles
+        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' && steps.scrub-baseline-artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          commit-message: "chore: update baseline profiles (nightly)"
-          branch: automation/baseline-profiles
-          title: "Update Baseline Profiles (Nightly)"
-          body: |
-            Automated baseline profile generation from nightly run.
-            This PR updates the baseline profiles to optimize app startup and performance based on latest changes.
-          token: ${{ secrets.GITHUB_TOKEN }}
-          delete-branch: true
-          labels: |
-            automation
-            performance
+          name: generated-baseline-profiles-${{ github.run_number }}
+          path: |
+            app/src/demoRelease/generated/baselineProfiles/baseline-prof.txt
+            app/src/demoRelease/generated/baselineProfiles/startup-prof.txt
+            app/src/prodRelease/generated/baselineProfiles/baseline-prof.txt
+            app/src/prodRelease/generated/baselineProfiles/startup-prof.txt
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload Gradle resource diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
