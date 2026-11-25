@@ -154,10 +154,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          results_dir="benchmark/build/outputs/androidTest-results"
-          if [[ -d "$results_dir" ]]; then
-            find "$results_dir" -type f -name 'logcat-*.txt' -delete
-          fi
+          for results_dir in \
+            benchmark/build/outputs/androidTest-results \
+            benchmark/build/reports/androidTests/connected; do
+            if [[ -d "$results_dir" ]]; then
+              find "$results_dir" -type f -name 'logcat-*.txt' -delete
+            fi
+          done
       # Test reports can contain submitted UI text; never upload them until the account
       # password has been scanned for and scrubbed. The account email is an identifier that
       # legitimately appears in UI-test logcat output, so it is not treated as a secret here.
@@ -309,6 +312,20 @@ jobs:
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
+      # UiAutomator logcat may record the benchmark login fields. Remove raw logs
+      # before scanning/upload; keep the structured JUnit and HTML test reports.
+      - name: Remove raw macrobenchmark logcat files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for results_dir in \
+            benchmark/build/outputs/androidTest-results \
+            benchmark/build/reports/androidTests/connected; do
+            if [[ -d "$results_dir" ]]; then
+              find "$results_dir" -type f -name 'logcat-*.txt' -delete
+            fi
+          done
       - name: Scrub benchmark artifacts for credential material
         id: scrub-benchmark-artifacts
         if: always()
