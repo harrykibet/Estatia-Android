@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import zipfile
@@ -31,7 +32,11 @@ def locate_apksigner() -> Path:
     sdk = Path(os.environ["ANDROID_HOME"])
     build_tools = sdk / "build-tools"
     versions = sorted(
-        (entry for entry in build_tools.iterdir() if entry.is_dir()),
+        (
+            entry
+            for entry in build_tools.iterdir()
+            if entry.is_dir() and re.fullmatch(r"\d+(?:\.\d+)*", entry.name)
+        ),
         key=lambda entry: tuple(int(part) for part in entry.name.split(".")),
     )
     if not versions:
