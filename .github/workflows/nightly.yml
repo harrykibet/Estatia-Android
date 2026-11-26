@@ -210,7 +210,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-profiled-release-binaries \
-            ./gradlew :app:assembleDemoRelease :app:assembleProdRelease \
+            ./gradlew :app:assembleDemoRelease :app:assembleProdRelease auditReleaseSymbols \
             --no-configuration-cache --stacktrace --console=plain
       - name: Verify packaged profiles and create release manifest
         id: verify-release-binaries
@@ -314,25 +314,8 @@ jobs:
             exit 1
           }
           echo "Production benchmark account secrets are present; values are not printed."
-      - name: Prepare and validate release signing keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/prepare-release-keystore.sh
-      - name: Assemble Production Release for Audit
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-release-audit ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
-      - name: Run Release Symbol Obfuscation Audit (LAW-038)
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-binary-purity ./gradlew auditReleaseSymbols --no-configuration-cache --stacktrace --console=plain
+      # Release assembly and symbol auditing run in the baseline-profile job
+      # so the exact profiled Demo/Prod APKs are built only once.
       - name: Start Connected Android Emulator
         env:
           # Android 14+ preserves compilation state across Macrobenchmark iterations.
