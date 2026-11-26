@@ -78,7 +78,7 @@ jobs:
   baseline-profiles:
     name: Generate Baseline Profiles
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 120
     env:
       GRADLE_CI_MAX_WORKERS: 1
       GRADLE_CI_GRADLE_XMX: 4608m
