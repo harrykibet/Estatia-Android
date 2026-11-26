@@ -68,7 +68,7 @@ internal fun Project.configureJacoco(
 
             sourceDirectories.setFrom(files("${projectDir}/src/main/java", "${projectDir}/src/main/kotlin"))
             classDirectories.setFrom(classDirectoriesTree)
-            executionData.setFrom(file("${buildDir}/jacoco/${unitTestTaskName}.exec"))
+            executionData.setFrom(file("${buildDir}/outputs/unit_test_code_coverage/${variant.name}UnitTest/${unitTestTaskName}.exec"))
         }
 
         tasks.register<JacocoCoverageVerification>("jacoco${variantName}Verification") {
@@ -83,7 +83,7 @@ internal fun Project.configureJacoco(
 
             sourceDirectories.setFrom(files("${projectDir}/src/main/java", "${projectDir}/src/main/kotlin"))
             classDirectories.setFrom(classDirectoriesTree)
-            executionData.setFrom(file("${buildDir}/jacoco/${unitTestTaskName}.exec"))
+            executionData.setFrom(file("${buildDir}/outputs/unit_test_code_coverage/${variant.name}UnitTest/${unitTestTaskName}.exec"))
 
             violationRules {
                 rule {
