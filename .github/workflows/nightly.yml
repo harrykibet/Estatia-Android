@@ -531,7 +531,55 @@ jobs:
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-architecture-audit ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --info
       - name: Run Full Coverage Report
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-coverage ./gradlew jacocoProdDebugReport --no-configuration-cache --stacktrace --info
-      - name: Verify critical JaCoCo reports contain coverage data
+      - name: Enforce configured JaCoCo coverage thresholds
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # These modules have configured line/branch limits and generated
+          # ProdDebug execution data in the full-report task above.
+          verification_modules=(
+            core/security
+            core/player-engine
+            core/network
+            core/database
+            core/domain
+            feature/auth
+            feature/payments
+            feature/home
+            feature/profile
+            feature/search
+            feature/property
+            feature/market
+            feature/chats
+            feature/favorites
+            feature/comments
+            feature/settings
+          )
+
+          verification_tasks=()
+          for module_path in "${verification_modules[@]}"; do
+            verification_tasks+=(":${module_path//\//:}:jacocoProdDebugVerification")
+          done
+
+          # These modules also have thresholds, but run #111 had NO-SOURCE unit
+          # tests and skipped reports for them. Activate their verifier
+          # automatically as soon as tests produce a non-empty execution file.
+          for module_path in core/model feature/shared-ui; do
+            execution_data="${module_path}/build/outputs/unit_test_code_coverage/prodDebugUnitTest/testProdDebugUnitTest.exec"
+            if [[ -s "$execution_data" ]]; then
+              verification_tasks+=(":${module_path//\//:}:jacocoProdDebugVerification")
+              echo "JaCoCo execution data found for $module_path; enabling its threshold verifier."
+            else
+              echo "::notice::Deferring JaCoCo verification for $module_path: no unit-test execution data was produced."
+            fi
+          done
+
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-coverage-verification \
+            ./gradlew "${verification_tasks[@]}" \
+            --continue --no-configuration-cache --stacktrace --info
+      - name: Verify JaCoCo report integrity and coverage inputs
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -539,44 +587,160 @@ jobs:
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
-          required_reports = {
-              "app": Path("app/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
-              "core:security": Path("core/security/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
-              "core:player-engine": Path("core/player-engine/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
+          # These modules have non-zero configured thresholds and produced
+          # reports from real ProdDebug unit-test execution data in run #111.
+          required_coverage_modules = [
+              "core:security",
+              "core:player-engine",
+              "core:network",
+              "core:database",
+              "core:domain",
+              "feature:auth",
+              "feature:payments",
+              "feature:home",
+              "feature:profile",
+              "feature:search",
+              "feature:property",
+              "feature:market",
+              "feature:chats",
+              "feature:favorites",
+              "feature:comments",
+              "feature:settings",
+          ]
+
+          # Keep the app report as a diagnostic output; :app has no non-zero
+          # line/branch threshold in the JaCoCo convention plugin.
+          diagnostic_only_modules = ["app"]
+
+          # core:model (30% line, 0% branch) and feature:shared-ui (60% line,
+          # 50% branch) currently have NO-SOURCE unit-test tasks. They are
+          # conditionally verified above if execution data becomes available.
+          optional_modules = {
+              "core:model": False,
+              "feature:shared-ui": True,
           }
 
-          for module, report_path in required_reports.items():
-              if not report_path.is_file() or report_path.stat().st_size == 0:
+          def module_root(module):
+              return Path(*module.split(":")) if ":" in module else Path(module)
+
+          def execution_data_path(module):
+              return (
+                  module_root(module)
+                  / "build/outputs/unit_test_code_coverage/prodDebugUnitTest"
+                  / "testProdDebugUnitTest.exec"
+              )
+
+          def report_path(module):
+              return (
+                  module_root(module)
+                  / "build/reports/jacoco/jacocoProdDebugReport"
+                  / "jacocoProdDebugReport.xml"
+              )
+
+          def verify_report(module, require_branch_data):
+              path = report_path(module)
+              if not path.is_file() or path.stat().st_size == 0:
                   raise SystemExit(
-                      f"::error::JaCoCo coverage report is missing or empty for {module}: {report_path}"
+                      f"::error::JaCoCo XML report is missing or empty for {module}: {path}"
                   )
 
-              report = ET.parse(report_path).getroot()
+              try:
+                  root = ET.parse(path).getroot()
+              except (ET.ParseError, OSError) as error:
+                  raise SystemExit(
+                      f"::error::JaCoCo XML report is malformed or unreadable for {module}: "
+                      f"{path}: {error}"
+                  ) from error
+
+              if root.tag != "report":
+                  raise SystemExit(
+                      f"::error::Unexpected JaCoCo XML root for {module}: "
+                      f"expected 'report', received '{root.tag}'"
+                  )
+
               counters = {
                   counter.attrib.get("type"): counter.attrib
-                  for counter in report.findall("counter")
+                  for counter in root.findall("counter")
               }
-              line = counters.get("LINE")
-              if line is None:
+
+              measured = {}
+              for counter_type in ("LINE", "BRANCH"):
+                  counter = counters.get(counter_type)
+                  if counter is None:
+                      raise SystemExit(
+                          f"::error::JaCoCo report for {module} has no {counter_type} counter: {path}"
+                      )
+
+                  try:
+                      covered = int(counter["covered"])
+                      missed = int(counter["missed"])
+                  except (KeyError, TypeError, ValueError) as error:
+                      raise SystemExit(
+                          f"::error::Invalid {counter_type} counter in JaCoCo report for "
+                          f"{module}: {path}: {error}"
+                      ) from error
+
+                  if covered < 0 or missed < 0:
+                      raise SystemExit(
+                          f"::error::Negative {counter_type} counts in JaCoCo report for {module}: {path}"
+                      )
+
+                  total = covered + missed
+                  if counter_type == "LINE" or require_branch_data:
+                      if total <= 0:
+                          raise SystemExit(
+                              f"::error::JaCoCo report for {module} has no measurable "
+                              f"{counter_type} coverage data: {path}"
+                          )
+
+                  measured[counter_type] = (covered, total)
+
+              line_covered, line_total = measured["LINE"]
+              branch_covered, branch_total = measured["BRANCH"]
+              line_percent = line_covered * 100.0 / line_total
+              branch_percent = (
+                  f"{branch_covered * 100.0 / branch_total:.1f}%"
+                  if branch_total
+                  else "not applicable (no branch points)"
+              )
+              print(
+                  f"{module}: LINE {line_covered}/{line_total} "
+                  f"({line_percent:.1f}%), BRANCH {branch_covered}/{branch_total} "
+                  f"({branch_percent})."
+              )
+
+          for module in diagnostic_only_modules:
+              verify_report(module, require_branch_data=False)
+
+          for module in required_coverage_modules:
+              execution_data = execution_data_path(module)
+              if not execution_data.is_file() or execution_data.stat().st_size == 0:
                   raise SystemExit(
-                      f"::error::JaCoCo report for {module} contains no line counter: {report_path}"
+                      f"::error::Required JaCoCo execution data is missing or empty for "
+                      f"{module}: {execution_data}"
+                  )
+              verify_report(module, require_branch_data=True)
+
+          for module, require_branch_data in optional_modules.items():
+              execution_data = execution_data_path(module)
+              report = report_path(module)
+              if execution_data.is_file() and execution_data.stat().st_size > 0:
+                  verify_report(module, require_branch_data=require_branch_data)
+              elif report.exists():
+                  raise SystemExit(
+                      f"::error::JaCoCo report exists without its execution-data input for "
+                      f"{module}: {execution_data}"
+                  )
+              else:
+                  print(
+                      f"{module}: threshold verification deferred; no unit-test "
+                      "execution data exists yet."
                   )
 
-              # JaCoCo XML counters expose missed and covered counts, not a total
-              # attribute. Derive the total so reports with valid but currently
-              # uncovered lines are not incorrectly rejected as empty.
-              covered = int(line.get("covered", "0"))
-              missed = int(line.get("missed", "0"))
-              total = covered + missed
-              if total <= 0:
-                  raise SystemExit(
-                      f"::error::JaCoCo report for {module} contains no line coverage data: {report_path}"
-                  )
-
-              percentage = covered * 100.0 / total
-              print(f"{module}: {covered}/{total} lines covered ({percentage:.1f}%).")
-
-          print("Critical JaCoCo reports contain non-empty line coverage data.")
+          print(
+              "JaCoCo report integrity and required execution-data validation passed. "
+              "Configured line/branch thresholds are enforced by the Gradle verification tasks."
+          )
           PY
       - name: Upload Quality Reports
         if: always()
