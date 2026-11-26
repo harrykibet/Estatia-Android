@@ -413,6 +413,31 @@ def main() -> None:
         args.source_sha,
     )
 
+    # A malformed report can leave a staging directory behind. Never commit
+    # staging/backup directories as durable evidence or discard the old snapshot.
+    for staging_name, published_name, backup_name in (
+        (
+            f".jacoco-staging-{args.run_id}",
+            "jacoco",
+            f".jacoco-previous-{args.run_id}",
+        ),
+        (
+            f".benchmarks-staging-{args.run_id}",
+            "benchmarks",
+            f".benchmarks-previous-{args.run_id}",
+        ),
+    ):
+        staging = latest / staging_name
+        backup = latest / backup_name
+        published = latest / published_name
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        if backup.exists():
+            if not published.exists():
+                backup.rename(published)
+            else:
+                shutil.rmtree(backup, ignore_errors=True)
+
     try:
         producer_results = json.loads(os.environ.get("NIGHTLY_RESULTS", "{}"))
     except json.JSONDecodeError as error:
