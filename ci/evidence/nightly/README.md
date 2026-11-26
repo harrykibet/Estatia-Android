@@ -9,6 +9,7 @@ The scheduled/manual nightly workflow publishes a bounded, main-branch evidence 
 - latest/coverage-summary.json and append-only coverage-history.jsonl.
 - Latest available Macrobenchmark JSON files under latest/benchmarks/ and append-only benchmark-history.jsonl.
 - latest/manifest.json, recording producer outcomes and the evidence categories updated by each run.
+- latest/release-manifest.json, recording the signed APK hashes, packaged Baseline Profile sizes and source-profile hashes.
 
 A failed quality gate does not block report publication. Missing report artifacts do not erase the previous latest snapshot. Profiles are replaced only when all four expected files contain rules and both signed release APKs pass signature and packaged-profile validation.
 
