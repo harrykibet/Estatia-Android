@@ -362,17 +362,15 @@ jobs:
                   error = testcase.find("error")
                   skipped = testcase.find("skipped")
 
-                  # This lane explicitly enables Macrobenchmark rules only. The
-                  # BaselineProfileRule cases are therefore expected to be
-                  # assumption-skipped by AndroidX, and are not benchmark failures.
-                  # Keep rejecting real errors and unexpected failures in that class.
+                  # This lane explicitly enables Macrobenchmark rules only. AndroidX
+                  # reports the disabled BaselineProfileRule cases as an
+                  # AssumptionViolatedException from BaselineProfileRule.apply.
+                  # Suppress only that exact failure signature. A generic JUnit
+                  # <skipped> result remains unexpected, even for this class.
                   if error is not None:
                       raise SystemExit(
                           f"::error::Instrumentation test errored: {class_name}#{method_name}"
                       )
-                  if class_name == disabled_rule_class and skipped is not None:
-                      ignored_disabled_rule_cases += 1
-                      continue
                   if class_name == disabled_rule_class and failure is not None:
                       failure_text = failure.text or ""
                       expected_disabled_rule_assumption = (
