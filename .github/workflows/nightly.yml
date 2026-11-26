@@ -193,6 +193,7 @@ jobs:
             done
           done
       - name: Prepare and validate release signing keystore
+        id: prepare-release-keystore
         if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -202,7 +203,7 @@ jobs:
         run: bash ./.github/scripts/prepare-release-keystore.sh
       - name: Assemble Demo and Prod release binaries
         id: assemble-release-binaries
-        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' }}
+        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' && steps.prepare-release-keystore.outcome == 'success' }}
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -1022,25 +1023,30 @@ jobs:
               "quality-metrics": "Architecture and Coverage Audit",
               "security-scan": "Dependency Vulnerability Scan",
               "nightly-evidence-publication": "Durable Evidence Publication",
-            }
+          }
 
-            failures = []
-            with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+          failures = []
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               summary.write("# Nightly Stress & Optimization\n\n")
               summary.write("| Job | Result |\n|---|---|\n")
               for key, label in labels.items():
                   result = results.get(key, {}).get("result", "missing")
-                  if key == "nightly-evidence-publication" and result == "skipped" and os.environ.get("GITHUB_REF") != "refs/heads/main":
+                  if (
+                      key == "nightly-evidence-publication"
+                      and result == "skipped"
+                      and os.environ.get("GITHUB_REF") != "refs/heads/main"
+                  ):
                       rendered_result = "skipped (non-main run; expected)"
                   else:
                       rendered_result = result
                       if result != "success":
-                          failures.append(f"${key}={result}")
+                          failures.append(f"{key}={result}")
                   summary.write(f"| {label} | {rendered_result} |\n")
               summary.write("\n")
               summary.write(
                   f"[Open workflow run]({os.environ['GITHUB_SERVER_URL']}/"
-                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']})\n"
+                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+                  f"{os.environ['GITHUB_RUN_ID']})\n"
               )
 
           if failures:
