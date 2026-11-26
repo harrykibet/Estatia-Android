@@ -531,6 +531,44 @@ jobs:
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-architecture-audit ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --info
       - name: Run Full Coverage Report
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-coverage ./gradlew jacocoProdDebugReport --no-configuration-cache --stacktrace --info
+      - name: Verify critical JaCoCo reports contain coverage data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          required_reports = {
+              "app": Path("app/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
+              "core:security": Path("core/security/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
+              "core:player-engine": Path("core/player-engine/build/reports/jacoco/jacocoProdDebugReport/jacocoProdDebugReport.xml"),
+          }
+
+          for module, report_path in required_reports.items():
+              if not report_path.is_file() or report_path.stat().st_size == 0:
+                  raise SystemExit(
+                      f"::error::JaCoCo coverage report is missing or empty for {module}: {report_path}"
+                  )
+
+              report = ET.parse(report_path).getroot()
+              counters = {
+                  counter.attrib.get("type"): counter.attrib
+                  for counter in report.findall("counter")
+              }
+              line = counters.get("LINE")
+              if line is None or int(line.get("total", "0")) <= 0:
+                  raise SystemExit(
+                      f"::error::JaCoCo report for {module} contains no line coverage data: {report_path}"
+                  )
+
+              covered = int(line.get("covered", "0"))
+              total = int(line["total"])
+              percentage = covered * 100.0 / total
+              print(f"{module}: {covered}/{total} lines covered ({percentage:.1f}%).")
+
+          print("Critical JaCoCo reports contain non-empty line coverage data.")
+          PY
       - name: Upload Quality Reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
