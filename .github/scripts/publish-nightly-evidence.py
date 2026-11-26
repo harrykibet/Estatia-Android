@@ -52,7 +52,12 @@ def append_jsonl(
             existing.add(key)
 
 
-def publish_profiles(artifacts: Path, repo: Path, binaries_verified: bool) -> dict:
+def publish_profiles(
+    artifacts: Path,
+    repo: Path,
+    binaries_verified: bool,
+    profile_metadata: dict,
+) -> dict:
     root = artifacts / "profiles"
     if not root.is_dir():
         return {"status": "not-produced", "files": 0}
@@ -104,6 +109,19 @@ def publish_profiles(artifacts: Path, repo: Path, binaries_verified: bool) -> di
         ]
         if not rules:
             raise SystemExit(f"Refusing to publish a profile without rules: {source}")
+        metadata = profile_metadata.get(f"{flavor}/{name}")
+        if not isinstance(metadata, dict):
+            raise SystemExit(
+                f"Release manifest has no source-profile checksum for {flavor}/{name}"
+            )
+        if (
+            metadata.get("sha256") != sha256(source)
+            or metadata.get("bytes") != source.stat().st_size
+            or metadata.get("rules") != len(rules)
+        ):
+            raise SystemExit(
+                f"Source profile does not match the profile packaged into the verified release manifest: {source}"
+            )
         target = (
             repo
             / "app/src"
@@ -210,8 +228,9 @@ def publish_jacoco(
         branch = parse_counter(report, "BRANCH", required=False)
         report_dir = xml_path.parent
         target = stage / module / report_dir.name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(report_dir, target, dirs_exist_ok=True)
+        target.mkdir(parents=True, exist_ok=True)
+        durable_xml = target / xml_path.name
+        shutil.copyfile(xml_path, durable_xml)
         rows.append({
             "workflow_run_id": run_id,
             "run_number": run_number,
@@ -221,7 +240,10 @@ def publish_jacoco(
                 Path("ci/evidence/nightly/latest/jacoco")
                 / module
                 / report_dir.name
+                / xml_path.name
             ),
+            "report_bytes": durable_xml.stat().st_size,
+            "report_sha256": sha256(durable_xml),
             "line": line,
             "branch": branch,
         })
@@ -320,7 +342,12 @@ def publish_benchmarks(
     }
 
 
-def verify_binary_artifact(artifacts: Path) -> dict:
+def verify_binary_artifact(
+    artifacts: Path,
+    source_sha: str,
+    run_id: int,
+    run_number: int,
+) -> dict:
     root = artifacts / "binaries"
     manifests = sorted(root.rglob("release-manifest.json")) if root.is_dir() else []
     if not manifests:
@@ -335,6 +362,13 @@ def verify_binary_artifact(artifacts: Path) -> dict:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"Invalid release manifest: {error}") from error
+
+    if manifest.get("source_commit") != source_sha:
+        raise ValueError("Release manifest source commit does not match this workflow run.")
+    if manifest.get("workflow_run_id") != run_id:
+        raise ValueError("Release manifest workflow run ID does not match this workflow run.")
+    if manifest.get("workflow_run_number") != run_number:
+        raise ValueError("Release manifest run number does not match this workflow run.")
 
     variants = manifest.get("variants", {})
     expected = {"demoRelease", "prodRelease"}
@@ -356,10 +390,43 @@ def verify_binary_artifact(artifacts: Path) -> dict:
         if item.get("signed") is not True:
             raise ValueError(f"Release APK is not marked signed: {apk}")
 
+    source_profiles = manifest.get("source_profiles", {})
+    expected_profile_keys = {
+        f"{flavor}/{name}"
+        for flavor in expected
+        for name in ("baseline-prof.txt", "startup-prof.txt")
+    }
+    if not isinstance(source_profiles, dict) or set(source_profiles) != expected_profile_keys:
+        raise ValueError("Release manifest does not contain checksums for all four source profiles.")
+
+    release_summary = {
+        "schema_version": manifest.get("schema_version"),
+        "source_commit": source_sha,
+        "workflow_run_id": run_id,
+        "workflow_run_number": run_number,
+        "binary_kind": manifest.get("binary_kind"),
+        "variants": {
+            flavor: {
+                key: variants[flavor][key]
+                for key in (
+                    "apk",
+                    "apk_bytes",
+                    "apk_sha256",
+                    "signed",
+                    "packaged_profile",
+                    "packaged_profile_bytes",
+                )
+            }
+            for flavor in sorted(expected)
+        },
+        "source_profiles": source_profiles,
+    }
     return {
         "status": "verified-artifact",
         "variants": sorted(expected),
         "binary_kind": manifest.get("binary_kind"),
+        "source_profiles": source_profiles,
+        "release_manifest": release_summary,
     }
 
 
@@ -386,14 +453,27 @@ def main() -> None:
     latest.mkdir(parents=True, exist_ok=True)
     artifacts = args.artifacts_root
 
-    binaries = attempt("release binaries", verify_binary_artifact, artifacts)
+    binaries = attempt(
+        "release binaries",
+        verify_binary_artifact,
+        artifacts,
+        args.source_sha,
+        args.run_id,
+        args.run_number,
+    )
     profiles = attempt(
         "Baseline Profiles",
         publish_profiles,
         artifacts,
         repo,
         binaries.get("status") == "verified-artifact",
+        binaries.get("source_profiles", {}),
     )
+    if binaries.get("status") == "verified-artifact":
+        (latest / "release-manifest.json").write_text(
+            json.dumps(binaries["release_manifest"], indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     jacoco = attempt(
         "JaCoCo reports",
         publish_jacoco,
