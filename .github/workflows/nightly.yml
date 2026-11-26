@@ -557,13 +557,22 @@ jobs:
                   for counter in report.findall("counter")
               }
               line = counters.get("LINE")
-              if line is None or int(line.get("total", "0")) <= 0:
+              if line is None:
+                  raise SystemExit(
+                      f"::error::JaCoCo report for {module} contains no line counter: {report_path}"
+                  )
+
+              # JaCoCo XML counters expose missed and covered counts, not a total
+              # attribute. Derive the total so reports with valid but currently
+              # uncovered lines are not incorrectly rejected as empty.
+              covered = int(line.get("covered", "0"))
+              missed = int(line.get("missed", "0"))
+              total = covered + missed
+              if total <= 0:
                   raise SystemExit(
                       f"::error::JaCoCo report for {module} contains no line coverage data: {report_path}"
                   )
 
-              covered = int(line.get("covered", "0"))
-              total = int(line["total"])
               percentage = covered * 100.0 / total
               print(f"{module}: {covered}/{total} lines covered ({percentage:.1f}%).")
 
