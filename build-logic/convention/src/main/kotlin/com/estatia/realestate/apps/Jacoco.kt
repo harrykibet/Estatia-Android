@@ -60,7 +60,12 @@ internal fun Project.configureJacoco(
             }
 
             val buildDir = layout.buildDirectory.get().asFile
-            val classDirectoriesTree = fileTree("${buildDir}/intermediates/javac/${variant.name}/classes") {
+            // AGP 9 moved Kotlin bytecode into intermediates/built_in_kotlinc and
+            // nests Java bytecode under the javac task output directory. Keep the
+            // legacy Kotlin path as a compatibility fallback for older AGP builds.
+            val classDirectoriesTree = fileTree("${buildDir}/intermediates") {
+                include("javac/${variant.name}/**/*.class")
+                include("built_in_kotlinc/${variant.name}/**/*.class")
                 exclude(jacocoExclusions)
             } + fileTree("${buildDir}/tmp/kotlin-classes/${variant.name}") {
                 exclude(jacocoExclusions)
@@ -75,7 +80,12 @@ internal fun Project.configureJacoco(
             dependsOn(reportTask)
 
             val buildDir = layout.buildDirectory.get().asFile
-            val classDirectoriesTree = fileTree("${buildDir}/intermediates/javac/${variant.name}/classes") {
+            // AGP 9 moved Kotlin bytecode into intermediates/built_in_kotlinc and
+            // nests Java bytecode under the javac task output directory. Keep the
+            // legacy Kotlin path as a compatibility fallback for older AGP builds.
+            val classDirectoriesTree = fileTree("${buildDir}/intermediates") {
+                include("javac/${variant.name}/**/*.class")
+                include("built_in_kotlinc/${variant.name}/**/*.class")
                 exclude(jacocoExclusions)
             } + fileTree("${buildDir}/tmp/kotlin-classes/${variant.name}") {
                 exclude(jacocoExclusions)
