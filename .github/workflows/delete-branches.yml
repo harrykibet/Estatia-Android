@@ -35,6 +35,9 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      - name: Test branch cleanup parser and safety guards
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+
       - name: Inventory all branches or process explicit selection
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
