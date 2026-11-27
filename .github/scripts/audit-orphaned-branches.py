@@ -348,7 +348,7 @@ def render_report(repo: str, default_branch: str, stale_days: int, results: list
     review = [result for result in results if result.status in {"REVIEW_REQUIRED", "MERGED_PR_WITH_NEW_WORK"}]
     lines = [
         "# Orphaned branch audit", "", f"- Repository: `{repo}`", f"- Default branch: `{default_branch}`",
-        f"- Generated: `{generated_at}`", f"- Stale threshold: `{stale_days}` days`, "",
+        f"- Generated: `{generated_at}`", f"- Stale threshold: `{stale_days}` days", "",
         "## Summary", "", f"- Branches audited: **{len(results)}**", f"- Stale branches: **{len(stale)}**",
         f"- Branches requiring manual review: **{len(review)}**", "",
         "| Status | Count |", "|---|---:|",
