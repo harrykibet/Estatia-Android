@@ -533,28 +533,6 @@ def test_orphaned_branch_audit() -> None:
 
 
 
-def test_orphaned_branch_audit() -> None:
-    """Exercise ancestry, cherry-pick, squash-merge, and carried-forward detection."""
-    tests = ROOT / ".github" / "scripts" / "tests" / "test_audit_orphaned_branches.py"
-    if not tests.is_file():
-        return
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "unittest",
-            "discover",
-            "-s",
-            ".github/scripts/tests",
-            "-p",
-            "test_audit_orphaned_branches.py",
-            "-v",
-        ],
-        cwd=ROOT,
-        check=True,
-    )
-
-
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
