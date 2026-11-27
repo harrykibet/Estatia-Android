@@ -606,8 +606,6 @@ def main() -> int:
         print("Batch branch cleanup parser and read-only-mode safety tests passed.")
         test_orphaned_branch_audit()
         print("Orphaned branch audit ancestry, PR-history, patch-equivalence, and carry-forward tests passed.")
-        test_orphaned_branch_audit()
-        print("Orphaned branch audit ancestry, PR-history, patch-equivalence, and carry-forward tests passed.")
     except (AssertionError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"::error::Tooling self-test failed: {error}", file=sys.stderr)
         return 1
