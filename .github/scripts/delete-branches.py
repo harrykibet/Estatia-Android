@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Safely delete exact batches of GitHub branches.
+"""Safely inventory remote branches or delete explicitly selected GitHub branches.
 
-Dry-run is the default. Use --execute only after reviewing the preview.
-Input may be positional, repeated --branch values, or newline-delimited stdin.
+Dry-run is the default. Use --execute only after reviewing an explicit preview.
+Input may be positional, repeated --branch values, a JSON array, or newline-delimited stdin.
+Use --all-branches for a forced read-only inventory of every remote branch.
 Blank lines and lines beginning with # are ignored; wildcards are unsupported.
 """
 from __future__ import annotations
@@ -109,7 +110,22 @@ def validate_branch(name: str) -> None:
 def parse_names(values: list[str], stdin_text: str | None) -> list[str]:
     raw = list(values)
     if stdin_text is not None:
-        raw.extend(stdin_text.splitlines())
+        submitted = stdin_text.strip()
+        if submitted:
+            if submitted.startswith(("[", "{")):
+                try:
+                    parsed = json.loads(submitted)
+                except json.JSONDecodeError as error:
+                    raise ValueError(
+                        "Branch input must be a JSON array of strings or one branch name per line."
+                    ) from error
+                if not isinstance(parsed, list):
+                    raise ValueError("JSON branch input must be an array of strings.")
+                if not all(isinstance(item, str) for item in parsed):
+                    raise ValueError("Every item in the JSON branch array must be a string.")
+                raw.extend(parsed)
+            else:
+                raw.extend(submitted.splitlines())
     names: list[str] = []
     seen: set[str] = set()
     for value in raw:
@@ -123,6 +139,20 @@ def parse_names(values: list[str], stdin_text: str | None) -> list[str]:
             seen.add(name)
             names.append(name)
     return names
+
+
+def list_remote_branches(api: GitHub, repo: str) -> list[str]:
+    """Return every remote branch name, failing closed on an incomplete response."""
+    records = api.pages(f"/repos/{repo}/branches")
+    names: list[str] = []
+    for record in records:
+        name = record.get("name")
+        if not isinstance(name, str) or not name:
+            raise RuntimeError("GitHub returned a branch record without a valid name.")
+        names.append(name)
+    if not names:
+        raise RuntimeError("GitHub returned no branches; refusing to produce an empty inventory.")
+    return parse_names(names, None)
 
 
 def read_protected(path: str | None) -> set[str]:
@@ -140,11 +170,20 @@ def read_protected(path: str | None) -> set[str]:
     return protected
 
 
-def write_summary(repo: str, dry_run: bool, outcomes: list[Outcome]) -> None:
+def write_summary(
+    repo: str,
+    dry_run: bool,
+    outcomes: list[Outcome],
+    *,
+    full_inventory: bool = False,
+) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
         return
-    title = "Branch deletion dry run" if dry_run else "Branch deletion results"
+    if full_inventory:
+        title = "Full remote branch inventory (forced dry run)"
+    else:
+        title = "Branch deletion dry run" if dry_run else "Branch deletion results"
     lines = [
         f"## {title}", "", f"Repository: {repo}", "",
         "| Branch | Result | Details |", "|---|---|---|",
@@ -157,6 +196,7 @@ def write_summary(repo: str, dry_run: bool, outcomes: list[Outcome]) -> None:
         f"Requested: **{len(outcomes)}** · "
         f"Deleted: **{sum(x.status == 'DELETED' for x in outcomes)}** · "
         f"Would delete: **{sum(x.status == 'WOULD_DELETE' for x in outcomes)}** · "
+        f"Review required: **{sum(x.status == 'REVIEW_REQUIRED' for x in outcomes)}** · "
         f"Skipped: **{sum(x.status == 'SKIPPED' for x in outcomes)}** · "
         f"Failed: **{sum(x.status == 'FAILED' for x in outcomes)}**",
         "",
@@ -172,18 +212,24 @@ def run(args: argparse.Namespace) -> int:
         print("ERROR: Set GITHUB_REPOSITORY or pass --repo owner/name.", file=sys.stderr)
         return 2
     if not token:
-        print("ERROR: GITHUB_TOKEN is required (contents:write, pull-requests:read).", file=sys.stderr)
+        print("ERROR: GITHUB_TOKEN is required (contents:read for inventory; contents:write for --execute; pull-requests:read).", file=sys.stderr)
         return 2
     try:
-        names = parse_names(args.branches + args.branch_options, sys.stdin.read() if args.from_stdin else None)
+        supplied_names = parse_names(
+            args.branches + args.branch_options,
+            sys.stdin.read() if args.from_stdin else None,
+        )
         protected = read_protected(args.protect_file) | set(args.protect_branch)
         for name in args.protect_branch:
             validate_branch(name)
+        if args.all_branches and supplied_names:
+            raise ValueError("--all-branches cannot be combined with explicit branch names.")
+        if args.all_branches and args.execute:
+            raise ValueError("--all-branches is permanently dry-run; --execute is not allowed.")
+        if not args.all_branches and not supplied_names:
+            raise ValueError("No branch names supplied. Supply branches or use --all-branches.")
     except (ValueError, FileNotFoundError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 2
-    if not names:
-        print("ERROR: No branch names supplied.", file=sys.stderr)
         return 2
 
     api = GitHub(token)
@@ -197,13 +243,18 @@ def run(args: argparse.Namespace) -> int:
             pr["head"]["ref"] for pr in open_prs
             if isinstance(pr.get("head"), dict) and pr["head"].get("ref")
         }
+        names = list_remote_branches(api, repo) if args.all_branches else supplied_names
     except Exception as error:
         print(f"ERROR: Unable to load safety metadata; no branches deleted: {error}", file=sys.stderr)
         return 2
 
-    dry_run = not args.execute
+    dry_run = args.all_branches or not args.execute
     print(f"Repository: {repo}\nDefault branch: {default_branch}")
-    print(f"Mode: {'DRY RUN' if dry_run else 'EXECUTE'}")
+    if args.all_branches:
+        print("Mode: FULL REMOTE BRANCH INVENTORY (FORCED DRY RUN)")
+        print(f"Remote branches discovered: {len(names)}")
+    else:
+        print(f"Mode: {'DRY RUN' if dry_run else 'EXECUTE'}")
     print(f"Open PR head branches protected: {len(open_heads)}\n")
 
     outcomes: list[Outcome] = []
@@ -221,6 +272,12 @@ def run(args: argparse.Namespace) -> int:
                 data = api.get(f"/repos/{repo}/branches/{encoded}")
                 if data.get("protected") is True:
                     outcome = Outcome(branch, "SKIPPED", "GitHub reports this branch as protected.")
+                elif dry_run and args.all_branches:
+                    outcome = Outcome(
+                        branch,
+                        "REVIEW_REQUIRED",
+                        "Policy checks passed; inspect commit history and unique work before explicitly selecting this branch for deletion.",
+                    )
                 elif dry_run:
                     outcome = Outcome(branch, "WOULD_DELETE", "Safety checks passed; no ref changed.")
                 else:
@@ -236,12 +293,17 @@ def run(args: argparse.Namespace) -> int:
         outcomes.append(outcome)
         print(f"{outcome.status:12} {branch} - {outcome.detail}")
 
-    write_summary(repo, dry_run, outcomes)
+    write_summary(repo, dry_run, outcomes, full_inventory=args.all_branches)
     deleted = sum(x.status == "DELETED" for x in outcomes)
     preview = sum(x.status == "WOULD_DELETE" for x in outcomes)
+    review_required = sum(x.status == "REVIEW_REQUIRED" for x in outcomes)
     skipped = sum(x.status == "SKIPPED" for x in outcomes)
     failed = sum(x.status == "FAILED" for x in outcomes)
-    print(f"\nSummary: requested={len(outcomes)}, deleted={deleted}, would_delete={preview}, skipped={skipped}, failed={failed}")
+    print(
+        f"\nSummary: requested={len(outcomes)}, deleted={deleted}, "
+        f"would_delete={preview}, review_required={review_required}, "
+        f"skipped={skipped}, failed={failed}"
+    )
     return 1 if failed else 0
 
 
@@ -252,7 +314,12 @@ def main() -> int:
                         help="Add an exact branch name; may be repeated.")
     parser.add_argument("--protect-branch", dest="protect_branch", action="append", default=[],
                         help="Additional protected branch; may be repeated.")
-    parser.add_argument("--from-stdin", action="store_true", help="Read branch names from stdin, one per line.")
+    parser.add_argument("--from-stdin", action="store_true", help="Read a JSON array or newline-delimited branch names from stdin.")
+    parser.add_argument(
+        "--all-branches",
+        action="store_true",
+        help="Enumerate every remote branch and produce a forced dry-run inventory; cannot be combined with branch names or --execute.",
+    )
     parser.add_argument("--repo", help="Repository owner/name; defaults to GITHUB_REPOSITORY.")
     parser.add_argument("--protect-file", help="File of additional protected branch names.")
     mode = parser.add_mutually_exclusive_group()

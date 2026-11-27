@@ -4,17 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: "Exact branch names to delete, one per line. Blank lines and # comments are ignored."
-        required: true
+        description: "Optional JSON array of exact branch names. Leave empty to audit all remote branches (forced dry run)."
+        required: false
+        default: ""
         type: string
       dry_run:
-        description: "Preview only. Set to false to perform deletions."
+        description: "For explicitly supplied branches only: preview when true, delete when false. Empty branch input always forces a full dry run."
         required: true
         default: true
         type: boolean
 
+# Read-only by default. Only the explicit-selection job receives contents:write.
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 
 concurrency:
@@ -22,11 +24,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  delete-branches:
-    name: Validate and delete requested branches
+  validate:
+    name: Test branch cleanup parser and safety guards
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - name: Check out default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,9 +36,58 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Preview or delete requested branches
+      - name: Run branch cleanup unit tests
+        run: python3 -m unittest discover -s .github/scripts/tests -p 'test_*.py' -v
+
+  inventory:
+    name: Full remote branch inventory (read-only)
+    needs: validate
+    if: ${{ inputs.branches == '' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Enumerate every remote branch (forced dry run)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::notice::No branch list supplied. Enumerating every remote branch with a read-only token; deletion is unavailable in this job."
+          python3 .github/scripts/delete-branches.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --protect-file .github/branch-deletion-protected.txt \
+            --all-branches --dry-run
+
+  selected-branches:
+    name: Preview or delete explicitly selected branches
+    needs: validate
+    if: ${{ inputs.branches != '' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    permissions:
+      contents: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Process explicit branch selection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           BRANCHES_INPUT: ${{ inputs.branches }}
           DRY_RUN: ${{ inputs.dry_run }}
         shell: bash
@@ -44,15 +95,16 @@ jobs:
           set -euo pipefail
 
           args=(
-            --from-stdin
+            --repo "${GITHUB_REPOSITORY}"
             --protect-file .github/branch-deletion-protected.txt
+            --from-stdin
           )
-
           if [[ "${DRY_RUN,,}" == "true" ]]; then
             args+=(--dry-run)
           else
             args+=(--execute)
           fi
 
-          printf '%s\n' "$BRANCHES_INPUT" | \
+          # Accept a JSON array (recommended for the GitHub UI) or newline-delimited names.
+          printf '%s\n' "${BRANCHES_INPUT}" | \
             python3 .github/scripts/delete-branches.py "${args[@]}"

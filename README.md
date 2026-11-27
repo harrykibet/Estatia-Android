@@ -197,11 +197,28 @@ Estatia is building the foundational rental infrastructure layer for emerging ma
 
 ## Batch Branch Cleanup
 
-A manually dispatched GitHub Actions workflow is available for deleting explicitly named batches of obsolete branches after review.
+A manually dispatched GitHub Actions workflow supports two distinct modes:
+
+### 1. Full branch inventory (no branch input)
 
 1. Open **Actions → Batch Branch Cleanup → Run workflow**.
-2. Enter exact branch names in the `branches` input, one per line.
-3. Run first with `dry_run` enabled and inspect the workflow summary.
-4. Set `dry_run` to false only when you are ready to delete the listed refs.
+2. Leave the `branches` input completely empty.
+3. Dispatch the workflow. It automatically enumerates every remote branch and runs a **forced dry run**, even if the `dry_run` toggle is accidentally set to false.
+4. Inspect the workflow summary. Branches passing the repository protection checks are marked `REVIEW_REQUIRED`, not automatically approved for deletion.
 
-The workflow protects the default branch, branches configured in `.github/branch-deletion-protected.txt`, branches backing open pull requests, and branches GitHub marks as protected. The reusable implementation is in `.github/scripts/delete-branches.py`.
+This inventory mode never deletes branches. It checks repository policy protections, default-branch status, open pull-request heads, and GitHub branch protection. It does **not** determine whether a branch contains unique or unmerged work; review its PR and commit history before selecting it.
+
+### 2. Explicit branch selection
+
+When ready to preview or delete selected branches, provide only the exact branch names. The recommended GitHub UI format is a single-line JSON array:
+
+```json
+["alert-autofix-16","automation/ci-perf-telemetry-42","chore/repository-artifact-cleanup"]
+```
+
+1. Keep `dry_run` enabled first and inspect the result.
+2. After independently confirming the selected branches are safe to remove, dispatch again with the same explicit list and set `dry_run` to false.
+
+Do not paste shell commands, variable assignments, quotes around the whole list, or Python invocations into the `branches` field. The script also accepts newline-delimited branch names when invoked directly or through stdin.
+
+The workflow protects the default branch, branches configured in `.github/branch-deletion-protected.txt`, branches backing open pull requests, and branches GitHub marks as protected. The script rejects wildcards and invalid branch names, deduplicates entries, and defaults to dry-run mode. Implementation: `.github/scripts/delete-branches.py`.

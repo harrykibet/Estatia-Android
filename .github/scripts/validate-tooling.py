@@ -487,6 +487,28 @@ def test_scrub_check_secrets() -> None:
             )
 
 
+def test_batch_branch_cleanup_parser() -> None:
+    """Run branch-cleanup parser and read-only-mode safety tests in PR validation."""
+    tests = ROOT / ".github" / "scripts" / "tests" / "test_delete_branches.py"
+    if not tests.is_file():
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            ".github/scripts/tests",
+            "-p",
+            "test_delete_branches.py",
+            "-v",
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print("Usage: validate-tooling.py BASE_SHA HEAD_SHA", file=sys.stderr)
@@ -534,6 +556,8 @@ def main() -> int:
         print("Diagnostics wrapper pipe self-test passed.")
         test_scrub_check_secrets()
         print("Credential scrubber leak-detection and fail-closed self-tests passed.")
+        test_batch_branch_cleanup_parser()
+        print("Batch branch cleanup parser and read-only-mode safety tests passed.")
     except (AssertionError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"::error::Tooling self-test failed: {error}", file=sys.stderr)
         return 1
