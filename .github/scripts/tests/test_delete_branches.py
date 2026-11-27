@@ -151,7 +151,7 @@ class ExecutionUniqueCommitGuardTests(unittest.TestCase):
         )
         output = io.StringIO()
         with patch.object(MODULE, "GitHub", return_value=api):
-            with patch.dict(os.environ, {"GITHUB_TOKEN": "unit-test-token"}):
+            with patch.dict(os.environ, {"GITHUB_TOKEN": "unit-test-token", "GITHUB_STEP_SUMMARY": ""}):
                 with redirect_stdout(output):
                     result = MODULE.run(args)
         return result, output.getvalue(), api.deleted
