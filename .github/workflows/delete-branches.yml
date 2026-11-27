@@ -63,9 +63,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "::notice::No branch list supplied. Enumerating every remote branch with a read-only token; deletion is unavailable in this job."
-          python3 .github/scripts/delete-branches.py \\
-            --repo "${GITHUB_REPOSITORY}" \\
-            --protect-file .github/branch-deletion-protected.txt \\
+          python3 .github/scripts/delete-branches.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --protect-file .github/branch-deletion-protected.txt \
             --all-branches --dry-run
 
   preview-selected:
@@ -92,10 +92,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\\n' "${BRANCHES_INPUT}" | \\
-            python3 .github/scripts/delete-branches.py \\
-              --repo "${GITHUB_REPOSITORY}" \\
-              --protect-file .github/branch-deletion-protected.txt \\
+          printf '%s\n' "${BRANCHES_INPUT}" | \
+            python3 .github/scripts/delete-branches.py \
+              --repo "${GITHUB_REPOSITORY}" \
+              --protect-file .github/branch-deletion-protected.txt \
               --from-stdin --dry-run
 
   delete-selected:
@@ -122,8 +122,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\\n' "${BRANCHES_INPUT}" | \\
-            python3 .github/scripts/delete-branches.py \\
-              --repo "${GITHUB_REPOSITORY}" \\
-              --protect-file .github/branch-deletion-protected.txt \\
+          printf '%s\n' "${BRANCHES_INPUT}" | \
+            python3 .github/scripts/delete-branches.py \
+              --repo "${GITHUB_REPOSITORY}" \
+              --protect-file .github/branch-deletion-protected.txt \
               --from-stdin --execute
