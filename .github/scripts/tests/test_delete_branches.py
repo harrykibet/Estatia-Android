@@ -6,7 +6,7 @@ import importlib.util
 import io
 import os
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import sys
 from unittest.mock import patch
