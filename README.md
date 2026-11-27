@@ -204,9 +204,9 @@ A manually dispatched GitHub Actions workflow supports two distinct modes:
 1. Open **Actions → Batch Branch Cleanup → Run workflow**.
 2. Leave the `branches` input completely empty.
 3. Dispatch the workflow. It automatically enumerates every remote branch and runs a **forced dry run**, even if the `dry_run` toggle is accidentally set to false.
-4. Inspect the workflow summary. Branches passing the repository protection checks are marked `REVIEW_REQUIRED`, not automatically approved for deletion.
+4. Inspect the workflow summary. Branches with commits not present in the default branch are marked `REVIEW_REQUIRED`. Every branch in a full inventory remains review-required; inventory mode never approves deletion.
 
-This inventory mode never deletes branches. It checks repository policy protections, default-branch status, open pull-request heads, and GitHub branch protection. It does **not** determine whether a branch contains unique or unmerged work; review its PR and commit history before selecting it.
+This inventory mode never deletes branches. It checks repository policy protections, default-branch status, open pull-request heads, GitHub branch protection, and compares each eligible branch with the default branch. It reports how many commits are ahead of the default branch. Branches with unique commits remain `REVIEW_REQUIRED`; branches without unique commits also remain review-required in inventory mode until explicitly selected.
 
 ### 2. Explicit branch selection
 
@@ -216,9 +216,10 @@ When ready to preview or delete selected branches, provide only the exact branch
 ["alert-autofix-16","automation/ci-perf-telemetry-42","chore/repository-artifact-cleanup"]
 ```
 
-1. Keep `dry_run` enabled first and inspect the result.
-2. After independently confirming the selected branches are safe to remove, dispatch again with the same explicit list and set `dry_run` to false.
+1. Keep `dry_run` enabled first and inspect the result. This preview runs with read-only permissions.
+2. Only branches marked `WOULD_DELETE` have passed the protection checks and have zero commits ahead of the default branch. Branches marked `REVIEW_REQUIRED` are blocked from deletion because they contain unique commits or require manual inventory review.
+3. After confirming the remaining selected branches are safe to remove, dispatch again with the same explicit list and set `dry_run` to false. Only this execution job receives `contents: write`.
 
 Do not paste shell commands, variable assignments, quotes around the whole list, or Python invocations into the `branches` field. The script also accepts newline-delimited branch names when invoked directly or through stdin.
 
-The workflow protects the default branch, branches configured in `.github/branch-deletion-protected.txt`, branches backing open pull requests, and branches GitHub marks as protected. The script rejects wildcards and invalid branch names, deduplicates entries, and defaults to dry-run mode. Implementation: `.github/scripts/delete-branches.py`.
+The workflow protects the default branch, branches configured in `.github/branch-deletion-protected.txt`, branches backing open pull requests, and branches GitHub marks as protected. Before any deletion, the script compares the candidate against the default branch and blocks deletion whenever GitHub reports commits ahead of the default. During execution it re-reads the branch tip and repeats the comparison immediately before deletion; a changed tip is sent for review. API comparison errors fail closed. The script rejects wildcards and invalid branch names and deduplicates entries. Implementation: `.github/scripts/delete-branches.py`.
