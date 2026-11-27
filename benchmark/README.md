@@ -16,10 +16,15 @@ The `benchmark` module is responsible for performance measurement and optimizati
 ## How to Run
 Run the production macrobenchmarks against a connected Android device or emulator:
 ```bash
-./gradlew :benchmark:connectedProdBenchmarkAndroidTest
+./gradlew :benchmark:connectedProdBenchmarkAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.targetPackageName=com.estatia.realestate.apps \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.benchmark.StartupBenchmark,com.estatia.realestate.apps.benchmark.ScrollBenchmark
 ```
 
-The benchmark module targets the app's `prodBenchmark` build variant. The device must be connected through ADB and support AndroidX Macrobenchmark (API 29 or newer). The Nightly workflow provisions a Pixel 6 API 31 emulator, waits for Android boot completion, runs the connected-device tasks, and stops the emulator even if a task fails.
+The benchmark module targets the app's `prodBenchmark` build variant. The device must be connected through ADB and support AndroidX Macrobenchmark (API 29 or newer). The Nightly baseline-profile lane uses a Pixel 6 API 31 emulator. The Macrobenchmark lane uses a Pixel 6 API 34 emulator (Android 14+) so compilation state remains stable across repeated measurements. The scroll benchmark restores the production benchmark-account session in its setup block and leaves `startupMode` unset so the target process remains alive while frames are measured. Both lanes wait for Android boot completion and stop the emulator even if a task fails.
+
+Baseline Profile generation and performance measurement are intentionally different modes. Baseline Profile generation uses `-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile` so emulator runs execute profile-generation tests without running the Macrobenchmark measurement tests. The nightly hosted-emulator macrobenchmark invocation explicitly enables both rule types and suppresses only AndroidX's `EMULATOR` error. This keeps the smoke/regression path executable, but emulator timings are not representative physical-device measurements and must not be used as release-performance claims. Use a supported physical device for authoritative startup/frame-timing comparisons.
 
 To generate variant-specific Baseline and Startup Profiles for both app environments:
 ```bash

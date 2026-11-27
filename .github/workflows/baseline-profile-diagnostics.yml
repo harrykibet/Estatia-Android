@@ -187,7 +187,9 @@ jobs:
           fi
           mkdir -p "$RUNNER_TEMP/baseline-profile-validation"
           bash ./.github/scripts/run-gradle-with-diagnostics.sh "${{ matrix.flavor }}-baseline-profile-generation" \
-            ./gradlew "$task" --no-configuration-cache --stacktrace --console=plain \
+            ./gradlew "$task" \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
+            --no-configuration-cache --stacktrace --console=plain \
             2>&1 | tee "$RUNNER_TEMP/baseline-profile-validation/generation-${{ matrix.flavor }}.log"
 
       - name: Capture emulator diagnostics
@@ -348,7 +350,6 @@ jobs:
         if: always()
         shell: bash
         env:
-          BASELINE_PROFILE_TEST_EMAIL: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_EMAIL || '' }}
           BASELINE_PROFILE_TEST_PASSWORD: ${{ matrix.flavor == 'prod' && secrets.BASELINE_PROFILE_TEST_PASSWORD || '' }}
         run: |
           bash ./.github/scripts/scrub-check-secrets.sh \
@@ -356,7 +357,7 @@ jobs:
               "app/src/${{ matrix.flavor }}Release/generated/baselineProfiles" \
               "$RUNNER_TEMP/baseline-profile-validation" \
               "$RUNNER_TEMP/gradle-ci-diagnostics" \
-            -- BASELINE_PROFILE_TEST_EMAIL BASELINE_PROFILE_TEST_PASSWORD
+            -- BASELINE_PROFILE_TEST_PASSWORD
 
       - name: Upload generated profiles and validation reports
         if: ${{ always() && steps.scrub-artifacts.outcome == 'success' }}

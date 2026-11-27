@@ -43,3 +43,9 @@
         androidx.work.WorkerParameters
     );
 }
+# Navigation Compose resolves serializable route argument types by their
+# kotlinx.serialization descriptor names at runtime. Keep this enum's JVM
+# name and entries so minified release/benchmark builds can resolve it.
+-keep class com.estatia.realestate.apps.core.model.feature.PaymentContext {
+    *;
+}

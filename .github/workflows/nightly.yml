@@ -2,8 +2,13 @@ name: Nightly Stress & Optimization
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Runs at midnight every day
-  workflow_dispatch:      # Allow manual trigger
+    - cron: '0 0 * * *'  # Runs at midnight every day (UTC)
+  workflow_dispatch:
+
+# Never cancel a long-running exhaustive audit when another event arrives.
+concurrency:
+  group: nightly-stress-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -29,36 +34,38 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set Up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           java-version: 17
-          distribution: 'temurin'
-
+          distribution: temurin
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
-
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
-
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
-
       - name: Prepare Firebase configuration (Prod)
         env:
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh prod
-
       - name: Run Feed Chaos Tests
-        # Chaos tests are expensive, running them in Nightly
+        # Chaos tests are expensive, running them in Nightly.
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-chaos-tests ./gradlew :app:pixel6Api31ProdDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.estatia.realestate.apps.chaos.FeedGestureChaosTest --no-configuration-cache --stacktrace --console=plain
-
+      - name: Upload chaos instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: chaos-test-results-${{ github.run_number }}
+          path: |
+            app/build/reports/androidTests/**
+            app/build/outputs/androidTest-results/**
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload Gradle resource diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -71,7 +78,7 @@ jobs:
   baseline-profiles:
     name: Generate Baseline Profiles
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 120
     env:
       GRADLE_CI_MAX_WORKERS: 1
       GRADLE_CI_GRADLE_XMX: 4608m
@@ -79,65 +86,182 @@ jobs:
       GRADLE_CI_PARALLEL: "false"
       GRADLE_CI_KOTLIN_PARALLEL: "false"
       GRADLE_CI_SAMPLE_SECONDS: 30
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set Up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           java-version: 17
-          distribution: 'temurin'
-
+          distribution: temurin
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
-
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
-
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
-
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
-
+      - name: Validate production benchmark account secrets
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_EMAIL repository secret."
+            exit 1
+          }
+          [[ -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_PASSWORD repository secret."
+            exit 1
+          }
+          echo "Production benchmark account secrets are present; values are not printed."
       - name: Start Connected Android Emulator
         run: bash ./.github/scripts/start-connected-android-emulator.sh
-
       - name: Generate Baseline Profile
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile ./gradlew :app:generateBaselineProfile --no-configuration-cache --stacktrace --console=plain
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8
-        with:
-          commit-message: "chore: update baseline profiles (nightly)"
-          branch: automation/baseline-profiles
-          title: "Update Baseline Profiles (Nightly)"
-          body: |
-            Automated baseline profile generation from nightly run.
-            This PR updates the baseline profiles to optimize app startup and performance based on latest changes.
-          token: ${{ secrets.GITHUB_TOKEN }}
-          delete-branch: true
-          labels: |
-            automation
-            performance
-
+        id: generate-baseline-profile
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Generate only BaselineProfileRule tests. MacrobenchmarkRule tests are
+          # intentionally excluded here because their measurements require a device.
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh baseline-profile \
+            ./gradlew :app:generateBaselineProfile \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
+            --no-configuration-cache --stacktrace --console=plain
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
-
+      # Keep Firebase configuration until release packaging has consumed it.
+      - name: Remove raw instrumentation logcat files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for results_dir in \
+            benchmark/build/outputs/androidTest-results \
+            benchmark/build/reports/androidTests/connected; do
+            if [[ -d "$results_dir" ]]; then
+              find "$results_dir" -type f -name 'logcat-*.txt' -delete
+            fi
+          done
+      - name: Scrub baseline-profile artifacts for credential material
+        id: scrub-baseline-artifacts
+        if: always()
+        env:
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          bash ./.github/scripts/scrub-check-secrets.sh \
+            --dirs \
+              app/src/demoRelease/generated/baselineProfiles \
+              app/src/prodRelease/generated/baselineProfiles \
+              benchmark/build/reports/androidTests/connected \
+              benchmark/build/outputs/androidTest-results \
+              "$RUNNER_TEMP/gradle-ci-diagnostics" \
+            -- BASELINE_PROFILE_TEST_PASSWORD
+      - name: Verify generated Baseline Profiles
+        id: verify-generated-baseline-profiles
+        if: ${{ always() && steps.generate-baseline-profile.outcome == 'success' && steps.scrub-baseline-artifacts.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for flavor in demoRelease prodRelease; do
+            for profile in baseline-prof.txt startup-prof.txt; do
+              path="app/src/$flavor/generated/baselineProfiles/$profile"
+              if [[ ! -s "$path" ]]; then
+                echo "::error::Expected generated baseline profile is missing or empty: $path"
+                exit 1
+              fi
+              rule_count="$(grep -Ev '^[[:space:]]*(#|//|$)' "$path" | wc -l)"
+              if [[ "$rule_count" -le 0 ]]; then
+                echo "::error::Generated baseline profile contains no rules: $path"
+                exit 1
+              fi
+              echo "$path: $rule_count non-empty profile rules"
+            done
+          done
+      - name: Prepare and validate release signing keystore
+        id: prepare-release-keystore
+        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash ./.github/scripts/prepare-release-keystore.sh
+      - name: Assemble Demo and Prod release binaries
+        id: assemble-release-binaries
+        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' && steps.prepare-release-keystore.outcome == 'success' }}
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-profiled-release-binaries \
+            ./gradlew :app:assembleDemoRelease :app:assembleProdRelease \
+            --no-configuration-cache --stacktrace --console=plain
+      - name: Verify packaged profiles and create release manifest
+        id: verify-release-binaries
+        if: ${{ always() && steps.assemble-release-binaries.outcome == 'success' }}
+        run: |
+          python3 ./.github/scripts/verify-nightly-release-binaries.py \
+            --bundle "$RUNNER_TEMP/nightly-release-binaries" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-number "$GITHUB_RUN_NUMBER"
+      - name: Run Release Symbol Obfuscation Audit (LAW-038)
+        if: ${{ always() && steps.assemble-release-binaries.outcome == 'success' }}
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-binary-purity ./gradlew auditReleaseSymbols --no-configuration-cache --stacktrace --console=plain
+      - name: Upload baseline profile instrumentation reports
+        if: ${{ always() && steps.scrub-baseline-artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: baseline-profile-test-results-${{ github.run_number }}
+          path: |
+            benchmark/build/reports/androidTests/connected/**
+            benchmark/build/outputs/androidTest-results/**
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload generated Baseline Profiles
+        if: ${{ always() && steps.verify-generated-baseline-profiles.outcome == 'success' && steps.verify-release-binaries.outcome == 'success' && steps.scrub-baseline-artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: generated-baseline-profiles-${{ github.run_number }}
+          path: |
+            app/src/demoRelease/generated/baselineProfiles/baseline-prof.txt
+            app/src/demoRelease/generated/baselineProfiles/startup-prof.txt
+            app/src/prodRelease/generated/baselineProfiles/baseline-prof.txt
+            app/src/prodRelease/generated/baselineProfiles/startup-prof.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload signed Demo and Prod release binaries
+        if: ${{ always() && steps.verify-release-binaries.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nightly-release-binaries-${{ github.run_number }}
+          path: ${{ runner.temp }}/nightly-release-binaries/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove generated Firebase configuration and release keystore
+        if: always()
+        shell: bash
+        run: rm -f app/src/demo/google-services.json app/src/prod/google-services.json AppKeyStore/keystore.jks
       - name: Upload Gradle resource diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -161,72 +285,229 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set Up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           java-version: 17
-          distribution: 'temurin'
-
+          distribution: temurin
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
-
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
       - name: Prepare KVM and Android Emulator
         run: bash ./.github/scripts/prepare-android-emulator.sh
-
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
-
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
-
-      - name: Prepare and validate release signing keystore
+      - name: Validate production benchmark account secrets
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/prepare-release-keystore.sh
-
-      - name: Assemble Production Release for Audit
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-release-audit ./gradlew :app:assembleProdRelease --no-configuration-cache --stacktrace --console=plain
-
-      - name: Run Release Symbol Obfuscation Audit (LAW-038)
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-binary-purity ./gradlew auditReleaseSymbols --no-configuration-cache --stacktrace --console=plain
-
+          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${BASELINE_PROFILE_TEST_EMAIL:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_EMAIL repository secret."
+            exit 1
+          }
+          [[ -n "${BASELINE_PROFILE_TEST_PASSWORD:-}" ]] || {
+            echo "::error::Missing BASELINE_PROFILE_TEST_PASSWORD repository secret."
+            exit 1
+          }
+          echo "Production benchmark account secrets are present; values are not printed."
+      # Release assembly and symbol auditing run in the baseline-profile job
+      # so the exact profiled Demo/Prod APKs are built only once.
       - name: Start Connected Android Emulator
+        env:
+          # Android 14+ preserves compilation state across Macrobenchmark iterations.
+          ANDROID_EMULATOR_API_LEVEL: "34"
+          ANDROID_EMULATOR_AVD_NAME: estatia-pixel6-api34
+          ANDROID_EMULATOR_DEVICE: pixel_6
         run: bash ./.github/scripts/start-connected-android-emulator.sh
-
       - name: Run Startup & Scroll Benchmarks
-        run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-benchmarks ./gradlew :benchmark:connectedProdBenchmarkAndroidTest --no-configuration-cache --stacktrace --console=plain
+        env:
+          BASELINE_PROFILE_TEST_EMAIL: ${{ secrets.BASELINE_PROFILE_TEST_EMAIL }}
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Only Macrobenchmark rules run here; BaselineProfile generation has its own job.
+          # targetPackageName is normally supplied by the Baseline Profile plugin's generate
+          # task, which this direct connected-test task bypasses, so it is passed explicitly.
+          echo "::warning::EMULATOR is suppressed for this hosted AVD only; timings are regression signals, not physical-device performance measurements."
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-benchmarks \
+            ./gradlew :benchmark:connectedProdBenchmarkAndroidTest \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=Macrobenchmark \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.targetPackageName=com.estatia.realestate.apps \
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
+            -Pandroid.testInstrumentationRunnerArguments.package=com.estatia.realestate.apps.benchmark \
+            --no-configuration-cache --stacktrace --console=plain
+      - name: Verify startup and feed-scroll benchmark coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
 
+          result_root = Path("benchmark/build/outputs/androidTest-results/connected")
+          xml_reports = sorted(result_root.rglob("TEST-*.xml"))
+          if not xml_reports:
+              raise SystemExit(
+                  "::error::Macrobenchmark instrumentation produced no JUnit XML reports."
+              )
+
+          required = {
+              "com.estatia.realestate.apps.benchmark.StartupBenchmark": {
+                  "startupCold", "startupWarm", "startupHot"
+              },
+              "com.estatia.realestate.apps.benchmark.ScrollBenchmark": {
+                  "scrollFeed"
+              },
+          }
+          disabled_rule_class = (
+              "com.estatia.realestate.apps.benchmark.BaselineProfileGenerator"
+          )
+          observed = {}
+          ignored_disabled_rule_cases = 0
+          for report_path in xml_reports:
+              root = ET.parse(report_path).getroot()
+              for testcase in root.findall(".//testcase"):
+                  class_name = testcase.attrib.get("classname", "")
+                  method_name = testcase.attrib.get("name", "")
+                  failure = testcase.find("failure")
+                  error = testcase.find("error")
+                  skipped = testcase.find("skipped")
+
+                  # This lane explicitly enables Macrobenchmark rules only. AndroidX
+                  # reports the disabled BaselineProfileRule cases as an
+                  # AssumptionViolatedException from BaselineProfileRule.apply.
+                  # Suppress only that exact failure signature. A generic JUnit
+                  # <skipped> result remains unexpected, even for this class.
+                  if error is not None:
+                      raise SystemExit(
+                          f"::error::Instrumentation test errored: {class_name}#{method_name}"
+                      )
+                  if class_name == disabled_rule_class and failure is not None:
+                      failure_text = failure.text or ""
+                      expected_disabled_rule_assumption = (
+                          "org.junit.AssumptionViolatedException" in failure_text
+                          and "androidx.benchmark.macro.junit4.BaselineProfileRule$apply"
+                          in failure_text
+                      )
+                      if expected_disabled_rule_assumption:
+                          ignored_disabled_rule_cases += 1
+                          continue
+
+                  if failure is not None:
+                      raise SystemExit(
+                          f"::error::Instrumentation test failed: {class_name}#{method_name}"
+                      )
+                  if skipped is not None:
+                      raise SystemExit(
+                          f"::error::Instrumentation test was skipped: {class_name}#{method_name}"
+                      )
+                  if class_name in required and method_name:
+                      observed.setdefault(class_name, set()).add(method_name)
+
+          missing = []
+          for class_name, methods in required.items():
+              absent = methods - observed.get(class_name, set())
+              if absent:
+                  missing.append(f"{class_name}: {', '.join(sorted(absent))}")
+          if missing:
+              raise SystemExit(
+                  "::error::Required benchmark test cases did not execute: "
+                  + "; ".join(missing)
+              )
+          if ignored_disabled_rule_cases:
+              print(
+                  f"Ignored {ignored_disabled_rule_cases} BaselineProfileRule testcase(s): "
+                  "those rules are intentionally disabled in this Macrobenchmark-only lane."
+              )
+
+          data_root = Path(
+              "benchmark/build/outputs/connected_android_test_additional_output/"
+              "prodBenchmarkRelease/connected"
+          )
+          data_files = sorted(data_root.rglob("*benchmarkData.json"))
+          if not data_files:
+              raise SystemExit(
+                  "::error::Macrobenchmark produced no benchmarkData.json metrics files."
+              )
+
+          measured = set()
+          for data_path in data_files:
+              payload = json.loads(data_path.read_text(encoding="utf-8"))
+              for benchmark in payload.get("benchmarks", []):
+                  name = benchmark.get("name")
+                  if name:
+                      measured.add(name)
+
+          expected_metrics = {"startupCold", "startupWarm", "startupHot", "scrollFeed"}
+          missing_metrics = expected_metrics - measured
+          if missing_metrics:
+              raise SystemExit(
+                  "::error::Macrobenchmark metrics are missing: "
+                  + ", ".join(sorted(missing_metrics))
+              )
+
+          for class_name, methods in required.items():
+              print(f"{class_name}: {', '.join(sorted(methods))}")
+          print("Verified Macrobenchmark metrics: " + ", ".join(sorted(expected_metrics)))
+          PY
+      - name: Summarize failed instrumentation tests
+        if: failure()
+        run: python3 ./.github/scripts/summarize-instrumentation-failures.py benchmark/build/outputs/androidTest-results
       - name: Stop Connected Android Emulator
         if: always()
         run: bash ./.github/scripts/stop-connected-android-emulator.sh
-
-      - name: Upload Benchmark Results
+      # UiAutomator logcat may record the benchmark login fields. Remove raw logs
+      # before scanning/upload; keep the structured JUnit and HTML test reports.
+      - name: Remove raw macrobenchmark logcat files
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for results_dir in \
+            benchmark/build/outputs/androidTest-results \
+            benchmark/build/reports/androidTests/connected; do
+            if [[ -d "$results_dir" ]]; then
+              find "$results_dir" -type f -name 'logcat-*.txt' -delete
+            fi
+          done
+      - name: Scrub benchmark artifacts for credential material
+        id: scrub-benchmark-artifacts
+        if: always()
+        env:
+          BASELINE_PROFILE_TEST_PASSWORD: ${{ secrets.BASELINE_PROFILE_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          bash ./.github/scripts/scrub-check-secrets.sh \
+            --dirs \
+              benchmark/build/outputs/connected_android_test_additional_output \
+              benchmark/build/reports/androidTests/connected \
+              benchmark/build/outputs/androidTest-results \
+              "$RUNNER_TEMP/gradle-ci-diagnostics" \
+            -- BASELINE_PROFILE_TEST_PASSWORD
+      - name: Upload benchmark measurements and instrumentation reports
+        if: ${{ always() && steps.scrub-benchmark-artifacts.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: benchmark-results
-          path: benchmark/build/outputs/connected_android_test_additional_output/
-          if-no-files-found: warn
-
+          name: benchmark-diagnostics-${{ github.run_number }}
+          path: |
+            benchmark/build/outputs/connected_android_test_additional_output/**
+            benchmark/build/reports/androidTests/connected/**
+            benchmark/build/outputs/androidTest-results/**
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Gradle resource diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -237,51 +518,265 @@ jobs:
           retention-days: 5
 
   quality-metrics:
-    name: Code Quality & Mutation Testing
+    name: Architecture, Lint & Coverage Audit
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    env:
+      # Keep the broad audit within the resource envelope used by emulator-heavy jobs.
+      GRADLE_CI_MAX_WORKERS: 1
+      GRADLE_CI_GRADLE_XMX: 4608m
+      GRADLE_CI_KOTLIN_XMX: 1536m
+      GRADLE_CI_PARALLEL: "false"
+      GRADLE_CI_KOTLIN_PARALLEL: "false"
+      GRADLE_CI_SAMPLE_SECONDS: 30
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set Up JDK 17
         uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
           java-version: 17
-          distribution: 'temurin'
-
+          distribution: temurin
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-provider: basic
-
       - name: Prepare Android local.properties
         run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-
       - name: Set Executable Permission for Gradlew
         run: chmod +x ./gradlew
-
       - name: Prepare Firebase configuration (Demo + Prod)
         env:
           GOOGLE_SERVICES_JSON_DEMO_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_DEMO_BASE64 }}
           GOOGLE_SERVICES_JSON_PROD_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_PROD_BASE64 }}
         run: bash ./.github/scripts/prepare-google-services.sh demo prod
-
       - name: Full Variant Architecture Audit
-        # 🏗️ EXHAUSTIVE AUDIT: Run architecture verification on ALL variants nightly.
+        # EXHAUSTIVE AUDIT: Run architecture verification on ALL variants nightly.
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-architecture-audit ./gradlew verifyArchitecture lint --no-configuration-cache --stacktrace --info
-
       - name: Run Full Coverage Report
         run: bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-coverage ./gradlew jacocoProdDebugReport --no-configuration-cache --stacktrace --info
+      - name: Enforce configured JaCoCo coverage thresholds
+        shell: bash
+        run: |
+          set -euo pipefail
 
+          # These modules have configured line/branch limits and generated
+          # ProdDebug execution data in the full-report task above.
+          verification_modules=(
+            core/security
+            core/player-engine
+            core/network
+            core/database
+            core/domain
+            feature/auth
+            feature/payments
+            feature/home
+            feature/profile
+            feature/search
+            feature/property
+            feature/market
+            feature/chats
+            feature/favorites
+            feature/comments
+            feature/settings
+          )
+
+          verification_tasks=()
+          for module_path in "${verification_modules[@]}"; do
+            verification_tasks+=(":${module_path//\//:}:jacocoProdDebugVerification")
+          done
+
+          # These modules also have thresholds, but run #111 had NO-SOURCE unit
+          # tests and skipped reports for them. Activate their verifier
+          # automatically as soon as tests produce a non-empty execution file.
+          for module_path in core/model feature/shared-ui; do
+            execution_data="${module_path}/build/outputs/unit_test_code_coverage/prodDebugUnitTest/testProdDebugUnitTest.exec"
+            if [[ -s "$execution_data" ]]; then
+              verification_tasks+=(":${module_path//\//:}:jacocoProdDebugVerification")
+              echo "JaCoCo execution data found for $module_path; enabling its threshold verifier."
+            else
+              echo "::notice::Deferring JaCoCo verification for $module_path: no unit-test execution data was produced."
+            fi
+          done
+
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-coverage-verification \
+            ./gradlew "${verification_tasks[@]}" \
+            --continue --no-configuration-cache --stacktrace --info
+      - name: Verify JaCoCo report integrity and coverage inputs
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          # These modules have non-zero configured thresholds and produced
+          # reports from real ProdDebug unit-test execution data in run #111.
+          required_coverage_modules = [
+              "core:security",
+              "core:player-engine",
+              "core:network",
+              "core:database",
+              "core:domain",
+              "feature:auth",
+              "feature:payments",
+              "feature:home",
+              "feature:profile",
+              "feature:search",
+              "feature:property",
+              "feature:market",
+              "feature:chats",
+              "feature:favorites",
+              "feature:comments",
+              "feature:settings",
+          ]
+
+          # Keep the app report as a diagnostic output; :app has no non-zero
+          # line/branch threshold in the JaCoCo convention plugin.
+          diagnostic_only_modules = ["app"]
+
+          # core:model (30% line, 0% branch) and feature:shared-ui (60% line,
+          # 50% branch) currently have NO-SOURCE unit-test tasks. They are
+          # conditionally verified above if execution data becomes available.
+          optional_modules = {
+              "core:model": False,
+              "feature:shared-ui": True,
+          }
+
+          def module_root(module):
+              return Path(*module.split(":")) if ":" in module else Path(module)
+
+          def execution_data_path(module):
+              return (
+                  module_root(module)
+                  / "build/outputs/unit_test_code_coverage/prodDebugUnitTest"
+                  / "testProdDebugUnitTest.exec"
+              )
+
+          def report_path(module):
+              return (
+                  module_root(module)
+                  / "build/reports/jacoco/jacocoProdDebugReport"
+                  / "jacocoProdDebugReport.xml"
+              )
+
+          def verify_report(module, require_branch_data):
+              path = report_path(module)
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(
+                      f"::error::JaCoCo XML report is missing or empty for {module}: {path}"
+                  )
+
+              try:
+                  root = ET.parse(path).getroot()
+              except (ET.ParseError, OSError) as error:
+                  raise SystemExit(
+                      f"::error::JaCoCo XML report is malformed or unreadable for {module}: "
+                      f"{path}: {error}"
+                  ) from error
+
+              if root.tag != "report":
+                  raise SystemExit(
+                      f"::error::Unexpected JaCoCo XML root for {module}: "
+                      f"expected 'report', received '{root.tag}'"
+                  )
+
+              counters = {
+                  counter.attrib.get("type"): counter.attrib
+                  for counter in root.findall("counter")
+              }
+
+              measured = {}
+              for counter_type in ("LINE", "BRANCH"):
+                  counter = counters.get(counter_type)
+                  if counter is None:
+                      raise SystemExit(
+                          f"::error::JaCoCo report for {module} has no {counter_type} counter: {path}"
+                      )
+
+                  try:
+                      covered = int(counter["covered"])
+                      missed = int(counter["missed"])
+                  except (KeyError, TypeError, ValueError) as error:
+                      raise SystemExit(
+                          f"::error::Invalid {counter_type} counter in JaCoCo report for "
+                          f"{module}: {path}: {error}"
+                      ) from error
+
+                  if covered < 0 or missed < 0:
+                      raise SystemExit(
+                          f"::error::Negative {counter_type} counts in JaCoCo report for {module}: {path}"
+                      )
+
+                  total = covered + missed
+                  if counter_type == "LINE" or require_branch_data:
+                      if total <= 0:
+                          raise SystemExit(
+                              f"::error::JaCoCo report for {module} has no measurable "
+                              f"{counter_type} coverage data: {path}"
+                          )
+
+                  measured[counter_type] = (covered, total)
+
+              line_covered, line_total = measured["LINE"]
+              branch_covered, branch_total = measured["BRANCH"]
+              line_percent = line_covered * 100.0 / line_total
+              branch_percent = (
+                  f"{branch_covered * 100.0 / branch_total:.1f}%"
+                  if branch_total
+                  else "not applicable (no branch points)"
+              )
+              print(
+                  f"{module}: LINE {line_covered}/{line_total} "
+                  f"({line_percent:.1f}%), BRANCH {branch_covered}/{branch_total} "
+                  f"({branch_percent})."
+              )
+
+          for module in diagnostic_only_modules:
+              verify_report(module, require_branch_data=False)
+
+          for module in required_coverage_modules:
+              execution_data = execution_data_path(module)
+              if not execution_data.is_file() or execution_data.stat().st_size == 0:
+                  raise SystemExit(
+                      f"::error::Required JaCoCo execution data is missing or empty for "
+                      f"{module}: {execution_data}"
+                  )
+              verify_report(module, require_branch_data=True)
+
+          for module, require_branch_data in optional_modules.items():
+              execution_data = execution_data_path(module)
+              report = report_path(module)
+              if execution_data.is_file() and execution_data.stat().st_size > 0:
+                  verify_report(module, require_branch_data=require_branch_data)
+              elif report.exists():
+                  raise SystemExit(
+                      f"::error::JaCoCo report exists without its execution-data input for "
+                      f"{module}: {execution_data}"
+                  )
+              else:
+                  print(
+                      f"{module}: threshold verification deferred; no unit-test "
+                      "execution data exists yet."
+                  )
+
+          print(
+              "JaCoCo report integrity and required execution-data validation passed. "
+              "Configured line/branch thresholds are enforced by the Gradle verification tasks."
+          )
+          PY
       - name: Upload Quality Reports
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: quality-reports
+          name: quality-reports-${{ github.run_number }}
           path: |
             **/build/reports/jacoco/**
             **/build/test-results/**
-
+            **/build/outputs/unit_test_code_coverage/**/*.exec
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Gradle resource diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -297,21 +792,255 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      GRADLE_CI_MAX_WORKERS: 1
+      GRADLE_CI_GRADLE_XMX: 5g
+      GRADLE_CI_KOTLIN_XMX: 1536m
+      GRADLE_CI_PARALLEL: "false"
+      GRADLE_CI_KOTLIN_PARALLEL: "false"
+      GRADLE_CI_SAMPLE_SECONDS: 30
     steps:
       - name: Checkout Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # immutable upstream commit
+      - name: Set up JDK 17
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6
         with:
-          project: Estatia
-          path: "."
-          format: "HTML"
-          out: "security-reports"
-          args: --nvdApiKey ${{ secrets.NVD_API_KEY }} --nvdApiDelay 3500
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          cache-provider: basic
+      - name: Prepare Android local.properties
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+      - name: Restore Dependency-Check database cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/dependency-check-data
+          key: owasp-dependency-check-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            owasp-dependency-check-${{ runner.os }}-
+      - name: Verify NVD API configuration
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$NVD_API_KEY" ]]; then
+            echo "::error::The repository secret NVD_API_KEY is required for the nightly Dependency-Check scan."
+            exit 1
+          fi
+          echo "NVD API authentication is configured."
+      - name: Run OWASP Dependency Check against resolved Gradle release dependencies
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          ODC_DATA_DIRECTORY: ${{ runner.temp }}/dependency-check-data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dependency-check-data" "$GITHUB_WORKSPACE/reports"
+          chmod +x ./gradlew
+          bash ./.github/scripts/run-gradle-with-diagnostics.sh nightly-owasp-dependency-check \
+            ./gradlew \
+            --init-script .github/scripts/owasp-dependency-check.init.gradle \
+            :app:dependencyCheckAnalyze \
+            --no-configuration-cache --stacktrace --console=plain
+      - name: Verify Dependency-Check scanned the Gradle dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
 
+          report_path = Path("reports/dependency-check-report.json")
+          if not report_path.is_file():
+              raise SystemExit(
+                  "::error::Dependency-Check did not generate its JSON dependency inventory."
+              )
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          dependencies = report.get("dependencies")
+          if not isinstance(dependencies, list):
+              raise SystemExit(
+                  "::error::Dependency-Check JSON has no dependencies array; refusing an empty scan."
+              )
+
+          identified = [
+              dependency for dependency in dependencies
+              if isinstance(dependency, dict)
+              and (
+                  dependency.get("fileName")
+                  or dependency.get("packages")
+                  or dependency.get("identifiers")
+              )
+          ]
+          print(f"Dependency-Check inventory entries: {len(identified)}")
+          if len(identified) < 25:
+              raise SystemExit(
+                  "::error::Dependency-Check found fewer than 25 dependency entries. "
+                  "The Gradle dependency graph may not have been scanned."
+              )
+          print("Resolved Gradle dependency inventory validation passed.")
+          PY
       - name: Upload Security Report
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: security-report
-          path: security-reports
+          name: security-report-${{ github.run_number }}
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload Gradle resource diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gradle-resource-${{ github.run_number }}-security-scan
+          path: ${{ runner.temp }}/gradle-ci-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  nightly-evidence-publication:
+    name: Publish Durable Nightly Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - chaos-tests
+      - baseline-profiles
+      - benchmarks
+      - quality-metrics
+      - security-scan
+    if: ${{ always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main for evidence publication
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Prepare evidence download directories
+        run: mkdir -p "$RUNNER_TEMP/nightly-evidence"/{quality,profiles,binaries,benchmarks}
+      - name: Download JaCoCo quality reports
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: quality-reports-${{ github.run_number }}
+          path: ${{ runner.temp }}/nightly-evidence/quality
+      - name: Download generated Baseline Profiles
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-baseline-profiles-${{ github.run_number }}
+          path: ${{ runner.temp }}/nightly-evidence/profiles
+      - name: Download signed release binaries
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nightly-release-binaries-${{ github.run_number }}
+          path: ${{ runner.temp }}/nightly-evidence/binaries
+      - name: Download Macrobenchmark measurements
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: benchmark-diagnostics-${{ github.run_number }}
+          path: ${{ runner.temp }}/nightly-evidence/benchmarks
+      - name: Publish available evidence and historical summaries
+        env:
+          NIGHTLY_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 ./.github/scripts/publish-nightly-evidence.py \
+            --artifacts-root "$RUNNER_TEMP/nightly-evidence" \
+            --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-number "$GITHUB_RUN_NUMBER"
+      - name: Commit and push updated evidence to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- ci/evidence/nightly
+          for profile_dir in \
+            app/src/demoRelease/generated/baselineProfiles \
+            app/src/prodRelease/generated/baselineProfiles; do
+            if [[ -d "$profile_dir" ]]; then
+              git add -A -- "$profile_dir"
+            fi
+          done
+          if git diff --cached --quiet; then
+            echo "No new nightly evidence to commit."
+            exit 0
+          fi
+          git commit -m "ci(evidence): publish nightly quality and profile snapshots [skip ci]"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
+  nightly-summary:
+    name: Nightly Result Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ always() }}
+    needs:
+      - chaos-tests
+      - baseline-profiles
+      - benchmarks
+      - quality-metrics
+      - security-scan
+      - nightly-evidence-publication
+    steps:
+      - name: Summarize nightly job outcomes
+        env:
+          NIGHTLY_RESULTS: ${{ toJSON(needs) }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["NIGHTLY_RESULTS"])
+          labels = {
+              "chaos-tests": "Deterministic Chaos Tests",
+              "baseline-profiles": "Baseline Profile Generation",
+              "benchmarks": "Performance Macrobenchmarks",
+              "quality-metrics": "Architecture and Coverage Audit",
+              "security-scan": "Dependency Vulnerability Scan",
+              "nightly-evidence-publication": "Durable Evidence Publication",
+          }
+
+          failures = []
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("# Nightly Stress & Optimization\n\n")
+              summary.write("| Job | Result |\n|---|---|\n")
+              for key, label in labels.items():
+                  result = results.get(key, {}).get("result", "missing")
+                  if (
+                      key == "nightly-evidence-publication"
+                      and result == "skipped"
+                      and os.environ.get("GITHUB_REF") != "refs/heads/main"
+                  ):
+                      rendered_result = "skipped (non-main run; expected)"
+                  else:
+                      rendered_result = result
+                      if result != "success":
+                          failures.append(f"{key}={result}")
+                  summary.write(f"| {label} | {rendered_result} |\n")
+              summary.write("\n")
+              summary.write(
+                  f"[Open workflow run]({os.environ['GITHUB_SERVER_URL']}/"
+                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+                  f"{os.environ['GITHUB_RUN_ID']})\n"
+              )
+
+          if failures:
+              print("::error::Nightly verification did not pass: " + ", ".join(failures))
+              sys.exit(1)
+          print("All nightly verification jobs completed successfully.")
+          PY

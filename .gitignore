@@ -54,3 +54,7 @@ AppKeyStore/
 /.run/
 /.gradle_temp/
 /.android_temp/
+
+# Firebase client configs are materialized by CI and must not be committed.
+app/src/demo/google-services.json
+app/src/prod/google-services.json
