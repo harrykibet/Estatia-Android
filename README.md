@@ -192,3 +192,16 @@ This gate includes lint, structural invariants, compiler-level architecture cont
 ## Vision
 
 Estatia is building the foundational rental infrastructure layer for emerging markets — enabling scalable, transparent, and monetizable property ecosystems across platforms.
+
+---
+
+## Batch Branch Cleanup
+
+A manually dispatched GitHub Actions workflow is available for deleting explicitly named batches of obsolete branches after review.
+
+1. Open **Actions → Batch Branch Cleanup → Run workflow**.
+2. Enter exact branch names in the `branches` input, one per line.
+3. Run first with `dry_run` enabled and inspect the workflow summary.
+4. Set `dry_run` to false only when you are ready to delete the listed refs.
+
+The workflow protects the default branch, branches configured in `.github/branch-deletion-protected.txt`, branches backing open pull requests, and branches GitHub marks as protected. The reusable implementation is in `.github/scripts/delete-branches.py`.

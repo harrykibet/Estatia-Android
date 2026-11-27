@@ -1,0 +1,3 @@
+# Maintained branches used by repository automation.
+# The repository default branch is protected automatically by the script.
+automation/baseline-profiles
