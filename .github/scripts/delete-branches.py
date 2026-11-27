@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safely inventory remote branches or delete explicitly selected GitHub branches.
 
-Dry-run is the default. Use --execute only after reviewing an explicit preview.
+Dry-run is the default. A branch with commits not present in the default branch is never deleted.
 Input may be positional, repeated --branch values, a JSON array, or newline-delimited stdin.
 Use --all-branches for a forced read-only inventory of every remote branch.
 Blank lines and lines beginning with # are ignored; wildcards are unsupported.
@@ -155,6 +155,33 @@ def list_remote_branches(api: GitHub, repo: str) -> list[str]:
     return parse_names(names, None)
 
 
+def compare_ahead_by(api: GitHub, repo: str, base_branch: str, head_branch: str) -> int:
+    """Return commits reachable from head_branch but not from base_branch.
+
+    Any API or response-shape problem fails closed; callers must not delete a
+    branch unless GitHub confirms that it has zero commits ahead of the default.
+    """
+    base = quote(base_branch, safe="")
+    head = quote(head_branch, safe="")
+    path = f"/repos/{repo}/compare/{base}...{head}"
+    try:
+        comparison = api.get(path)
+    except APIError as error:
+        raise RuntimeError(
+            f"Unable to compare {head_branch!r} with {base_branch!r}; refusing deletion: {error}"
+        ) from error
+    if not isinstance(comparison, dict):
+        raise RuntimeError(
+            f"GitHub returned an invalid comparison for {head_branch!r}; refusing deletion."
+        )
+    ahead_by = comparison.get("ahead_by")
+    if type(ahead_by) is not int or ahead_by < 0:
+        raise RuntimeError(
+            f"GitHub returned invalid ahead_by metadata for {head_branch!r}; refusing deletion."
+        )
+    return ahead_by
+
+
 def read_protected(path: str | None) -> set[str]:
     if not path:
         return set()
@@ -212,7 +239,7 @@ def run(args: argparse.Namespace) -> int:
         print("ERROR: Set GITHUB_REPOSITORY or pass --repo owner/name.", file=sys.stderr)
         return 2
     if not token:
-        print("ERROR: GITHUB_TOKEN is required (contents:read for inventory; contents:write for --execute; pull-requests:read).", file=sys.stderr)
+        print("ERROR: GITHUB_TOKEN is required (contents:read for inventory and previews; contents:write only for --execute; pull-requests:read).", file=sys.stderr)
         return 2
     try:
         supplied_names = parse_names(
@@ -272,17 +299,56 @@ def run(args: argparse.Namespace) -> int:
                 data = api.get(f"/repos/{repo}/branches/{encoded}")
                 if data.get("protected") is True:
                     outcome = Outcome(branch, "SKIPPED", "GitHub reports this branch as protected.")
-                elif dry_run and args.all_branches:
-                    outcome = Outcome(
-                        branch,
-                        "REVIEW_REQUIRED",
-                        "Policy checks passed; inspect commit history and unique work before explicitly selecting this branch for deletion.",
-                    )
-                elif dry_run:
-                    outcome = Outcome(branch, "WOULD_DELETE", "Safety checks passed; no ref changed.")
                 else:
-                    api.delete(f"/repos/{repo}/git/refs/heads/{encoded}")
-                    outcome = Outcome(branch, "DELETED", "GitHub accepted the ref deletion.")
+                    ahead_by = compare_ahead_by(api, repo, default_branch, branch)
+                    if ahead_by > 0:
+                        outcome = Outcome(
+                            branch,
+                            "REVIEW_REQUIRED",
+                            f"Branch contains {ahead_by} commit(s) not present in {default_branch}; manual review required.",
+                        )
+                    elif dry_run and args.all_branches:
+                        outcome = Outcome(
+                            branch,
+                            "REVIEW_REQUIRED",
+                            f"No commits are ahead of {default_branch}; full inventory mode never approves deletion. Select explicitly after review.",
+                        )
+                    elif dry_run:
+                        outcome = Outcome(
+                            branch,
+                            "WOULD_DELETE",
+                            f"No commits are ahead of {default_branch}; policy checks passed; no ref changed.",
+                        )
+                    else:
+                        # Re-read the branch tip immediately before deleting. This
+                        # narrows the race window if another actor updates the ref.
+                        latest = api.get(f"/repos/{repo}/branches/{encoded}")
+                        initial_sha = data.get("commit", {}).get("sha") if isinstance(data.get("commit"), dict) else None
+                        latest_sha = latest.get("commit", {}).get("sha") if isinstance(latest, dict) and isinstance(latest.get("commit"), dict) else None
+                        if not initial_sha or latest_sha != initial_sha:
+                            outcome = Outcome(
+                                branch,
+                                "REVIEW_REQUIRED",
+                                "Branch tip changed during validation; rerun the preview before considering deletion.",
+                            )
+                        elif latest.get("protected") is True:
+                            outcome = Outcome(
+                                branch,
+                                "SKIPPED",
+                                "GitHub reports this branch as protected on the final pre-delete check.",
+                            )
+                        else:
+                            # Re-check the comparison against the current default tip.
+                            latest_ahead_by = compare_ahead_by(api, repo, default_branch, branch)
+                            if latest_ahead_by > 0:
+                                outcome = Outcome(
+                                    branch,
+                                    "REVIEW_REQUIRED",
+                                    f"Branch now contains {latest_ahead_by} commit(s) not present in {default_branch}; deletion blocked.",
+                                )
+                            else:
+                                api.delete(f"/repos/{repo}/git/refs/heads/{encoded}")
+                                outcome = Outcome(branch, "DELETED", "GitHub accepted the ref deletion.")
             except APIError as error:
                 if error.status == 404:
                     outcome = Outcome(branch, "SKIPPED", "Branch does not exist or was already deleted.")
