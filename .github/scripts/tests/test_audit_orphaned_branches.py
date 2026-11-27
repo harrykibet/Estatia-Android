@@ -103,7 +103,7 @@ def test_unique_commit_after_squash_merged_pr_is_flagged() -> None:
         feature_head = commit_file(repo, "feature.txt", "merged feature\n", "feature PR work")
         tail_head = commit_file(repo, "later.txt", "important later work\n", "later unsubmitted work")
         git(repo, "checkout", "-q", "main")
-        git(repo, "merge", "--squash", "-q", "feature_head")
+        git(repo, "merge", "--squash", "-q", "feature")
         git(repo, "commit", "-q", "-m", "squash merge PR #8")
         merge_sha = git(repo, "rev-parse", "HEAD")
         history = [{
