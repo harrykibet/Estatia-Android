@@ -1,0 +1,58 @@
+name: Batch Branch Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Exact branch names to delete, one per line. Blank lines and # comments are ignored."
+        required: true
+        type: string
+      dry_run:
+        description: "Preview only. Set to false to perform deletions."
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  delete-branches:
+    name: Validate and delete requested branches
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Preview or delete requested branches
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCHES_INPUT: ${{ inputs.branches }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=(
+            --from-stdin
+            --protect-file .github/branch-deletion-protected.txt
+          )
+
+          if [[ "${DRY_RUN,,}" == "true" ]]; then
+            args+=(--dry-run)
+          else
+            args+=(--execute)
+          fi
+
+          printf '%s\n' "$BRANCHES_INPUT" | \
+            python3 .github/scripts/delete-branches.py "${args[@]}"
