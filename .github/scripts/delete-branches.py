@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Safely delete exact batches of GitHub branches.
+"""Safely inventory remote branches or delete explicitly selected GitHub branches.
 
-Dry-run is the default. Use --execute only after reviewing the preview.
-Input may be positional, repeated --branch values, or newline-delimited stdin.
+Dry-run is the default. Use --execute only after reviewing an explicit preview.
+Input may be positional, repeated --branch values, a JSON array, or newline-delimited stdin.
+Use --all-branches for a forced read-only inventory of every remote branch.
 Blank lines and lines beginning with # are ignored; wildcards are unsupported.
 """
 from __future__ import annotations
