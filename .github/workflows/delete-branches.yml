@@ -14,7 +14,7 @@ on:
         default: true
         type: boolean
 
-# Read-only by default. Only the explicit-selection job receives contents:write.
+# Read-only by default. Only the explicit execution job receives contents:write.
 permissions:
   contents: read
   pull-requests: read
@@ -47,7 +47,7 @@ jobs:
       contents: read
       pull-requests: read
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -63,15 +63,45 @@ jobs:
         run: |
           set -euo pipefail
           echo "::notice::No branch list supplied. Enumerating every remote branch with a read-only token; deletion is unavailable in this job."
-          python3 .github/scripts/delete-branches.py \
-            --repo "${GITHUB_REPOSITORY}" \
-            --protect-file .github/branch-deletion-protected.txt \
+          python3 .github/scripts/delete-branches.py \\
+            --repo "${GITHUB_REPOSITORY}" \\
+            --protect-file .github/branch-deletion-protected.txt \\
             --all-branches --dry-run
 
-  selected-branches:
-    name: Preview or delete explicitly selected branches
+  preview-selected:
+    name: Preview explicitly selected branches (read-only)
     needs: validate
-    if: ${{ inputs.branches != '' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: ${{ inputs.branches != '' && inputs.dry_run == true && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Preview explicit branch selection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          BRANCHES_INPUT: ${{ inputs.branches }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\\n' "${BRANCHES_INPUT}" | \\
+            python3 .github/scripts/delete-branches.py \\
+              --repo "${GITHUB_REPOSITORY}" \\
+              --protect-file .github/branch-deletion-protected.txt \\
+              --from-stdin --dry-run
+
+  delete-selected:
+    name: Delete explicitly selected branches
+    needs: validate
+    if: ${{ inputs.branches != '' && inputs.dry_run == false && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     permissions:
       contents: write
       pull-requests: read
@@ -84,27 +114,16 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Process explicit branch selection
+      - name: Delete explicitly selected branches
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           BRANCHES_INPUT: ${{ inputs.branches }}
-          DRY_RUN: ${{ inputs.dry_run }}
         shell: bash
         run: |
           set -euo pipefail
-
-          args=(
-            --repo "${GITHUB_REPOSITORY}"
-            --protect-file .github/branch-deletion-protected.txt
-            --from-stdin
-          )
-          if [[ "${DRY_RUN,,}" == "true" ]]; then
-            args+=(--dry-run)
-          else
-            args+=(--execute)
-          fi
-
-          # Accept a JSON array (recommended for the GitHub UI) or newline-delimited names.
-          printf '%s\n' "${BRANCHES_INPUT}" | \
-            python3 .github/scripts/delete-branches.py "${args[@]}"
+          printf '%s\\n' "${BRANCHES_INPUT}" | \\
+            python3 .github/scripts/delete-branches.py \\
+              --repo "${GITHUB_REPOSITORY}" \\
+              --protect-file .github/branch-deletion-protected.txt \\
+              --from-stdin --execute
