@@ -212,7 +212,7 @@ def run(args: argparse.Namespace) -> int:
         print("ERROR: Set GITHUB_REPOSITORY or pass --repo owner/name.", file=sys.stderr)
         return 2
     if not token:
-        print("ERROR: GITHUB_TOKEN is required (contents:write, pull-requests:read).", file=sys.stderr)
+        print("ERROR: GITHUB_TOKEN is required (contents:read for inventory; contents:write for --execute; pull-requests:read).", file=sys.stderr)
         return 2
     try:
         supplied_names = parse_names(
