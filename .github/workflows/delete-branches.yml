@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: "Exact branch names to delete, one per line. Blank lines and # comments are ignored."
-        required: true
+        description: "Optional JSON array of exact branch names. Leave empty to audit all remote branches (forced dry run)."
+        required: false
+        default: ""
         type: string
       dry_run:
-        description: "Preview only. Set to false to perform deletions."
+        description: "For explicitly supplied branches only: preview when true, delete when false. Empty branch input always forces a full dry run."
         required: true
         default: true
         type: boolean
@@ -23,10 +24,10 @@ concurrency:
 
 jobs:
   delete-branches:
-    name: Validate and delete requested branches
+    name: Inventory, validate, and optionally delete branches
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,7 +35,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
-      - name: Preview or delete requested branches
+      - name: Inventory all branches or process explicit selection
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCHES_INPUT: ${{ inputs.branches }}
@@ -43,16 +44,27 @@ jobs:
         run: |
           set -euo pipefail
 
-          args=(
-            --from-stdin
+          common_args=(
+            --repo "${GITHUB_REPOSITORY}"
             --protect-file .github/branch-deletion-protected.txt
           )
 
+          # An empty input is deliberately safe: inventory every remote branch,
+          # force dry-run mode, and never interpret the dry_run toggle as authority.
+          if [[ -z "${BRANCHES_INPUT//[[:space:]]/}" ]]; then
+            echo "::notice::No branches supplied. Enumerating all remote branches in forced dry-run mode."
+            python3 .github/scripts/delete-branches.py "${common_args[@]}" --all-branches --dry-run
+            exit 0
+          fi
+
+          args=("${common_args[@]}" --from-stdin)
           if [[ "${DRY_RUN,,}" == "true" ]]; then
             args+=(--dry-run)
           else
             args+=(--execute)
           fi
 
-          printf '%s\n' "$BRANCHES_INPUT" | \
+          # Non-empty input is an explicit allowlist, accepted as a JSON array
+          # (recommended for the GitHub UI) or newline-delimited names.
+          printf '%s\n' "${BRANCHES_INPUT}" | \
             python3 .github/scripts/delete-branches.py "${args[@]}"
