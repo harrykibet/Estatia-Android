@@ -7,7 +7,6 @@ import com.estatia.realestate.apps.core.common.interfaces.IClock
 import com.estatia.realestate.apps.core.common.interfaces.ILogger
 import com.estatia.realestate.apps.core.domain.config.INetworkConfig
 import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
-import com.estatia.realestate.apps.core.network.api.SecretApi
 import com.estatia.realestate.apps.core.network.core.AndroidNetworkStateProvider
 import com.estatia.realestate.apps.core.network.core.ExponentialRetryPolicy
 import com.estatia.realestate.apps.core.network.core.ProductionNetworkClient
@@ -174,13 +173,6 @@ object ProdNetworkModule {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
     }
-
-    @Provides
-    @Singleton
-    fun provideSecretApi(retrofit: Retrofit): SecretApi {
-        return retrofit.create(SecretApi::class.java)
-    }
-
     @Provides
     @Singleton
     fun provideNetworkClient(

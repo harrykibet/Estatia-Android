@@ -9,9 +9,7 @@ import com.estatia.realestate.apps.core.network.interfaces.IConfigRemoteDataSour
 import com.estatia.realestate.apps.core.network.interfaces.IPaymentsRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDatasource
 import com.estatia.realestate.apps.core.network.interfaces.ISearchRemoteDataSource
-import com.estatia.realestate.apps.core.network.interfaces.ISecretRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.IUserRemoteDataSource
-import com.estatia.realestate.apps.core.network.sources.SecretRemoteDataSource
 import com.estatia.realestate.apps.core.network.sources.firebase.FirebaseAuthService
 import com.estatia.realestate.apps.core.network.sources.firebase.FirebaseBackendInitializer
 import com.estatia.realestate.apps.core.network.sources.firebase.FirebaseConfig
@@ -82,8 +80,4 @@ internal abstract class ProdDataSourcesModule {
     @Binds
     @Singleton
     abstract fun bindPaymentsRemoteSource(dataSource: FirebasePaymentsRemoteDataSource): IPaymentsRemoteDataSource
-
-    @Binds
-    @Singleton
-    abstract fun bindSecretRemoteSource(dataSource: SecretRemoteDataSource): ISecretRemoteDataSource
 }

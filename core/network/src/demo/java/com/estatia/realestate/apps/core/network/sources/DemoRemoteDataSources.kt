@@ -17,7 +17,6 @@ import com.estatia.realestate.apps.core.network.interfaces.IConfigRemoteDataSour
 import com.estatia.realestate.apps.core.network.interfaces.IPaymentsRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDatasource
 import com.estatia.realestate.apps.core.network.interfaces.ISearchRemoteDataSource
-import com.estatia.realestate.apps.core.network.interfaces.ISecretRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.IUserRemoteDataSource
 import com.estatia.realestate.apps.core.model.property.PropertyCursor
 import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
@@ -25,7 +24,6 @@ import com.estatia.realestate.apps.core.model.analytics.AnalyticsEvent
 import com.estatia.realestate.apps.core.model.feature.PaymentMethod
 import com.estatia.realestate.apps.core.model.feature.PaymentStatus
 import com.estatia.realestate.apps.core.model.property.Money
-import com.estatia.realestate.apps.core.model.security.SecretId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.util.UUID
@@ -154,12 +152,6 @@ class DemoUserRemoteDataSource @Inject constructor() : IUserRemoteDataSource {
 @DataSource
 class DemoConfigRemoteDataSource @Inject constructor() : IConfigRemoteDataSource {
     override suspend fun fetchRemoteConfig(): AppResult<String?> = AppResult.Success("demo_config")
-}
-
-@Singleton
-@DataSource
-class DemoSecretRemoteDataSource @Inject constructor() : ISecretRemoteDataSource {
-    override suspend fun fetchSecret(secretId: SecretId): AppResult<String> = AppResult.Success("demo_secret")
 }
 
 @Singleton

@@ -13,7 +13,7 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
  * Validator for managing the integrity of application API keys.
  * 
  * 🏗️ OPERATIONAL CONTRACT:
- * - Responsibility: Validate remote service keys against cryptographic patterns from [ISecurityConfig].
+ * - Responsibility: Validate supplied API-key formats against [ISecurityConfig]; this class never retrieves credentials.
  * - Security: Explicitly REDACTS keys in logs via [sanitizeForLogging].
  * - Concurrency: Stateless and thread-safe.
  * - Resilience: Surfaces [SecurityException.InvalidApiKey] for malformed or missing keys.

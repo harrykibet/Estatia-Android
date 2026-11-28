@@ -1,17 +1,17 @@
 package com.estatia.realestate.apps.core.network.utils
 
 /**
- * Registry of remote service identifiers used for secret resolution.
- * 
- * 🏗️ OPERATIONAL CONTRACT:
- * - Responsibility: Map domain service identifiers to platform-specific Secret Manager keys.
- * - Immutability: Pure value enumeration.
+ * Service categories used to select client-side API-key format validation rules.
+ *
+ * These values are validation categories only. They are not Secret Manager
+ * resource names and do not provide or authorize access to private credentials.
+ * Private provider credentials must remain on trusted server infrastructure.
  */
-enum class ServiceNames(val secretId: String) {
-    PAYMENTS("StripePaymentAPIKey"),
-    AUTH("Firebase API Key"),
-    GOOGLE_PLAY_INTEGRITY("INTERGRITY_API_KEY"),
-    AI_ML("AI_ML_API_Key");
+enum class ServiceNames {
+    PAYMENTS,
+    AUTH,
+    GOOGLE_PLAY_INTEGRITY,
+    AI_ML;
 
     companion object {
         fun fromServiceName(service: String) =

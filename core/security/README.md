@@ -10,7 +10,7 @@ The `security` module is responsible for protecting sensitive user data and hand
 
 ## Key Components
 - `TokenLocalDataSource`: Manages the lifecycle of user sessions.
-- `BuildConfigSecureKeyProvider`: Safely exposes sensitive configuration keys.
+- `AndroidKeyStoreManager`: Owns Android Keystore-backed key operations.
 
 ## Dependency Graph
 ![Module Graph](module_graph.png)
