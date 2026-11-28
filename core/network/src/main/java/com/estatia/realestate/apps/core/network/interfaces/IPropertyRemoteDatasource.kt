@@ -26,6 +26,15 @@ interface IPropertyRemoteDatasource {
     ): AppResult<String>
 
     /**
+     * Submits an existing owner-bound inactive draft for moderator review.
+     * This method can be retried without re-uploading the listing's media.
+     */
+    suspend fun submitPropertyForReview(propertyId: String): AppResult<Unit> =
+        AppResult.Error(UnsupportedOperationException(
+            "Property submission is not supported by this remote data source."
+        ))
+
+    /**
      * Updates an existing property listing using allowlisted fields.
      */
     suspend fun updateProperty(
