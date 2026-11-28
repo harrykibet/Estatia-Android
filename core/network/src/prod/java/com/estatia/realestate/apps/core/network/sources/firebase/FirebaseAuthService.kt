@@ -66,7 +66,7 @@ internal class FirebaseAuthService @Inject constructor(
                 user.profilePictureUrl?.let { put("profilePictureUrl", it) }
                 user.bio?.let { put("bio", it) }
                 user.userType.takeIf { it.isNotBlank() }?.let {
-                    put("profileType", it)
+                    put("profileCategory", it)
                 }
             }
 
