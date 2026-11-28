@@ -46,7 +46,7 @@ internal class FirestoreUsers @Inject constructor(
 
             val snapshot =
                 database.collection(
-                    FirestoreCollections.USERS
+                    FirestoreCollections.PUBLIC_PROFILES
                 )
                     .document(userId)
                     .get()
@@ -54,9 +54,8 @@ internal class FirestoreUsers @Inject constructor(
 
 
 
-            val user = snapshot.toObject(
-                UserEntityModel::class.java
-            ) ?: throw DatabaseException.NotFound
+            val fields = snapshot.data ?: throw DatabaseException.NotFound
+            val user = FirestorePublicProfileMapper.toEntity(snapshot.id, fields)
 
             val duration = System.currentTimeMillis() - startTime
             metricsTracker.trackDuration("network.users.fetch_latency", duration.milliseconds)

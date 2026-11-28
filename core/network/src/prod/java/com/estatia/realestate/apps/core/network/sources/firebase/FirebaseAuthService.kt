@@ -9,7 +9,6 @@ import com.estatia.realestate.apps.core.common.interfaces.PhoneVerificationState
 import com.estatia.realestate.apps.core.network.core.RetryConfigs
 import com.estatia.realestate.apps.core.network.db_entities.NetworkUserEntity
 import com.estatia.realestate.apps.core.network.db_entities.UserEntityModel
-import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
 import com.estatia.realestate.apps.core.network.interfaces.IAuthExceptionMapper
 import com.estatia.realestate.apps.core.network.interfaces.IAuthRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
@@ -21,8 +20,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -39,8 +37,8 @@ import kotlin.coroutines.resumeWithException
 
 @Service
 internal class FirebaseAuthService @Inject constructor(
-    private val database: FirebaseFirestore,
     private val firebaseAuth: FirebaseAuth,
+    private val functions: FirebaseFunctions,
     @FirebaseMapper private val authErrorMapper: IAuthExceptionMapper,
     private val networkClient: INetworkClient
 ) : IAuthRemoteDataSource {
@@ -56,15 +54,26 @@ internal class FirebaseAuthService @Inject constructor(
     ): AppResult<Unit> {
 
         return networkClient.execute(RetryConfigs.AUTH) {
+            val authenticatedUser = firebaseAuth.currentUser
+                ?: throw AuthException.UserNotAuthenticated
 
-            val userRef =
-                database.collection(FirestoreCollections.USERS)
-                    .document(userId)
+            require(authenticatedUser.uid == userId) {
+                "Cannot update a profile for a different authenticated user."
+            }
 
-            userRef.set(
-                user,
-                SetOptions.merge()
-            ).await()
+            val profileData = buildMap<String, Any> {
+                user.name?.let { put("displayName", it) }
+                user.profilePictureUrl?.let { put("profilePictureUrl", it) }
+                user.bio?.let { put("bio", it) }
+                user.userType.takeIf { it.isNotBlank() }?.let {
+                    put("profileType", it)
+                }
+            }
+
+            functions
+                .getHttpsCallable("syncUserProfile")
+                .call(profileData)
+                .await()
         }
     }
 
@@ -87,7 +96,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignUpFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -111,7 +120,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignInFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -151,7 +160,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignInFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -281,14 +290,35 @@ internal class FirebaseAuthService @Inject constructor(
 
     private suspend fun signInWithCredentialSuspend(
         credential: PhoneAuthCredential
-    ): Unit = suspendCancellableCoroutine { cont ->
-        firebaseAuth.signInWithCredential(credential)
-            .addOnSuccessListener {
-                if (cont.isActive) cont.resume(Unit)
-            }
-            .addOnFailureListener { exception ->
-                if (cont.isActive) cont.resumeWithException(exception)
-            }
+    ) {
+        val firebaseUser = firebaseAuth.signInWithCredential(credential)
+            .await()
+            .user
+            ?: throw AuthException.SignInFailed
+
+        syncAuthenticatedProfile(firebaseUser)
+    }
+
+    /**
+     * Ensures the user's safe public profile exists before profile reads occur.
+     *
+     * This runs after every Firebase sign-in path so existing mixed user
+     * documents can be migrated by the backend callable without exposing their
+     * private fields to the public profile collection.
+     *
+     * @param user Authenticated Firebase user.
+     */
+    private suspend fun syncAuthenticatedProfile(
+        user: com.google.firebase.auth.FirebaseUser
+    ) {
+        check(firebaseAuth.currentUser?.uid == user.uid) {
+            "Profile synchronization requires the current authenticated user."
+        }
+
+        functions
+            .getHttpsCallable("syncUserProfile")
+            .call(emptyMap<String, Any>())
+            .await()
     }
 
 

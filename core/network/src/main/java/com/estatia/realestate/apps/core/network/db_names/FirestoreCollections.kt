@@ -5,6 +5,7 @@ import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 @Utility
 object FirestoreCollections {
     const val USERS = "users"
+    const val PUBLIC_PROFILES = "publicProfiles"
     const val PROPERTIES = "properties"
     const val ANALYTICS = "analytics"
 
