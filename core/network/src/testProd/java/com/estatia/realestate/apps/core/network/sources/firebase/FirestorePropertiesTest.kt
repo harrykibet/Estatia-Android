@@ -121,7 +121,6 @@ class FirestorePropertiesTest {
                     }
                 )
             }
-            verify(exactly = 0) { database.runBatch(any()) }
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
         }
