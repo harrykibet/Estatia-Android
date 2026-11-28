@@ -43,9 +43,10 @@ import kotlinx.coroutines.tasks.await
  *
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Low-level Firestore and Storage operations for property entities.
- * - Idempotency: Enforces client-side ID generation [propertyId] to ensure retries don't create duplicate documents.
- * - Concurrency: Thread-safe; leverages [networkClient] for execution context.
- * - Resilience: Chunked queries [chunked] for 'whereIn' limits and batched writes [runBatch] for atomicity.
+ * - Ownership: Property creation, update and deletion require the current Firebase Auth UID.
+ * - Publication: Client-created listings begin inactive; activation remains server-owned.
+ * - Storage: An owner-bound draft exists before uploads, with MIME metadata and compensating cleanup.
+ * - Resilience: Multi-resource uploads use a no-retry executor and clean up paths created by the attempt.
  * - Performance: Offloads HLS generation to server-side; performs only direct VOD/Image uploads.
  * - Observability: Tracks upload and fetch latency for property management.
  */
