@@ -30,8 +30,8 @@ import kotlinx.coroutines.tasks.await
  * 🏗️ OPERATIONAL CONTRACT:
  * - Responsibility: Manage comment streams and submissions.
  * - Concurrency: Thread-safe reactive observation via [callbackFlow].
- * - Resilience: Uses [RetryConfigs.COMMENTS] for submissions; correctly cleans up listeners on [awaitClose].
- * - Safety: Enforces atomic comment count increments via [runBatch].
+ * - Resilience: Uses [RetryConfigs.COMMENTS] and a stable comment ID for retries.
+ * - Safety: Derives author identity and increments the aggregate on the server.
  * - Observability: Tracks comment observation stream health and submission latency.
  */
 @Utility

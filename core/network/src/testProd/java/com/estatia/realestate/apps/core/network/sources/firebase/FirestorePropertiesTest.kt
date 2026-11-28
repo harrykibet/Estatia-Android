@@ -97,7 +97,7 @@ class FirestorePropertiesTest {
 
     @Test
     fun `likeProperty delegates state transition to the server callable`() = runTest {
-        networkChaos.script(NetworkBehavior.Success)
+        networkChaos.script(NetworkBehavior.Success, NetworkBehavior.Success)
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
