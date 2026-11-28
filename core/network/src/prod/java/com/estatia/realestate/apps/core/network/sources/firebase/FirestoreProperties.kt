@@ -361,7 +361,12 @@ internal class FirestoreProperties @Inject constructor(
             // Do not read private contact data as a side effect of a public listing
             // read. Until the product defines a lead/contact entitlement, only the
             // authenticated owner may read properties/{id}/contact/info.
-            val contactInfo = if (auth.currentUser?.uid == property.ownerId) {
+            val contactInfo = if (
+                FirestorePropertyReadPolicy.canReadPrivateContact(
+                    authenticatedUid = auth.currentUser?.uid,
+                    propertyOwnerId = property.ownerId
+                )
+            ) {
                 database.collection(PROPERTIES)
                     .document(propertyId)
                     .collection(CONTACT)
