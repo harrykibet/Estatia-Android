@@ -5,6 +5,8 @@ import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.NetworkException
 import com.estatia.realestate.apps.core.common.interfaces.IClock
 import com.estatia.realestate.apps.core.network.core.ExponentialRetryPolicy
+import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
+import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.PROPERTIES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.CONTACT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKED_PROPERTIES
@@ -27,6 +29,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.storage.FirebaseStorage
+import android.content.Context
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -38,6 +41,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -55,6 +59,7 @@ class FirestorePropertiesTest {
     private lateinit var storage: FirebaseStorage
     private lateinit var functions: FirebaseFunctions
     private lateinit var auth: FirebaseAuth
+    private lateinit var context: Context
     private lateinit var networkChaos: NetworkChaosController
     private lateinit var metricsTracker: com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
     private lateinit var firestoreProperties: FirestoreProperties
@@ -65,6 +70,7 @@ class FirestorePropertiesTest {
         storage = mockk()
         functions = mockk()
         auth = mockk()
+        context = mockk()
         networkChaos = NetworkChaosController()
 
         val exceptionMapper = mockk<IExceptionMapper>(relaxed = true)
@@ -91,9 +97,71 @@ class FirestorePropertiesTest {
             storage,
             functions,
             auth,
+            context,
             networkClient,
             metricsTracker
         )
+    }
+
+    @Test
+    fun `submitPropertyForReview calls the backend with only the property ID`() = runTest {
+        stubAuthenticatedUser("owner-123")
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        val response = mockk<HttpsCallableResult>()
+        val payload = slot<Any>()
+
+        every {
+            functions.getHttpsCallable("submitPropertyForReview")
+        } returns callable
+        every { callable.call(capture(payload)) } returns task
+        coEvery { task.await() } returns response
+        every { response.data } returns mapOf(
+            "propertyId" to "property-123",
+            "publicationStatus" to "pending_review",
+            "submitted" to true
+        )
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            PropertyPublicationCallable.submitForReview(functions, "property-123")
+
+            val request = payload.captured as? Map<*, *>
+            assertEquals(mapOf("propertyId" to "property-123"), request)
+            verify(exactly = 1) {
+                functions.getHttpsCallable("submitPropertyForReview")
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
+    fun `submitPropertyForReview rejects a malformed backend response`() = runTest {
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        val response = mockk<HttpsCallableResult>()
+        every {
+            functions.getHttpsCallable("submitPropertyForReview")
+        } returns callable
+        every { callable.call(any()) } returns task
+        coEvery { task.await() } returns response
+        every { response.data } returns mapOf(
+            "propertyId" to "another-property",
+            "publicationStatus" to "published"
+        )
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            try {
+                PropertyPublicationCallable.submitForReview(functions, "property-123")
+                throw AssertionError("Expected malformed backend response to fail.")
+            } catch (exception: Exception) {
+                assertTrue(exception.message.orEmpty().contains("did not enter pending review"))
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
     }
 
     @Test
@@ -336,6 +404,97 @@ class FirestorePropertiesTest {
         } catch (exception: IllegalArgumentException) {
             assertTrue(exception.message.orEmpty().contains("createdAt"))
         }
+    }
+
+    @Test
+    fun `inactive public draft write payload uses authenticated owner and omits private fields`() {
+        val property = PropertyEntityModel(
+            id = "caller-property-id",
+            title = "Public listing",
+            ownerId = "forged-owner",
+            ownerName = "Unverified owner name",
+            contact = PropertyContactEntity(
+                phone = "+254700000001",
+                email = "private@example.test"
+            ),
+            active = true,
+            imageUrl = listOf("https://attacker.example.test/unverified.jpg"),
+            directVideoUrls = listOf("https://attacker.example.test/unverified.mp4"),
+            hlsUrl = listOf("https://attacker.example.test/unverified.m3u8"),
+            viewsCount = 90,
+            sharesCount = 80,
+            likesCount = 70,
+            commentsCount = 60,
+            matchScore = 0.99f,
+            createdAt = 1L
+        )
+
+        val payload = FirestorePropertyWriteMapper.toInactiveDraft(
+            property = property,
+            propertyId = "server-selected-id",
+            authenticatedOwnerId = "authenticated-owner",
+            uploadAttemptId = "attempt-123"
+        )
+
+        assertEquals("authenticated-owner", payload["ownerId"])
+        assertEquals("attempt-123", payload["uploadAttemptId"])
+        assertEquals("server-selected-id", payload["id"])
+        assertEquals(false, payload["active"])
+        assertEquals("Public listing", payload["title"])
+        assertEquals(emptyList<String>(), payload["imageUrl"])
+        assertEquals(emptyList<String>(), payload["directVideoUrls"])
+        assertEquals(emptyList<String>(), payload["hlsUrl"])
+        assertFalse(payload.containsKey("ownerName"))
+        assertFalse(payload.containsKey("contact"))
+        assertFalse(payload.containsKey("contactPhone"))
+        assertFalse(payload.containsKey("contactEmail"))
+        assertFalse(payload.containsKey("viewsCount"))
+        assertFalse(payload.containsKey("sharesCount"))
+        assertFalse(payload.containsKey("likesCount"))
+        assertFalse(payload.containsKey("commentsCount"))
+        assertFalse(payload.containsKey("matchScore"))
+        assertFalse(payload["createdAt"] == 1L)
+    }
+
+    @Test
+    fun `media finalization payload cannot change owner or publication state`() {
+        val payload = FirestorePropertyWriteMapper.toMediaFinalization(
+            imageUrls = listOf("https://cdn.example.test/image.jpg"),
+            videoUrls = listOf("https://cdn.example.test/video.mp4")
+        )
+
+        assertEquals(
+            setOf("imageUrl", "directVideoUrls", "hlsUrl", "uploadAttemptId", "updatedAt"),
+            payload.keys
+        )
+        assertEquals(listOf("https://cdn.example.test/image.jpg"), payload["imageUrl"])
+        assertEquals(listOf("https://cdn.example.test/video.mp4"), payload["directVideoUrls"])
+    }
+
+    @Test
+    fun `public property mapper ignores legacy embedded contact data`() {
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "legacy-property",
+            fields = mapOf(
+                "title" to "Legacy listing",
+                "contact" to mapOf(
+                    "phone" to "+254700000001",
+                    "email" to "private@example.test"
+                )
+            )
+        )
+
+        assertEquals(null, property.contact)
+    }
+
+    @Test
+    fun `private property contact requires two matching non-empty identities`() {
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact(null, null))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", null))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact(null, "user-1"))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("", ""))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", "user-2"))
+        assertTrue(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", "user-1"))
     }
 
     private fun stubAuthenticatedUser(userId: String) {
