@@ -141,6 +141,64 @@ class FirestorePropertiesTest {
     }
 
     @Test
+    fun `recordView and recordShare use idempotent backend events`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        stubAuthenticatedUser("user123")
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        every {
+            functions.getHttpsCallable("recordPropertyEngagement")
+        } returns callable
+        every { callable.call(any()) } returns task
+        coEvery { task.await() } returns mockk()
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            val viewResult = firestoreProperties.recordView("property-123")
+            val shareResult = firestoreProperties.recordShare("property-123")
+
+            assertTrue(viewResult is AppResult.Success)
+            assertTrue(shareResult is AppResult.Success)
+            verify(exactly = 2) {
+                functions.getHttpsCallable("recordPropertyEngagement")
+            }
+            verify(exactly = 1) {
+                callable.call(
+                    match {
+                        it is Map<*, *> &&
+                            it["propertyId"] == "property-123" &&
+                            it["eventType"] == "view" &&
+                            it["eventId"] is String
+                    }
+                )
+            }
+            verify(exactly = 1) {
+                callable.call(
+                    match {
+                        it is Map<*, *> &&
+                            it["propertyId"] == "property-123" &&
+                            it["eventType"] == "share" &&
+                            it["eventId"] is String
+                    }
+                )
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
+    fun `recordView rejects unauthenticated requests before calling backend`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        every { auth.currentUser } returns null
+
+        val result = firestoreProperties.recordView("property-123")
+
+        assertTrue(result is AppResult.Error)
+        verify(exactly = 0) { functions.getHttpsCallable(any()) }
+    }
+
+    @Test
     fun `getPropertyById preserves public property when gated contact read is denied`() = runTest {
         networkChaos.script(NetworkBehavior.Success)
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
