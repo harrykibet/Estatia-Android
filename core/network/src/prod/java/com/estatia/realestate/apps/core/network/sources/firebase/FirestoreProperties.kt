@@ -1,6 +1,8 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
+import android.content.Context
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
 import com.estatia.realestate.apps.core.common.exceptions.AuthException
@@ -28,8 +30,13 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
+import com.google.firebase.storage.StorageException
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.tasks.await
 
@@ -50,6 +57,7 @@ internal class FirestoreProperties @Inject constructor(
     private val storage: FirebaseStorage,
     private val functions: FirebaseFunctions,
     private val auth: FirebaseAuth,
+    @ApplicationContext private val context: Context,
     private val networkClient: INetworkClient,
     private val metricsTracker: IMetricsTracker
 ) : IPropertyRemoteDatasource {
@@ -58,118 +66,223 @@ internal class FirestoreProperties @Inject constructor(
         const val MAX_LEGACY_LIKE_MIGRATION_BATCHES = 10
     }
 
+    private data class PendingMediaUpload(
+        val uri: Uri,
+        val path: String,
+        val metadata: StorageMetadata
+    )
+
     override suspend fun uploadProperty(
         property: PropertyEntityModel,
         contactInfo: PropertyContactEntity,
         imageUris: List<Uri>,
         videoUris: List<Uri>
     ): AppResult<String> {
+        val authenticatedUid = requireAuthenticatedUser()
+        if (!property.ownerId.isNullOrBlank() && property.ownerId != authenticatedUid) {
+            return AppResult.Error(AuthException.UserNotAuthenticated)
+        }
 
-        // IDEMPOTENCY: Use the client-provided ID or fallback to generating one once.
-        // This ensures retries don't create duplicate documents.
+        // Generate stable identifiers and object paths before entering the network executor.
+        // The no-retry policy avoids replaying a partially completed multi-resource workflow.
         val propertyId = property.id.ifBlank { UUID.randomUUID().toString() }
-
-        val imagePaths = imageUris.map {
-            "$PROPERTIES/$propertyId/${MediaFormat.MEDIA_TYPE_IMAGES}/${UUID.randomUUID()}"
-        }
-
-        val videoPaths = videoUris.map {
-            "$PROPERTIES/$propertyId/${MediaFormat.MEDIA_TYPE_VIDEOS}/${UUID.randomUUID()}"
-        }
-
+        val propertyRef = database.collection(PROPERTIES).document(propertyId)
+        val contactRef = propertyRef.collection(CONTACT).document("info")
+        val imageUploads = buildMediaUploads(
+            imageUris,
+            propertyId,
+            MediaFormat.MEDIA_TYPE_IMAGES,
+            MediaFormat.IMAGE_FORMATS
+        )
+        val videoUploads = buildMediaUploads(
+            videoUris,
+            propertyId,
+            MediaFormat.MEDIA_TYPE_VIDEOS,
+            MediaFormat.VIDEO_FORMATS
+        )
+        val uploadedPaths = linkedSetOf<String>()
         val startTime = System.currentTimeMillis()
 
-        return networkClient.execute {
-
-            val images =
-                uploadMedia(
-                    imageUris,
-                    imagePaths
+        return networkClient.execute(RetryConfigs.NO_RETRY) {
+            // The parent must exist before Storage uploads so rules can verify ownerId
+            // by reading properties/{propertyId}. The client cannot publish the draft.
+            if (propertyRef.get().await().exists()) {
+                throw DatabaseException.InvalidData(
+                    "The property identifier is already in use."
                 )
+            }
 
-
-            val videos =
-                uploadMedia(
-                    videoUris,
-                    videoPaths
-                )
-
-
-            val finalProperty =
-                property.copy(
-                    id = propertyId,
-                    imageUrl = images,
-                    directVideoUrls = videos,
-                    hlsUrl = emptyList() // HLS generation is server-side via Cloud Functions/Transcoder
-                )
-
-            val propertyRef = database.collection(PROPERTIES).document(propertyId)
-            val contactRef = propertyRef.collection(CONTACT).document("info")
-
+            val draft = FirestorePropertyWriteMapper.toInactiveDraft(
+                property = property,
+                propertyId = propertyId,
+                authenticatedOwnerId = authenticatedUid
+            )
             database.runBatch { batch ->
-                batch.set(propertyRef, finalProperty)
-                batch.set(contactRef, contactInfo)
+                batch.set(propertyRef, draft)
+                batch.set(
+                    contactRef,
+                    mapOf(
+                        "phone" to contactInfo.phone,
+                        "email" to contactInfo.email
+                    )
+                )
             }.await()
 
-            val duration = System.currentTimeMillis() - startTime
-            metricsTracker.trackDuration("network.properties.upload_latency", duration.milliseconds)
-            metricsTracker.incrementCounter("network.properties.upload_success")
+            try {
+                val imageUrls = uploadMedia(imageUploads, uploadedPaths)
+                val videoUrls = uploadMedia(videoUploads, uploadedPaths)
 
-            propertyId
+                propertyRef.update(
+                    FirestorePropertyWriteMapper.toMediaFinalization(
+                        imageUrls = imageUrls,
+                        videoUrls = videoUrls
+                    )
+                ).await()
+
+                val duration = System.currentTimeMillis() - startTime
+                metricsTracker.trackDuration(
+                    "network.properties.upload_latency",
+                    duration.milliseconds
+                )
+                metricsTracker.incrementCounter("network.properties.upload_success")
+                propertyId
+            } catch (failure: Exception) {
+                // This includes download-URL and final Firestore update failures.
+                // Cleanup runs even if the coroutine was cancelled and never masks
+                // the original upload/finalization exception.
+                withContext(NonCancellable) {
+                    rollbackFailedPropertyUpload(propertyRef, contactRef, uploadedPaths)
+                }
+                throw failure
+            }
         }
     }
 
-    private suspend fun uploadMedia(
+    private fun buildMediaUploads(
         uris: List<Uri>,
-        paths: List<String>
-    ): List<String> {
-
-        return uris.mapIndexed { index, uri ->
-
-            val path = paths[index]
-
-            storage.reference
-                .child(path)
-                .putFile(uri)
-                .await()
-                .storage
-                .downloadUrl
-                .await()
-                .toString()
+        propertyId: String,
+        mediaDirectory: String,
+        allowedFormats: Set<MediaFormat>
+    ): List<PendingMediaUpload> = uris.map { uri ->
+        val mimeType = context.contentResolver.getType(uri)
+            ?: MimeTypeMap.getSingleton()
+                .getMimeTypeFromExtension(
+                    MimeTypeMap.getFileExtensionFromUrl(uri.toString())
+                )
+            ?: throw DatabaseException.InvalidData(
+                "Unable to determine the media content type."
+            )
+        val format = MediaFormat.fromMimeType(mimeType.lowercase())
+        if (format == null || format !in allowedFormats) {
+            throw DatabaseException.InvalidData(
+                "Unsupported media content type."
+            )
         }
+
+        PendingMediaUpload(
+            uri = uri,
+            path = "$PROPERTIES/$propertyId/$mediaDirectory/${UUID.randomUUID()}",
+            metadata = StorageMetadata.Builder()
+                .setContentType(format.mimeType)
+                .build()
+        )
+    }
+
+    private suspend fun uploadMedia(
+        uploads: List<PendingMediaUpload>,
+        uploadedPaths: MutableSet<String>
+    ): List<String> = uploads.map { upload ->
+        // Add the unique path before starting putFile: if the server commits the
+        // object but the client loses the task result, compensation still tries it.
+        uploadedPaths.add(upload.path)
+        storage.reference
+            .child(upload.path)
+            .putFile(upload.uri, upload.metadata)
+            .await()
+            .storage
+            .downloadUrl
+            .await()
+            .toString()
+    }
+
+    private suspend fun rollbackFailedPropertyUpload(
+        propertyRef: com.google.firebase.firestore.DocumentReference,
+        contactRef: com.google.firebase.firestore.DocumentReference,
+        uploadedPaths: Set<String>
+    ) {
+        var cleanupFailed = false
+
+        uploadedPaths.forEach { path ->
+            try {
+                storage.reference.child(path).delete().await()
+            } catch (exception: StorageException) {
+                if (exception.errorCode != StorageException.ERROR_OBJECT_NOT_FOUND) {
+                    cleanupFailed = true
+                }
+            } catch (_: Exception) {
+                cleanupFailed = true
+            }
+        }
+
+        try {
+            contactRef.delete().await()
+        } catch (_: Exception) {
+            cleanupFailed = true
+        }
+
+        try {
+            propertyRef.delete().await()
+        } catch (_: Exception) {
+            cleanupFailed = true
+        }
+
+        if (cleanupFailed) {
+            metricsTracker.incrementCounter("network.properties.upload_cleanup_failure")
+        }
+        metricsTracker.incrementCounter("network.properties.upload_failure")
     }
 
     override suspend fun updateProperty(
         propertyId: String,
         updates: PropertyUpdateFields
     ): AppResult<Unit> {
-
         return networkClient.execute {
-
-            database.collection(PROPERTIES)
-                .document(propertyId)
-                .update(
-                    mapOf(
-                        FirestoreFields.TITLE to updates.title,
-                        FirestoreFields.DESCRIPTION to updates.description,
-                        FirestoreFields.PRICE to updates.price,
-                        FirestoreFields.DEPOSIT_AMOUNT to updates.depositAmount,
-                        FirestoreFields.COUNTY to updates.county,
-                        FirestoreFields.PROPERTY_TYPE to updates.propertyType,
-                        FirestoreFields.BEDROOMS to updates.bedrooms,
-                        FirestoreFields.BATHROOMS to updates.bathrooms,
-                        FirestoreFields.AREA_SIZE to updates.areaSize,
-                        FirestoreFields.AMENITIES to updates.amenities,
-                        FirestoreFields.FEATURES to updates.features,
-                        FirestoreFields.ADDRESS to updates.address,
-                        FirestoreFields.AVAILABLE_FROM to updates.availableFrom,
-                        FirestoreFields.LEASE_TERMS to updates.leaseTerms,
-                        FirestoreFields.AVAILABLE to updates.available,
-                        FirestoreFields.ACTIVE to updates.active
-                    ).filterValues { it != null }
+            val authenticatedUid = requireAuthenticatedUser()
+            if (updates.active != null) {
+                throw DatabaseException.InvalidData(
+                    "Listing activation is controlled by the backend."
                 )
-                .await()
+            }
 
+            val propertyRef = database.collection(PROPERTIES).document(propertyId)
+            val snapshot = propertyRef.get().await()
+            if (!snapshot.exists()) {
+                throw DatabaseException.NotFound
+            }
+            if (snapshot.getString("ownerId") != authenticatedUid) {
+                throw AuthException.UserNotAuthenticated
+            }
+
+            propertyRef.update(
+                mapOf(
+                    FirestoreFields.TITLE to updates.title,
+                    FirestoreFields.DESCRIPTION to updates.description,
+                    FirestoreFields.PRICE to updates.price,
+                    FirestoreFields.DEPOSIT_AMOUNT to updates.depositAmount,
+                    FirestoreFields.COUNTY to updates.county,
+                    FirestoreFields.PROPERTY_TYPE to updates.propertyType,
+                    FirestoreFields.BEDROOMS to updates.bedrooms,
+                    FirestoreFields.BATHROOMS to updates.bathrooms,
+                    FirestoreFields.AREA_SIZE to updates.areaSize,
+                    FirestoreFields.AMENITIES to updates.amenities,
+                    FirestoreFields.FEATURES to updates.features,
+                    FirestoreFields.ADDRESS to updates.address,
+                    FirestoreFields.AVAILABLE_FROM to updates.availableFrom,
+                    FirestoreFields.LEASE_TERMS to updates.leaseTerms,
+                    FirestoreFields.AVAILABLE to updates.available,
+                    FirestoreFields.UPDATED_AT to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                ).filterValues { it != null }
+            ).await()
         }
     }
 
@@ -177,13 +290,25 @@ internal class FirestoreProperties @Inject constructor(
         propertyId: String
     ): AppResult<Unit> {
         return networkClient.execute {
+            val authenticatedUid = requireAuthenticatedUser()
+            val propertyRef = database.collection(PROPERTIES).document(propertyId)
+            val snapshot = propertyRef.get().await()
+            if (!snapshot.exists()) {
+                throw DatabaseException.NotFound
+            }
+            if (snapshot.getString("ownerId") != authenticatedUid) {
+                throw AuthException.UserNotAuthenticated
+            }
 
-            database.collection(PROPERTIES)
-                .document(propertyId)
-                .delete()
-                .await()
+            propertyRef.collection(CONTACT).document("info").delete().await()
+            propertyRef.delete().await()
         }
     }
+
+    private fun requireAuthenticatedUser(): String =
+        auth.currentUser?.uid?.takeIf(String::isNotBlank)
+            ?: throw AuthException.UserNotAuthenticated
+
 
     override suspend fun getPropertyById(
         propertyId: String
@@ -209,9 +334,10 @@ internal class FirestoreProperties @Inject constructor(
                 "Unable to parse property"
             )
 
-            // Contact information is separately gated. A user may be allowed to
-            // read the public property but not its contact document.
-            val contactInfo = try {
+            // Do not read private contact data as a side effect of a public listing
+            // read. Until the product defines a lead/contact entitlement, only the
+            // authenticated owner may read properties/{id}/contact/info.
+            val contactInfo = if (auth.currentUser?.uid == property.ownerId) {
                 database.collection(PROPERTIES)
                     .document(propertyId)
                     .collection(CONTACT)
@@ -219,12 +345,7 @@ internal class FirestoreProperties @Inject constructor(
                     .get()
                     .await()
                     .toObject(PropertyContactEntity::class.java)
-            } catch (exception: FirebaseFirestoreException) {
-                if (exception.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) {
-                    throw exception
-                }
-
-                metricsTracker.incrementCounter("network.properties.contact_read_denied")
+            } else {
                 null
             }
 
@@ -406,6 +527,7 @@ internal class FirestoreProperties @Inject constructor(
 
             val query =
                 database.collection(PROPERTIES)
+                    .whereEqualTo(FirestoreFields.ACTIVE, true)
                     .orderBy(
                         FirestoreFields.CREATED_AT,
                         Query.Direction.DESCENDING
