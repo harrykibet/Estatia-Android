@@ -368,10 +368,12 @@ class FirestorePropertiesTest {
         val payload = FirestorePropertyWriteMapper.toInactiveDraft(
             property = property,
             propertyId = "server-selected-id",
-            authenticatedOwnerId = "authenticated-owner"
+            authenticatedOwnerId = "authenticated-owner",
+            uploadAttemptId = "attempt-123"
         )
 
         assertEquals("authenticated-owner", payload["ownerId"])
+        assertEquals("attempt-123", payload["uploadAttemptId"])
         assertEquals("server-selected-id", payload["id"])
         assertEquals(false, payload["active"])
         assertEquals("Public listing", payload["title"])
@@ -395,7 +397,7 @@ class FirestorePropertiesTest {
         )
 
         assertEquals(
-            setOf("imageUrl", "directVideoUrls", "hlsUrl", "updatedAt"),
+            setOf("imageUrl", "directVideoUrls", "hlsUrl", "uploadAttemptId", "updatedAt"),
             payload.keys
         )
         assertEquals(listOf("https://cdn.example.test/image.jpg"), payload["imageUrl"])
