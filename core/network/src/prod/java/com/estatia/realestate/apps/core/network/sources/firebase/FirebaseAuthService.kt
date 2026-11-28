@@ -9,7 +9,6 @@ import com.estatia.realestate.apps.core.common.interfaces.PhoneVerificationState
 import com.estatia.realestate.apps.core.network.core.RetryConfigs
 import com.estatia.realestate.apps.core.network.db_entities.NetworkUserEntity
 import com.estatia.realestate.apps.core.network.db_entities.UserEntityModel
-import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections
 import com.estatia.realestate.apps.core.network.interfaces.IAuthExceptionMapper
 import com.estatia.realestate.apps.core.network.interfaces.IAuthRemoteDataSource
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
@@ -21,8 +20,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -39,8 +37,8 @@ import kotlin.coroutines.resumeWithException
 
 @Service
 internal class FirebaseAuthService @Inject constructor(
-    private val database: FirebaseFirestore,
     private val firebaseAuth: FirebaseAuth,
+    private val functions: FirebaseFunctions,
     @FirebaseMapper private val authErrorMapper: IAuthExceptionMapper,
     private val networkClient: INetworkClient
 ) : IAuthRemoteDataSource {
@@ -56,15 +54,23 @@ internal class FirebaseAuthService @Inject constructor(
     ): AppResult<Unit> {
 
         return networkClient.execute(RetryConfigs.AUTH) {
+            val authenticatedUser = firebaseAuth.currentUser
+                ?: throw AuthException.UserNotAuthenticated
 
-            val userRef =
-                database.collection(FirestoreCollections.USERS)
-                    .document(userId)
+            require(authenticatedUser.uid == userId) {
+                "Cannot update a profile for a different authenticated user."
+            }
 
-            userRef.set(
-                user,
-                SetOptions.merge()
-            ).await()
+            val profileData = buildMap<String, Any> {
+                user.name?.let { put("displayName", it) }
+                user.profilePictureUrl?.let { put("profilePictureUrl", it) }
+                user.bio?.let { put("bio", it) }
+            }
+
+            functions
+                .getHttpsCallable("syncUserProfile")
+                .call(profileData)
+                .await()
         }
     }
 
