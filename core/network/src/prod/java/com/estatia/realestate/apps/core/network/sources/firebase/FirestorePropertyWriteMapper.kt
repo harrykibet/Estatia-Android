@@ -24,9 +24,11 @@ internal object FirestorePropertyWriteMapper {
         // and lets reconciliation identify drafts whose transaction outcome was unknown.
         put("uploadAttemptId", uploadAttemptId)
         put("title", property.title)
-        put("imageUrl", property.imageUrl.orEmpty())
-        put("directVideoUrls", property.directVideoUrls.orEmpty())
-        put("hlsUrl", property.hlsUrl.orEmpty())
+        // Media URLs are emitted only after the corresponding Storage uploads
+        // succeed; never trust caller-supplied URLs in a newly created draft.
+        put("imageUrl", emptyList<String>())
+        put("directVideoUrls", emptyList<String>())
+        put("hlsUrl", emptyList<String>())
         put("video", property.video)
         put("active", false)
         put("available", property.available)
