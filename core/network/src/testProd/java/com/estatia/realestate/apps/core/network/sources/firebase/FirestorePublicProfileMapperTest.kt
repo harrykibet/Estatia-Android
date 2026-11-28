@@ -18,7 +18,7 @@ class FirestorePublicProfileMapperTest {
                 "profileType" to "PROPERTY_OWNER",
                 "email" to "private@example.test",
                 "phoneNumber" to "+254700000001",
-                "userType" to "PROPERTY_OWNER",
+                "userType" to "ADMIN",
                 "verificationLevel" to "TRUSTED_PARTNER",
                 "followerCount" to 25
             )
@@ -34,7 +34,6 @@ class FirestorePublicProfileMapperTest {
         assertEquals("PROPERTY_OWNER", user.userType)
         assertNull(user.email)
         assertNull(user.phoneNumber)
-        assertEquals("TENANT", user.userType)
         assertEquals("NONE", user.verificationLevel)
         assertEquals(0, user.followerCount)
     }
