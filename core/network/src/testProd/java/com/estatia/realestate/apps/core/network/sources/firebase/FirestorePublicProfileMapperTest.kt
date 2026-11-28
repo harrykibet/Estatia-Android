@@ -15,6 +15,7 @@ class FirestorePublicProfileMapperTest {
                 "displayName" to "Example Person",
                 "profilePictureUrl" to "https://cdn.example.test/avatar.png",
                 "bio" to "Public biography",
+                "profileType" to "PROPERTY_OWNER",
                 "email" to "private@example.test",
                 "phoneNumber" to "+254700000001",
                 "userType" to "PROPERTY_OWNER",
@@ -30,6 +31,7 @@ class FirestorePublicProfileMapperTest {
             user.profilePictureUrl
         )
         assertEquals("Public biography", user.bio)
+        assertEquals("PROPERTY_OWNER", user.userType)
         assertNull(user.email)
         assertNull(user.phoneNumber)
         assertEquals("TENANT", user.userType)
