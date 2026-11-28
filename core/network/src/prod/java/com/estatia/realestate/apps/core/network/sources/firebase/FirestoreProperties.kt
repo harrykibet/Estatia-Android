@@ -282,15 +282,6 @@ internal class FirestoreProperties @Inject constructor(
         }
     }
 
-    override suspend fun submitPropertyForReview(
-        propertyId: String
-    ): AppResult<Unit> {
-        return networkClient.execute(RetryConfigs.NO_RETRY) {
-            requireAuthenticatedUser()
-            PropertyPublicationCallable.submitForReview(functions, propertyId)
-        }
-    }
-
     override suspend fun updateProperty(
         propertyId: String,
         updates: PropertyUpdateFields
