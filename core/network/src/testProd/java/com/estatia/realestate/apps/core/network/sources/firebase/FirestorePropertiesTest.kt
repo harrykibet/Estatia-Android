@@ -18,6 +18,11 @@ import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.HttpsCallableReference
+import com.google.firebase.functions.HttpsCallableResult
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.QuerySnapshot
@@ -47,6 +52,8 @@ class FirestorePropertiesTest {
 
     private lateinit var database: FirebaseFirestore
     private lateinit var storage: FirebaseStorage
+    private lateinit var functions: FirebaseFunctions
+    private lateinit var auth: FirebaseAuth
     private lateinit var networkChaos: NetworkChaosController
     private lateinit var metricsTracker: com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
     private lateinit var firestoreProperties: FirestoreProperties
@@ -55,6 +62,8 @@ class FirestorePropertiesTest {
     fun setup() {
         database = mockk()
         storage = mockk()
+        functions = mockk()
+        auth = mockk()
         networkChaos = NetworkChaosController()
 
         val exceptionMapper = mockk<IExceptionMapper>(relaxed = true)
@@ -76,7 +85,60 @@ class FirestorePropertiesTest {
         )
 
         metricsTracker = mockk(relaxed = true)
-        firestoreProperties = FirestoreProperties(database, storage, networkClient, metricsTracker)
+        firestoreProperties = FirestoreProperties(
+            database,
+            storage,
+            functions,
+            auth,
+            networkClient,
+            metricsTracker
+        )
+    }
+
+    @Test
+    fun `likeProperty delegates state transition to the server callable`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        stubAuthenticatedUser("user123")
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        every { functions.getHttpsCallable("setPropertyLike") } returns callable
+        every { callable.call(any()) } returns task
+        coEvery { task.await() } returns mockk()
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            val result = firestoreProperties.likeProperty(
+                userId = "user123",
+                propertyId = "property-123"
+            )
+            assertTrue(result is AppResult.Success)
+            verify(exactly = 1) {
+                callable.call(
+                    match {
+                        it is Map<*, *> &&
+                            it["propertyId"] == "property-123" &&
+                            it["liked"] == true
+                    }
+                )
+            }
+            verify(exactly = 0) { database.runBatch(any()) }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
+    fun `likeProperty rejects a mismatched user ID before calling backend`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        stubAuthenticatedUser("authenticated-user")
+
+        val result = firestoreProperties.likeProperty(
+            userId = "another-user",
+            propertyId = "property-123"
+        )
+
+        assertTrue(result is AppResult.Error)
+        verify(exactly = 0) { functions.getHttpsCallable(any()) }
     }
 
     @Test
@@ -131,6 +193,10 @@ class FirestorePropertiesTest {
 
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
         try {
+            stubAuthenticatedUser("user123")
+            stubLegacyMigrationComplete()
+            stubAuthenticatedUser("user123")
+            stubLegacyMigrationComplete()
             val likedCollection = stubEmptyLikedPropertiesQuery("user123")
 
             val result = firestoreProperties.fetchLikedProperties("user123")
@@ -226,6 +292,24 @@ class FirestorePropertiesTest {
         } catch (exception: IllegalArgumentException) {
             assertTrue(exception.message.orEmpty().contains("createdAt"))
         }
+    }
+
+    private fun stubAuthenticatedUser(userId: String) {
+        val firebaseUser = mockk<FirebaseUser>()
+        every { auth.currentUser } returns firebaseUser
+        every { firebaseUser.uid } returns userId
+    }
+
+    private fun stubLegacyMigrationComplete() {
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        val result = mockk<HttpsCallableResult>()
+        every {
+            functions.getHttpsCallable("migrateLegacyPropertyLikes")
+        } returns callable
+        every { callable.call(any()) } returns task
+        coEvery { task.await() } returns result
+        every { result.data } returns mapOf("remaining" to 0)
     }
 
     private fun stubEmptyLikedPropertiesQuery(userId: String): CollectionReference {
