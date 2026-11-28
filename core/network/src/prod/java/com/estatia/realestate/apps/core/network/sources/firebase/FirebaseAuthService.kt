@@ -93,7 +93,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignUpFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -117,7 +117,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignInFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -157,7 +157,7 @@ internal class FirebaseAuthService @Inject constructor(
                     .user
                     ?: throw AuthException.SignInFailed
 
-
+            syncAuthenticatedProfile(firebaseUser)
             FirebaseUserMapper.toEntity(firebaseUser)
         }
     }
@@ -287,14 +287,35 @@ internal class FirebaseAuthService @Inject constructor(
 
     private suspend fun signInWithCredentialSuspend(
         credential: PhoneAuthCredential
-    ): Unit = suspendCancellableCoroutine { cont ->
-        firebaseAuth.signInWithCredential(credential)
-            .addOnSuccessListener {
-                if (cont.isActive) cont.resume(Unit)
-            }
-            .addOnFailureListener { exception ->
-                if (cont.isActive) cont.resumeWithException(exception)
-            }
+    ) {
+        val firebaseUser = firebaseAuth.signInWithCredential(credential)
+            .await()
+            .user
+            ?: throw AuthException.SignInFailed
+
+        syncAuthenticatedProfile(firebaseUser)
+    }
+
+    /**
+     * Ensures the user's safe public profile exists before profile reads occur.
+     *
+     * This runs after every Firebase sign-in path so existing mixed user
+     * documents can be migrated by the backend callable without exposing their
+     * private fields to the public profile collection.
+     *
+     * @param user Authenticated Firebase user.
+     */
+    private suspend fun syncAuthenticatedProfile(
+        user: com.google.firebase.auth.FirebaseUser
+    ) {
+        check(firebaseAuth.currentUser?.uid == user.uid) {
+            "Profile synchronization requires the current authenticated user."
+        }
+
+        functions
+            .getHttpsCallable("syncUserProfile")
+            .call(emptyMap<String, Any>())
+            .await()
     }
 
 
