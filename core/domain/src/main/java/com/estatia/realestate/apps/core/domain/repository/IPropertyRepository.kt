@@ -50,6 +50,12 @@ interface IPropertyRepository {
     ): AppResult<String>
 
     /**
+     * Submits an existing inactive owner-bound draft for backend moderation.
+     * Safe to retry because submission is idempotent and does not re-upload media.
+     */
+    suspend fun submitPropertyForReview(propertyId: String): AppResult<Unit>
+
+    /**
      * Updates an existing remote property listing.
      */
     suspend fun updateProperty(
