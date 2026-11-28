@@ -4,7 +4,7 @@ run-name: "Baseline Profile generation - ${{ github.ref_name }} #${{ github.run_
 
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "security/server-authoritative-property-likes" ]
     types: [ opened, synchronize, reopened, ready_for_review ]
   push:
     branches: [ "main" ]

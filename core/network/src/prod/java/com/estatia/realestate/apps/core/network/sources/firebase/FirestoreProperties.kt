@@ -3,25 +3,22 @@ package com.estatia.realestate.apps.core.network.sources.firebase
 import android.net.Uri
 import com.estatia.realestate.apps.core.architecture.annotations.Logic.Utility
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.common.exceptions.AuthException
 import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
 import com.estatia.realestate.apps.core.common.media.MediaFormat
 import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
-import com.estatia.realestate.apps.core.model.feature.LikesDomainModel
 import com.estatia.realestate.apps.core.model.property.PropertyCursor
 import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
 import com.estatia.realestate.apps.core.network.core.RetryConfig
 import com.estatia.realestate.apps.core.network.core.RetryConfigs
-import com.estatia.realestate.apps.core.network.db_entities.LikesEntity
 import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
 import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
 import com.estatia.realestate.apps.core.network.db_entities.PropertyRemotePage
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.PROPERTIES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.CONTACT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKED_PROPERTIES
-import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.USERS
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
-import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.LIKES_COUNT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.SHARES_COUNT
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.VIEWS_COUNT
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
@@ -31,6 +28,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import java.util.UUID
 import javax.inject.Inject
@@ -52,9 +51,15 @@ import kotlinx.coroutines.tasks.await
 internal class FirestoreProperties @Inject constructor(
     private val database: FirebaseFirestore,
     private val storage: FirebaseStorage,
+    private val functions: FirebaseFunctions,
+    private val auth: FirebaseAuth,
     private val networkClient: INetworkClient,
     private val metricsTracker: IMetricsTracker
 ) : IPropertyRemoteDatasource {
+
+    private companion object {
+        const val MAX_LEGACY_LIKE_MIGRATION_BATCHES = 10
+    }
 
     override suspend fun uploadProperty(
         property: PropertyEntityModel,
@@ -235,6 +240,33 @@ internal class FirestoreProperties @Inject constructor(
     ): AppResult<List<PropertyEntityModel>> {
 
         return networkClient.execute(RetryConfigs.PROPERTY_FEED) {
+            requireAuthenticatedUser(userId)
+
+            var remainingLegacyLikes = 0
+            for (attempt in 0 until MAX_LEGACY_LIKE_MIGRATION_BATCHES) {
+                val migration = functions
+                    .getHttpsCallable("migrateLegacyPropertyLikes")
+                    .call(emptyMap<String, Any>())
+                    .await()
+                val data = migration.data as? Map<*, *>
+                    ?: throw DatabaseException.InvalidData(
+                        "Legacy favorite migration returned an invalid response."
+                    )
+                remainingLegacyLikes = (data["remaining"] as? Number)?.toInt()
+                    ?: throw DatabaseException.InvalidData(
+                        "Legacy favorite migration omitted its remaining count."
+                    )
+                if (remainingLegacyLikes == 0) {
+                    break
+                }
+            }
+
+            if (remainingLegacyLikes > 0) {
+                throw DatabaseException.InvalidData(
+                    "Legacy favorite migration remains incomplete after " +
+                        "$MAX_LEGACY_LIKE_MIGRATION_BATCHES batches."
+                )
+            }
 
             val likedPropertyIds = database.collection(USERS)
                 .document(userId)
@@ -269,53 +301,18 @@ internal class FirestoreProperties @Inject constructor(
     ): AppResult<Unit> {
 
 
-        return networkClient.execute {
-
-
-            val propertyRef =
-                database.collection(PROPERTIES)
-                    .document(propertyId)
-
-            val likesRef =
-                propertyRef
-                    .collection(LIKES)
-                    .document(userId)
-
-
-            val likedPropertiesRef =
-                database.collection(USERS)
-                    .document(userId)
-                    .collection(LIKED_PROPERTIES)
-                    .document(propertyId)
-
-
-            val likeData = LikesDomainModel(
-                userId,
-                System.currentTimeMillis()
-            )
-
-            database.runBatch { batch ->
-
-                batch.set(
-                    likesRef,
-                    LikesEntity.fromDomainModel(
-                        likeData
+        return networkClient.execute(RetryConfigs.PROPERTY_FEED) {
+            requireAuthenticatedUser(userId)
+            functions
+                .getHttpsCallable("setPropertyLike")
+                .call(
+                    mapOf(
+                        "propertyId" to propertyId,
+                        "liked" to true
                     )
                 )
-
-
-                batch.set(
-                    likedPropertiesRef,
-                    LikesEntity.fromDomainModel(
-                        likeData
-                    )
-                )
-
-                batch.update(propertyRef, LIKES_COUNT, FieldValue.increment(1))
-
-            }.await()
-
-
+                .await()
+            Unit
         }
     }
 
@@ -325,33 +322,33 @@ internal class FirestoreProperties @Inject constructor(
     ): AppResult<Unit> {
 
 
-        return networkClient.execute {
+        return networkClient.execute(RetryConfigs.PROPERTY_FEED) {
+            requireAuthenticatedUser(userId)
+            functions
+                .getHttpsCallable("setPropertyLike")
+                .call(
+                    mapOf(
+                        "propertyId" to propertyId,
+                        "liked" to false
+                    )
+                )
+                .await()
+            Unit
+        }
+    }
 
-            val propertyRef =
-                database.collection(PROPERTIES)
-                    .document(propertyId)
-
-            val likesRef =
-                propertyRef
-                    .collection(LIKES)
-                    .document(userId)
-
-
-            val likedPropertiesRef =
-                database.collection(USERS)
-                    .document(userId)
-                    .collection(LIKED_PROPERTIES)
-                    .document(propertyId)
-
-
-            database.runBatch { batch ->
-
-                batch.delete(likesRef)
-                batch.delete(likedPropertiesRef)
-
-                batch.update(propertyRef, LIKES_COUNT, FieldValue.increment(-1))
-
-            }.await()
+    /**
+     * Verifies the requested user ID matches the Firebase session.
+     *
+     * The backend independently derives the UID from the callable auth token.
+     *
+     * @param userId User ID supplied by the repository layer.
+     */
+    private fun requireAuthenticatedUser(userId: String) {
+        val authenticatedUid = auth.currentUser?.uid
+            ?: throw AuthException.UserNotAuthenticated
+        if (authenticatedUid != userId) {
+            throw AuthException.UserNotAuthenticated
         }
     }
 

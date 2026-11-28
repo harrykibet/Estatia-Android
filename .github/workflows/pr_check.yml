@@ -2,7 +2,7 @@ name: PR Check (High Maturity)
 
 on:
   pull_request:
-    branches: [ "main" ]
+    # Include stacked pull requests whose base is another open PR branch.
     types: [ opened, synchronize, reopened, ready_for_review ]
   merge_group:
     types: [ checks_requested ]
