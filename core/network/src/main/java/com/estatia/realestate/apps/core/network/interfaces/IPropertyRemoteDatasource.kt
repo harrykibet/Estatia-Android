@@ -5,6 +5,7 @@ import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
 import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
 import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
 import com.estatia.realestate.apps.core.common.exceptions.AppResult
+import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
 import com.estatia.realestate.apps.core.model.property.PropertyCursor
 import com.estatia.realestate.apps.core.network.db_entities.PropertyRemotePage
 import com.estatia.realestate.apps.core.architecture.annotations.Identity.DataSource
@@ -30,7 +31,7 @@ interface IPropertyRemoteDatasource {
      * This method can be retried without re-uploading the listing's media.
      */
     suspend fun submitPropertyForReview(propertyId: String): AppResult<Unit> =
-        AppResult.Error(UnsupportedOperationException(
+        AppResult.Error(DatabaseException.InvalidData(
             "Property submission is not supported by this remote data source."
         ))
 
