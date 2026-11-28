@@ -420,6 +420,16 @@ class FirestorePropertiesTest {
         assertEquals(null, property.contact)
     }
 
+    @Test
+    fun `private property contact requires two matching non-empty identities`() {
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact(null, null))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", null))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact(null, "user-1"))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("", ""))
+        assertFalse(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", "user-2"))
+        assertTrue(FirestorePropertyReadPolicy.canReadPrivateContact("user-1", "user-1"))
+    }
+
     private fun stubAuthenticatedUser(userId: String) {
         val firebaseUser = mockk<FirebaseUser>()
         every { auth.currentUser } returns firebaseUser
