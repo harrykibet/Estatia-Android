@@ -427,6 +427,7 @@ internal class FirestoreProperties @Inject constructor(
                 // Chunk the IDs to avoid "too many values in whereIn" error.
                 likedPropertyIds.chunked(30).flatMap { chunk ->
                     database.collection(PROPERTIES)
+                        .whereEqualTo(FirestoreFields.ACTIVE, true)
                         .whereIn(FieldPath.documentId(), chunk)
                         .get()
                         .await()
