@@ -52,6 +52,7 @@ internal class FirestoreSearch @Inject constructor(
             val results = database.collection(
                 FirestoreCollections.PROPERTIES
             )
+                .whereEqualTo(FirestoreFields.ACTIVE, true)
                 .orderBy(
                     FirestoreFields.TITLE,
                     Query.Direction.ASCENDING
@@ -62,10 +63,10 @@ internal class FirestoreSearch @Inject constructor(
                 .get()
                 .await()
                 .documents
-                .mapNotNull {
-                    it.toObject(
-                        PropertyEntityModel::class.java
-                    )
+                .mapNotNull { document ->
+                    document.data?.let { fields ->
+                        FirestorePropertyMapper.toEntity(document.id, fields)
+                    }
                 }
 
             val duration = System.currentTimeMillis() - startTime
@@ -111,19 +112,17 @@ internal class FirestoreSearch @Inject constructor(
                 database.collection(
                     FirestoreCollections.PROPERTIES
                 )
+                    .whereEqualTo(FirestoreFields.ACTIVE, true)
                     .get()
                     .await()
 
 
 
             snapshot.documents
-                .mapNotNull {
-
-                    val property =
-                        it.toObject(
-                            PropertyEntityModel::class.java
-                        )
-
+                .mapNotNull { document ->
+                    val property = document.data?.let { fields ->
+                        FirestorePropertyMapper.toEntity(document.id, fields)
+                    }
 
                     property?.let { model ->
 
