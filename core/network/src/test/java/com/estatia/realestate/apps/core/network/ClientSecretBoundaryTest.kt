@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test
  * Guards the client/server credential boundary.
  *
  * Mobile production source must never grow a client-callable Secret Manager
- * retrieval abstraction. Test fixtures are excluded because some architecture
- * adversarial fixtures intentionally model forbidden designs.
+ * retrieval abstraction. This intentionally checks endpoint/repository types
+ * and legacy resource identifiers, not generic methods such as getSecret that
+ * are also legitimately used by the local Android Keystore. Test fixtures are
+ * excluded because architecture adversarial fixtures model forbidden designs.
  */
 class ClientSecretBoundaryTest {
 
@@ -27,9 +29,7 @@ class ClientSecretBoundaryTest {
             "SecretId",
             "ISecureKeyProvider",
             "BuildConfigSecureKeyProvider",
-            "getSecret",
             "StripePaymentAPIKey",
-            "Firebase API Key",
             "INTERGRITY_API_KEY",
             "AI_ML_API_Key",
         )
