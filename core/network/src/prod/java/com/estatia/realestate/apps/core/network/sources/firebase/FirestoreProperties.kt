@@ -11,7 +11,6 @@ import com.estatia.realestate.apps.core.common.media.MediaFormat
 import com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
 import com.estatia.realestate.apps.core.model.property.PropertyCursor
 import com.estatia.realestate.apps.core.model.property.PropertyUpdateFields
-import com.estatia.realestate.apps.core.network.core.RetryConfig
 import com.estatia.realestate.apps.core.network.core.RetryConfigs
 import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
 import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
@@ -25,7 +24,6 @@ import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDatasource
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
@@ -297,8 +295,10 @@ internal class FirestoreProperties @Inject constructor(
                 throw AuthException.UserNotAuthenticated
             }
 
-            propertyRef.collection(CONTACT).document("info").delete().await()
-            propertyRef.delete().await()
+            database.runBatch { batch ->
+                batch.delete(propertyRef.collection(CONTACT).document("info"))
+                batch.delete(propertyRef)
+            }.await()
         }
     }
 
