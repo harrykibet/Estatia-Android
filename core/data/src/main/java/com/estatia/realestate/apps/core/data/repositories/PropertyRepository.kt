@@ -151,6 +151,12 @@ class PropertyRepository @Inject constructor(
             )
     }
 
+    override suspend fun submitPropertyForReview(propertyId: String): AppResult<Unit> {
+        return remoteDataSource
+            .submitPropertyForReview(propertyId)
+            .translatePropertyFailures(exceptionTranslator)
+    }
+
     override suspend fun updateProperty(
         propertyId: String,
         updates: PropertyUpdateFields
