@@ -23,6 +23,6 @@ internal object FirestorePublicProfileMapper {
         name = fields["displayName"] as? String,
         profilePictureUrl = fields["profilePictureUrl"] as? String,
         bio = fields["bio"] as? String,
-        userType = fields["profileType"] as? String ?: "TENANT"
+        userType = fields["profileCategory"] as? String ?: "TENANT"
     )
 }
