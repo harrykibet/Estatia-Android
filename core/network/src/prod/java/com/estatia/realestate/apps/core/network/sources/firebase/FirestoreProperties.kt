@@ -88,6 +88,7 @@ internal class FirestoreProperties @Inject constructor(
         val propertyId = property.id.ifBlank { UUID.randomUUID().toString() }
         val propertyRef = database.collection(PROPERTIES).document(propertyId)
         val contactRef = propertyRef.collection(CONTACT).document("info")
+        val uploadAttemptId = UUID.randomUUID().toString()
         val imagePaths = imageUris.map {
             "$PROPERTIES/$propertyId/${MediaFormat.MEDIA_TYPE_IMAGES}/${UUID.randomUUID()}"
         }
@@ -114,12 +115,22 @@ internal class FirestoreProperties @Inject constructor(
             val draft = FirestorePropertyWriteMapper.toInactiveDraft(
                 property = property,
                 propertyId = propertyId,
-                authenticatedOwnerId = authenticatedUid
+                authenticatedOwnerId = authenticatedUid,
+                uploadAttemptId = uploadAttemptId
             )
+            var draftCreated = false
             try {
-                database.runBatch { batch ->
-                    batch.set(propertyRef, draft)
-                    batch.set(
+                // A transaction prevents a caller-supplied existing property ID
+                // from overwriting somebody else's document or private contact.
+                database.runTransaction { transaction ->
+                    val existing = transaction.get(propertyRef)
+                    if (existing.exists()) {
+                        throw DatabaseException.InvalidData(
+                            "The property identifier is already in use."
+                        )
+                    }
+                    transaction.set(propertyRef, draft)
+                    transaction.set(
                         contactRef,
                         mapOf(
                             "phone" to contactInfo.phone,
@@ -127,6 +138,7 @@ internal class FirestoreProperties @Inject constructor(
                         )
                     )
                 }.await()
+                draftCreated = true
 
                 val imageUrls = uploadMedia(imageUploads, uploadedPaths)
                 val videoUrls = uploadMedia(videoUploads, uploadedPaths)
@@ -149,7 +161,20 @@ internal class FirestoreProperties @Inject constructor(
                 // Includes a download-URL failure after a Storage object was created
                 // and a Firestore finalization failure. Cleanup never masks the cause.
                 withContext(NonCancellable) {
-                    rollbackFailedPropertyUpload(propertyRef, contactRef, uploadedPaths)
+                    // Usually set after the creation transaction returns. If its
+                    // acknowledgement was lost, prove ownership using the unique
+                    // marker before cleaning anything. Never delete an existing ID.
+                    val matchingDraft = draftCreated || try {
+                        val snapshot = propertyRef.get().await()
+                        snapshot.exists() &&
+                            snapshot.getString("ownerId") == authenticatedUid &&
+                            snapshot.getString("uploadAttemptId") == uploadAttemptId
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (matchingDraft) {
+                        rollbackFailedPropertyUpload(propertyRef, contactRef, uploadedPaths)
+                    }
                 }
                 throw failure
             }
