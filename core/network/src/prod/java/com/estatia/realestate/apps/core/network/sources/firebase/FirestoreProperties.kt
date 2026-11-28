@@ -116,18 +116,18 @@ internal class FirestoreProperties @Inject constructor(
                 propertyId = propertyId,
                 authenticatedOwnerId = authenticatedUid
             )
-            database.runBatch { batch ->
-                batch.set(propertyRef, draft)
-                batch.set(
-                    contactRef,
-                    mapOf(
-                        "phone" to contactInfo.phone,
-                        "email" to contactInfo.email
-                    )
-                )
-            }.await()
-
             try {
+                database.runBatch { batch ->
+                    batch.set(propertyRef, draft)
+                    batch.set(
+                        contactRef,
+                        mapOf(
+                            "phone" to contactInfo.phone,
+                            "email" to contactInfo.email
+                        )
+                    )
+                }.await()
+
                 val imageUrls = uploadMedia(imageUploads, uploadedPaths)
                 val videoUrls = uploadMedia(videoUploads, uploadedPaths)
 
@@ -206,33 +206,34 @@ internal class FirestoreProperties @Inject constructor(
         contactRef: com.google.firebase.firestore.DocumentReference,
         uploadedPaths: Set<String>
     ) {
-        var cleanupFailed = false
+        var storageCleanupFailed = false
 
         uploadedPaths.forEach { path ->
             try {
                 storage.reference.child(path).delete().await()
             } catch (exception: StorageException) {
                 if (exception.errorCode != StorageException.ERROR_OBJECT_NOT_FOUND) {
-                    cleanupFailed = true
+                    storageCleanupFailed = true
                 }
             } catch (_: Exception) {
-                cleanupFailed = true
+                storageCleanupFailed = true
             }
         }
 
-        try {
-            contactRef.delete().await()
-        } catch (_: Exception) {
-            cleanupFailed = true
+        if (storageCleanupFailed) {
+            // Keep the inactive owner-bound draft as the reconciliation anchor.
+            // Deleting it would make a later rules-authorized cleanup impossible.
+            metricsTracker.incrementCounter("network.properties.upload_cleanup_failure")
+            metricsTracker.incrementCounter("network.properties.upload_failure")
+            return
         }
 
         try {
-            propertyRef.delete().await()
+            database.runBatch { batch ->
+                batch.delete(contactRef)
+                batch.delete(propertyRef)
+            }.await()
         } catch (_: Exception) {
-            cleanupFailed = true
-        }
-
-        if (cleanupFailed) {
             metricsTracker.incrementCounter("network.properties.upload_cleanup_failure")
         }
         metricsTracker.incrementCounter("network.properties.upload_failure")
@@ -304,7 +305,7 @@ internal class FirestoreProperties @Inject constructor(
     }
 
     private fun requireAuthenticatedUser(): String =
-        auth.currentUser?.uid?.takeIf(String::isNotBlank)
+        auth.currentUser?.uid?.takeIf { it.isNotBlank() }
             ?: throw AuthException.UserNotAuthenticated
 
 
