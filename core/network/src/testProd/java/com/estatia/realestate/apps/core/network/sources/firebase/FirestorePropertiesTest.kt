@@ -27,6 +27,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.storage.FirebaseStorage
+import android.content.Context
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -55,6 +56,7 @@ class FirestorePropertiesTest {
     private lateinit var storage: FirebaseStorage
     private lateinit var functions: FirebaseFunctions
     private lateinit var auth: FirebaseAuth
+    private lateinit var context: Context
     private lateinit var networkChaos: NetworkChaosController
     private lateinit var metricsTracker: com.estatia.realestate.apps.core.domain.analytics.IMetricsTracker
     private lateinit var firestoreProperties: FirestoreProperties
@@ -65,6 +67,7 @@ class FirestorePropertiesTest {
         storage = mockk()
         functions = mockk()
         auth = mockk()
+        context = mockk()
         networkChaos = NetworkChaosController()
 
         val exceptionMapper = mockk<IExceptionMapper>(relaxed = true)
@@ -91,6 +94,7 @@ class FirestorePropertiesTest {
             storage,
             functions,
             auth,
+            context,
             networkClient,
             metricsTracker
         )
@@ -336,6 +340,79 @@ class FirestorePropertiesTest {
         } catch (exception: IllegalArgumentException) {
             assertTrue(exception.message.orEmpty().contains("createdAt"))
         }
+    }
+
+    @Test
+    fun `inactive public draft write payload uses authenticated owner and omits private fields`() {
+        val property = PropertyEntityModel(
+            id = "caller-property-id",
+            title = "Public listing",
+            ownerId = "forged-owner",
+            ownerName = "Unverified owner name",
+            contact = PropertyContactEntity(
+                phone = "+254700000001",
+                email = "private@example.test"
+            ),
+            active = true,
+            viewsCount = 90,
+            sharesCount = 80,
+            likesCount = 70,
+            commentsCount = 60,
+            matchScore = 0.99f,
+            createdAt = 1L
+        )
+
+        val payload = FirestorePropertyWriteMapper.toInactiveDraft(
+            property = property,
+            propertyId = "server-selected-id",
+            authenticatedOwnerId = "authenticated-owner"
+        )
+
+        assertEquals("authenticated-owner", payload["ownerId"])
+        assertEquals("server-selected-id", payload["id"])
+        assertEquals(false, payload["active"])
+        assertEquals("Public listing", payload["title"])
+        assertFalse(payload.containsKey("ownerName"))
+        assertFalse(payload.containsKey("contact"))
+        assertFalse(payload.containsKey("contactPhone"))
+        assertFalse(payload.containsKey("contactEmail"))
+        assertFalse(payload.containsKey("viewsCount"))
+        assertFalse(payload.containsKey("sharesCount"))
+        assertFalse(payload.containsKey("likesCount"))
+        assertFalse(payload.containsKey("commentsCount"))
+        assertFalse(payload.containsKey("matchScore"))
+        assertFalse(payload["createdAt"] == 1L)
+    }
+
+    @Test
+    fun `media finalization payload cannot change owner or publication state`() {
+        val payload = FirestorePropertyWriteMapper.toMediaFinalization(
+            imageUrls = listOf("https://cdn.example.test/image.jpg"),
+            videoUrls = listOf("https://cdn.example.test/video.mp4")
+        )
+
+        assertEquals(
+            setOf("imageUrl", "directVideoUrls", "hlsUrl", "updatedAt"),
+            payload.keys
+        )
+        assertEquals(listOf("https://cdn.example.test/image.jpg"), payload["imageUrl"])
+        assertEquals(listOf("https://cdn.example.test/video.mp4"), payload["directVideoUrls"])
+    }
+
+    @Test
+    fun `public property mapper ignores legacy embedded contact data`() {
+        val property = FirestorePropertyMapper.toEntity(
+            documentId = "legacy-property",
+            fields = mapOf(
+                "title" to "Legacy listing",
+                "contact" to mapOf(
+                    "phone" to "+254700000001",
+                    "email" to "private@example.test"
+                )
+            )
+        )
+
+        assertEquals(null, property.contact)
     }
 
     private fun stubAuthenticatedUser(userId: String) {
