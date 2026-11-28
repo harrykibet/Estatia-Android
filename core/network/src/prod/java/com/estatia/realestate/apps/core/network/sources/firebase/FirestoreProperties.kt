@@ -78,40 +78,40 @@ internal class FirestoreProperties @Inject constructor(
         imageUris: List<Uri>,
         videoUris: List<Uri>
     ): AppResult<String> {
-        val authenticatedUid = requireAuthenticatedUser()
+        val authenticatedUid = auth.currentUser?.uid?.takeIf { it.isNotBlank() }
+            ?: return AppResult.Error(AuthException.UserNotAuthenticated)
         if (!property.ownerId.isNullOrBlank() && property.ownerId != authenticatedUid) {
             return AppResult.Error(AuthException.UserNotAuthenticated)
         }
 
-        // Generate stable identifiers and object paths before entering the network executor.
-        // The no-retry policy avoids replaying a partially completed multi-resource workflow.
+        // Generate stable identifiers and object paths before the one-shot executor.
+        // Multi-resource upload is deliberately not auto-retried after compensation.
         val propertyId = property.id.ifBlank { UUID.randomUUID().toString() }
         val propertyRef = database.collection(PROPERTIES).document(propertyId)
         val contactRef = propertyRef.collection(CONTACT).document("info")
-        val imageUploads = buildMediaUploads(
-            imageUris,
-            propertyId,
-            MediaFormat.MEDIA_TYPE_IMAGES,
-            MediaFormat.IMAGE_FORMATS
-        )
-        val videoUploads = buildMediaUploads(
-            videoUris,
-            propertyId,
-            MediaFormat.MEDIA_TYPE_VIDEOS,
-            MediaFormat.VIDEO_FORMATS
-        )
+        val imagePaths = imageUris.map {
+            "$PROPERTIES/$propertyId/${MediaFormat.MEDIA_TYPE_IMAGES}/${UUID.randomUUID()}"
+        }
+        val videoPaths = videoUris.map {
+            "$PROPERTIES/$propertyId/${MediaFormat.MEDIA_TYPE_VIDEOS}/${UUID.randomUUID()}"
+        }
         val uploadedPaths = linkedSetOf<String>()
         val startTime = System.currentTimeMillis()
 
         return networkClient.execute(RetryConfigs.NO_RETRY) {
-            // The parent must exist before Storage uploads so rules can verify ownerId
-            // by reading properties/{propertyId}. The client cannot publish the draft.
-            if (propertyRef.get().await().exists()) {
-                throw DatabaseException.InvalidData(
-                    "The property identifier is already in use."
-                )
-            }
+            val imageUploads = buildMediaUploads(
+                imageUris,
+                imagePaths,
+                MediaFormat.IMAGE_FORMATS
+            )
+            val videoUploads = buildMediaUploads(
+                videoUris,
+                videoPaths,
+                MediaFormat.VIDEO_FORMATS
+            )
 
+            // The owner-bound parent must exist before Storage uploads so rules
+            // can authorize properties/{id}/images|videos by looking up ownerId.
             val draft = FirestorePropertyWriteMapper.toInactiveDraft(
                 property = property,
                 propertyId = propertyId,
@@ -147,9 +147,8 @@ internal class FirestoreProperties @Inject constructor(
                 metricsTracker.incrementCounter("network.properties.upload_success")
                 propertyId
             } catch (failure: Exception) {
-                // This includes download-URL and final Firestore update failures.
-                // Cleanup runs even if the coroutine was cancelled and never masks
-                // the original upload/finalization exception.
+                // Includes a download-URL failure after a Storage object was created
+                // and a Firestore finalization failure. Cleanup never masks the cause.
                 withContext(NonCancellable) {
                     rollbackFailedPropertyUpload(propertyRef, contactRef, uploadedPaths)
                 }
@@ -160,15 +159,13 @@ internal class FirestoreProperties @Inject constructor(
 
     private fun buildMediaUploads(
         uris: List<Uri>,
-        propertyId: String,
-        mediaDirectory: String,
+        paths: List<String>,
         allowedFormats: Set<MediaFormat>
-    ): List<PendingMediaUpload> = uris.map { uri ->
+    ): List<PendingMediaUpload> = uris.mapIndexed { index, uri ->
         val mimeType = context.contentResolver.getType(uri)
-            ?: MimeTypeMap.getSingleton()
-                .getMimeTypeFromExtension(
-                    MimeTypeMap.getFileExtensionFromUrl(uri.toString())
-                )
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                MimeTypeMap.getFileExtensionFromUrl(uri.toString())
+            )
             ?: throw DatabaseException.InvalidData(
                 "Unable to determine the media content type."
             )
@@ -181,7 +178,7 @@ internal class FirestoreProperties @Inject constructor(
 
         PendingMediaUpload(
             uri = uri,
-            path = "$PROPERTIES/$propertyId/$mediaDirectory/${UUID.randomUUID()}",
+            path = paths[index],
             metadata = StorageMetadata.Builder()
                 .setContentType(format.mimeType)
                 .build()
@@ -280,7 +277,7 @@ internal class FirestoreProperties @Inject constructor(
                     FirestoreFields.AVAILABLE_FROM to updates.availableFrom,
                     FirestoreFields.LEASE_TERMS to updates.leaseTerms,
                     FirestoreFields.AVAILABLE to updates.available,
-                    FirestoreFields.UPDATED_AT to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
                 ).filterValues { it != null }
             ).await()
         }
