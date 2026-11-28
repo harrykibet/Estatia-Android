@@ -357,6 +357,9 @@ class FirestorePropertiesTest {
                 email = "private@example.test"
             ),
             active = true,
+            imageUrl = listOf("https://attacker.example.test/unverified.jpg"),
+            directVideoUrls = listOf("https://attacker.example.test/unverified.mp4"),
+            hlsUrl = listOf("https://attacker.example.test/unverified.m3u8"),
             viewsCount = 90,
             sharesCount = 80,
             likesCount = 70,
@@ -377,6 +380,9 @@ class FirestorePropertiesTest {
         assertEquals("server-selected-id", payload["id"])
         assertEquals(false, payload["active"])
         assertEquals("Public listing", payload["title"])
+        assertEquals(emptyList<String>(), payload["imageUrl"])
+        assertEquals(emptyList<String>(), payload["directVideoUrls"])
+        assertEquals(emptyList<String>(), payload["hlsUrl"])
         assertFalse(payload.containsKey("ownerName"))
         assertFalse(payload.containsKey("contact"))
         assertFalse(payload.containsKey("contactPhone"))
