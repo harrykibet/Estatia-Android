@@ -194,8 +194,6 @@ class FirestorePropertiesTest {
         try {
             stubAuthenticatedUser("user123")
             stubLegacyMigrationComplete()
-            stubAuthenticatedUser("user123")
-            stubLegacyMigrationComplete()
             val likedCollection = stubEmptyLikedPropertiesQuery("user123")
 
             val result = firestoreProperties.fetchLikedProperties("user123")
@@ -219,6 +217,8 @@ class FirestorePropertiesTest {
 
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
         try {
+            stubAuthenticatedUser("user123")
+            stubLegacyMigrationComplete()
             val likedCollection = stubEmptyLikedPropertiesQuery("user123")
 
             val result = firestoreProperties.fetchLikedProperties("user123")
