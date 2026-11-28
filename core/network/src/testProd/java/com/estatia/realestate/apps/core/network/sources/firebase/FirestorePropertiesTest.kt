@@ -30,6 +30,7 @@ import com.google.firebase.storage.FirebaseStorage
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
@@ -101,8 +102,9 @@ class FirestorePropertiesTest {
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
+        val payload = slot<Any?>()
         every { functions.getHttpsCallable("setPropertyLike") } returns callable
-        every { callable.call(any()) } returns task
+        every { callable.call(capture(payload)) } returns task
         coEvery { task.await() } returns mockk()
 
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
@@ -112,15 +114,11 @@ class FirestorePropertiesTest {
                 propertyId = "property-123"
             )
             assertTrue(result is AppResult.Success)
-            verify(exactly = 1) {
-                callable.call(
-                    match {
-                        it is Map<*, *> &&
-                            it["propertyId"] == "property-123" &&
-                            it["liked"] == true
-                    }
-                )
-            }
+            verify(exactly = 1) { callable.call(any()) }
+            val request = payload.captured as? Map<*, *>
+            assertTrue("Callable payload must be a map", request != null)
+            assertEquals("property-123", request?.get("propertyId"))
+            assertEquals(true, request?.get("liked"))
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
         }
@@ -149,7 +147,8 @@ class FirestorePropertiesTest {
         every {
             functions.getHttpsCallable("recordPropertyEngagement")
         } returns callable
-        every { callable.call(any()) } returns task
+        val payloads = mutableListOf<Any?>()
+        every { callable.call(capture(payloads)) } returns task
         coEvery { task.await() } returns mockk()
 
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
@@ -162,25 +161,13 @@ class FirestorePropertiesTest {
             verify(exactly = 2) {
                 functions.getHttpsCallable("recordPropertyEngagement")
             }
-            verify(exactly = 1) {
-                callable.call(
-                    match {
-                        it is Map<*, *> &&
-                            it["propertyId"] == "property-123" &&
-                            it["eventType"] == "view" &&
-                            it["eventId"] is String
-                    }
-                )
-            }
-            verify(exactly = 1) {
-                callable.call(
-                    match {
-                        it is Map<*, *> &&
-                            it["propertyId"] == "property-123" &&
-                            it["eventType"] == "share" &&
-                            it["eventId"] is String
-                    }
-                )
+            val requests = payloads.mapNotNull { it as? Map<*, *> }
+            assertEquals(2, requests.size)
+            val viewRequest = requests.single { it["eventType"] == "view" }
+            val shareRequest = requests.single { it["eventType"] == "share" }
+            for (request in listOf(viewRequest, shareRequest)) {
+                assertEquals("property-123", request["propertyId"])
+                assertTrue(request["eventId"] is String)
             }
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
