@@ -14,11 +14,15 @@ internal object FirestorePropertyWriteMapper {
     fun toInactiveDraft(
         property: PropertyEntityModel,
         propertyId: String,
-        authenticatedOwnerId: String
+        authenticatedOwnerId: String,
+        uploadAttemptId: String
     ): Map<String, Any> = buildMap {
         put("schemaVersion", property.schemaVersion)
         put("id", propertyId)
         put("ownerId", authenticatedOwnerId)
+        // Unique marker prevents a failed attempt from deleting an existing document
+        // and lets reconciliation identify drafts whose transaction outcome was unknown.
+        put("uploadAttemptId", uploadAttemptId)
         put("title", property.title)
         put("imageUrl", property.imageUrl.orEmpty())
         put("directVideoUrls", property.directVideoUrls.orEmpty())
@@ -54,6 +58,7 @@ internal object FirestorePropertyWriteMapper {
         "directVideoUrls" to videoUrls,
         // HLS generation remains a trusted server-side responsibility.
         "hlsUrl" to emptyList<String>(),
+        "uploadAttemptId" to FieldValue.delete(),
         "updatedAt" to FieldValue.serverTimestamp()
     )
 }
