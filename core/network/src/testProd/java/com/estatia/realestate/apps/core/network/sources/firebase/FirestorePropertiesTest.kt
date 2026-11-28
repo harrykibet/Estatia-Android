@@ -31,6 +31,7 @@ import io.mockk.coEvery
 import io.mockk.slot
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
@@ -98,7 +99,7 @@ class FirestorePropertiesTest {
 
     @Test
     fun `likeProperty delegates state transition to the server callable`() = runTest {
-        networkChaos.script(NetworkBehavior.Success)
+        networkChaos.script(NetworkBehavior.Success, NetworkBehavior.Success)
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
@@ -133,6 +134,53 @@ class FirestorePropertiesTest {
             userId = "another-user",
             propertyId = "property-123"
         )
+
+        assertTrue(result is AppResult.Error)
+        verify(exactly = 0) { functions.getHttpsCallable(any()) }
+    }
+
+    @Test
+    fun `recordView and recordShare use idempotent backend events`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        stubAuthenticatedUser("user123")
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        every {
+            functions.getHttpsCallable("recordPropertyEngagement")
+        } returns callable
+        val payloads = mutableListOf<Any>()
+        every { callable.call(capture(payloads)) } returns task
+        coEvery { task.await() } returns mockk()
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            val viewResult = firestoreProperties.recordView("property-123")
+            val shareResult = firestoreProperties.recordShare("property-123")
+
+            assertTrue(viewResult is AppResult.Success)
+            assertTrue(shareResult is AppResult.Success)
+            verify(exactly = 2) {
+                functions.getHttpsCallable("recordPropertyEngagement")
+            }
+            val requests = payloads.mapNotNull { it as? Map<*, *> }
+            assertEquals(2, requests.size)
+            val viewRequest = requests.single { it["eventType"] == "view" }
+            val shareRequest = requests.single { it["eventType"] == "share" }
+            for (request in listOf(viewRequest, shareRequest)) {
+                assertEquals("property-123", request["propertyId"])
+                assertTrue(request["eventId"] is String)
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
+    fun `recordView rejects unauthenticated requests before calling backend`() = runTest {
+        networkChaos.script(NetworkBehavior.Success)
+        every { auth.currentUser } returns null
+
+        val result = firestoreProperties.recordView("property-123")
 
         assertTrue(result is AppResult.Error)
         verify(exactly = 0) { functions.getHttpsCallable(any()) }

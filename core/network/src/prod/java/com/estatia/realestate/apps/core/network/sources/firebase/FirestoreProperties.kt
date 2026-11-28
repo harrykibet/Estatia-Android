@@ -19,12 +19,9 @@ import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.Su
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.SubCollections.LIKED_PROPERTIES
 import com.estatia.realestate.apps.core.network.db_names.FirestoreCollections.USERS
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
-import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.SHARES_COUNT
-import com.estatia.realestate.apps.core.network.db_names.FirestoreFields.VIEWS_COUNT
 import com.estatia.realestate.apps.core.network.interfaces.INetworkClient
 import com.estatia.realestate.apps.core.network.interfaces.IPropertyRemoteDatasource
 import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
@@ -353,20 +350,47 @@ internal class FirestoreProperties @Inject constructor(
     }
 
     override suspend fun recordView(propertyId: String): AppResult<Unit> {
-        return networkClient.execute {
-            database.collection(PROPERTIES)
-                .document(propertyId)
-                .update(VIEWS_COUNT, FieldValue.increment(1))
+        val eventId = UUID.randomUUID().toString()
+        return networkClient.execute(RetryConfigs.ANALYTICS) {
+            requireAuthenticatedSession()
+            functions
+                .getHttpsCallable("recordPropertyEngagement")
+                .call(
+                    mapOf(
+                        "propertyId" to propertyId,
+                        "eventId" to eventId,
+                        "eventType" to "view"
+                    )
+                )
                 .await()
+            Unit
         }
     }
 
     override suspend fun recordShare(propertyId: String): AppResult<Unit> {
-        return networkClient.execute {
-            database.collection(PROPERTIES)
-                .document(propertyId)
-                .update(SHARES_COUNT, FieldValue.increment(1))
+        val eventId = UUID.randomUUID().toString()
+        return networkClient.execute(RetryConfigs.ANALYTICS) {
+            requireAuthenticatedSession()
+            functions
+                .getHttpsCallable("recordPropertyEngagement")
+                .call(
+                    mapOf(
+                        "propertyId" to propertyId,
+                        "eventId" to eventId,
+                        "eventType" to "share"
+                    )
+                )
                 .await()
+            Unit
+        }
+    }
+
+    /**
+     * Requires a signed-in user before recording a server-owned event.
+     */
+    private fun requireAuthenticatedSession() {
+        if (auth.currentUser?.uid.isNullOrBlank()) {
+            throw AuthException.UserNotAuthenticated
         }
     }
 
