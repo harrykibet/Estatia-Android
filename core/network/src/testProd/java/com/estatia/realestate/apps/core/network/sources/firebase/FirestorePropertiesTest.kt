@@ -102,7 +102,7 @@ class FirestorePropertiesTest {
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
-        val payload = slot<Any?>()
+        val payload = slot<Any>()
         every { functions.getHttpsCallable("setPropertyLike") } returns callable
         every { callable.call(capture(payload)) } returns task
         coEvery { task.await() } returns mockk()
@@ -147,7 +147,7 @@ class FirestorePropertiesTest {
         every {
             functions.getHttpsCallable("recordPropertyEngagement")
         } returns callable
-        val payloads = mutableListOf<Any?>()
+        val payloads = mutableListOf<Any>()
         every { callable.call(capture(payloads)) } returns task
         coEvery { task.await() } returns mockk()
 
