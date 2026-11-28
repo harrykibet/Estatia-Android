@@ -104,6 +104,67 @@ class FirestorePropertiesTest {
     }
 
     @Test
+    fun `submitPropertyForReview calls the backend with only the property ID`() = runTest {
+        stubAuthenticatedUser("owner-123")
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        val response = mockk<HttpsCallableResult>()
+        val payload = slot<Any>()
+
+        every {
+            functions.getHttpsCallable("submitPropertyForReview")
+        } returns callable
+        every { callable.call(capture(payload)) } returns task
+        coEvery { task.await() } returns response
+        every { response.data } returns mapOf(
+            "propertyId" to "property-123",
+            "publicationStatus" to "pending_review",
+            "submitted" to true
+        )
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            PropertyPublicationCallable.submitForReview(functions, "property-123")
+
+            val request = payload.captured as? Map<*, *>
+            assertEquals(mapOf("propertyId" to "property-123"), request)
+            verify(exactly = 1) {
+                functions.getHttpsCallable("submitPropertyForReview")
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
+    fun `submitPropertyForReview rejects a malformed backend response`() = runTest {
+        val callable = mockk<HttpsCallableReference>()
+        val task = mockk<Task<HttpsCallableResult>>()
+        val response = mockk<HttpsCallableResult>()
+        every {
+            functions.getHttpsCallable("submitPropertyForReview")
+        } returns callable
+        every { callable.call(any()) } returns task
+        coEvery { task.await() } returns response
+        every { response.data } returns mapOf(
+            "propertyId" to "another-property",
+            "publicationStatus" to "published"
+        )
+
+        mockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        try {
+            try {
+                PropertyPublicationCallable.submitForReview(functions, "property-123")
+                throw AssertionError("Expected malformed backend response to fail.")
+            } catch (exception: Exception) {
+                assertTrue(exception.message.orEmpty().contains("did not enter pending review"))
+            }
+        } finally {
+            unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
+        }
+    }
+
+    @Test
     fun `likeProperty delegates state transition to the server callable`() = runTest {
         networkChaos.script(NetworkBehavior.Success, NetworkBehavior.Success)
         stubAuthenticatedUser("user123")
