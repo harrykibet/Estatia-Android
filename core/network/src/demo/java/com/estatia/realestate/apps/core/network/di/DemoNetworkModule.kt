@@ -10,7 +10,6 @@ import com.estatia.realestate.apps.core.common.exceptions.AuthException
 import com.estatia.realestate.apps.core.common.exceptions.DatabaseException
 import com.estatia.realestate.apps.core.common.exceptions.NetworkException
 import com.estatia.realestate.apps.core.common.exceptions.StorageException
-import com.estatia.realestate.apps.core.network.api.SecretApi
 import com.estatia.realestate.apps.core.model.system.NetworkState
 import com.estatia.realestate.apps.core.network.core.RetryConfig
 import com.estatia.realestate.apps.core.network.di.NetworkInterceptors
@@ -168,11 +167,5 @@ object DemoNetworkModule {
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideSecretApi(retrofit: Retrofit): SecretApi {
-        return retrofit.create(SecretApi::class.java)
     }
 }
