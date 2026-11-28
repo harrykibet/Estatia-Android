@@ -1,7 +1,6 @@
 package com.estatia.realestate.apps.core.network.sources.firebase
 
 import com.estatia.realestate.apps.core.model.property.PropertyCursor
-import com.estatia.realestate.apps.core.network.db_entities.PropertyContactEntity
 import com.estatia.realestate.apps.core.network.db_entities.PropertyEntityModel
 import com.estatia.realestate.apps.core.network.db_names.FirestoreFields
 import com.google.firebase.Timestamp
@@ -27,8 +26,6 @@ internal object FirestorePropertyMapper {
         documentId: String,
         fields: Map<String, Any?>,
     ): PropertyEntityModel {
-        val contactFields = fields["contact"] as? Map<*, *>
-
         return PropertyEntityModel(
             schemaVersion = fields.int("schemaVersion") ?: 1,
             id = fields.string("id") ?: documentId,
@@ -44,12 +41,8 @@ internal object FirestorePropertyMapper {
             createdAt = readCreatedAt(fields[FirestoreFields.CREATED_AT])?.epochMillis,
             ownerId = fields.string("ownerId"),
             ownerName = fields.string("ownerName"),
-            contact = contactFields?.let {
-                PropertyContactEntity(
-                    phone = it["phone"] as? String,
-                    email = it["email"] as? String,
-                )
-            },
+            // Public parent documents are never a source of private contact details.
+            contact = null,
             county = fields.string("county"),
             active = fields.boolean("active") ?: true,
             viewsCount = fields.int("viewsCount") ?: 0,
