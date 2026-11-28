@@ -273,6 +273,15 @@ internal class FirestoreProperties @Inject constructor(
         metricsTracker.incrementCounter("network.properties.upload_failure")
     }
 
+    override suspend fun submitPropertyForReview(
+        propertyId: String
+    ): AppResult<Unit> {
+        return networkClient.execute(RetryConfigs.NO_RETRY) {
+            requireAuthenticatedUser()
+            PropertyPublicationCallable.submitForReview(functions, propertyId)
+        }
+    }
+
     override suspend fun updateProperty(
         propertyId: String,
         updates: PropertyUpdateFields
