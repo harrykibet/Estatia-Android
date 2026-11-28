@@ -11,7 +11,7 @@ fi
 
 prepare_flavor() {
   local flavor="$1"
-  local secret_name encoded destination expected_package temp_file
+  local secret_name encoded destination expected_package expected_project_id temp_file
 
   case "$flavor" in
     demo)
@@ -19,12 +19,19 @@ prepare_flavor() {
       encoded="${GOOGLE_SERVICES_JSON_DEMO_BASE64:-}"
       destination="app/src/demo/google-services.json"
       expected_package="com.estatia.realestate.apps.demo"
+      expected_project_id=""
       ;;
     prod)
       secret_name="GOOGLE_SERVICES_JSON_PROD_BASE64"
       encoded="${GOOGLE_SERVICES_JSON_PROD_BASE64:-}"
       destination="app/src/prod/google-services.json"
       expected_package="com.estatia.realestate.apps"
+      # Keep production mobile configuration aligned with Backend .firebaserc
+      # and the Web SDK project. Dependabot's isolated demo fallback is exempt.
+      expected_project_id="firestore-72e4c"
+      if [[ "${ALLOW_CI_FIREBASE_CONFIG_FALLBACK:-false}" == "true" ]]; then
+        expected_project_id=""
+      fi
       ;;
     *)
       echo "::error::Unsupported Firebase flavor '$flavor'. Use demo or prod."
@@ -92,11 +99,11 @@ JSON
   # Validate the decoded JSON and ensure it contains the application ID for
   # this flavor. Only validation errors are printed; secret contents are never
   # emitted to the workflow log.
-  if ! python3 - "$temp_file" "$expected_package" <<'PY'
+  if ! python3 - "$temp_file" "$expected_package" "$expected_project_id" <<'PY'
 import json
 import sys
 
-path, expected_package = sys.argv[1], sys.argv[2]
+path, expected_package, expected_project_id = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
     with open(path, "r", encoding="utf-8") as source:
         payload = json.load(source)
@@ -109,6 +116,14 @@ clients = payload.get("client") if isinstance(payload, dict) else None
 if not isinstance(project_info, dict) or not isinstance(project_info.get("project_id"), str):
     print("Firebase JSON is missing project_info.project_id.", file=sys.stderr)
     raise SystemExit(1)
+if expected_project_id and project_info["project_id"] != expected_project_id:
+    print(
+        "Production Firebase JSON project ID does not match the Backend/Web project.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+if expected_project_id:
+    print(f"Verified production Firebase project ID: {expected_project_id}.")
 if not isinstance(clients, list):
     print("Firebase JSON is missing the client array.", file=sys.stderr)
     raise SystemExit(1)
