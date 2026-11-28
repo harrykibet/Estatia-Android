@@ -89,7 +89,7 @@ class FirestoreCommentsTest {
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
-        val payload = slot<Any?>()
+        val payload = slot<Any>()
         every { functions.getHttpsCallable("submitPropertyComment") } returns callable
         every { callable.call(capture(payload)) } returns task
         coEvery { task.await() } returns mockk()
