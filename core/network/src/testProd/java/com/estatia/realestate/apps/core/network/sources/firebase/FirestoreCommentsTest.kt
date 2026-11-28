@@ -21,12 +21,14 @@ import com.google.firebase.functions.HttpsCallableResult
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -87,8 +89,9 @@ class FirestoreCommentsTest {
         stubAuthenticatedUser("user123")
         val callable = mockk<HttpsCallableReference>()
         val task = mockk<Task<HttpsCallableResult>>()
+        val payload = slot<Any?>()
         every { functions.getHttpsCallable("submitPropertyComment") } returns callable
-        every { callable.call(any()) } returns task
+        every { callable.call(capture(payload)) } returns task
         coEvery { task.await() } returns mockk()
 
         mockkStatic("kotlinx.coroutines.tasks.TasksKt")
@@ -104,17 +107,13 @@ class FirestoreCommentsTest {
             val result = firestoreComments.submitComment(comment)
 
             assertTrue(result is AppResult.Success)
-            verify(exactly = 1) {
-                callable.call(
-                    match {
-                        it is Map<*, *> &&
-                            it.keys == setOf("propertyId", "commentId", "message") &&
-                            it["propertyId"] == "property-123" &&
-                            it["message"] == "Is this available?" &&
-                            it["commentId"] is String
-                    }
-                )
-            }
+            verify(exactly = 1) { callable.call(any()) }
+            val request = payload.captured as? Map<*, *>
+            assertTrue("Callable payload must be a map", request != null)
+            assertEquals(setOf("propertyId", "commentId", "message"), request?.keys)
+            assertEquals("property-123", request?.get("propertyId"))
+            assertEquals("Is this available?", request?.get("message"))
+            assertTrue(request?.get("commentId") is String)
         } finally {
             unmockkStatic("kotlinx.coroutines.tasks.TasksKt")
         }
