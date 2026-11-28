@@ -119,6 +119,7 @@ internal class FirestoreProperties @Inject constructor(
                 uploadAttemptId = uploadAttemptId
             )
             var draftCreated = false
+            var mediaFinalized = false
             try {
                 // A transaction prevents a caller-supplied existing property ID
                 // from overwriting somebody else's document or private contact.
@@ -149,6 +150,12 @@ internal class FirestoreProperties @Inject constructor(
                         videoUrls = videoUrls
                     )
                 ).await()
+                mediaFinalized = true
+
+                // Submission is a separate idempotent callable. If it fails after
+                // upload finalization, retain the complete inactive draft so the
+                // caller can retry submission without uploading media again.
+                PropertyPublicationCallable.submitForReview(functions, propertyId)
 
                 val duration = System.currentTimeMillis() - startTime
                 metricsTracker.trackDuration(
@@ -160,7 +167,7 @@ internal class FirestoreProperties @Inject constructor(
             } catch (failure: Exception) {
                 // Includes a download-URL failure after a Storage object was created
                 // and a Firestore finalization failure. Cleanup never masks the cause.
-                withContext(NonCancellable) {
+                if (!mediaFinalized) withContext(NonCancellable) {
                     // Usually set after the creation transaction returns. If its
                     // acknowledgement was lost, prove ownership using the unique
                     // marker before cleaning anything. Never delete an existing ID.
@@ -175,6 +182,8 @@ internal class FirestoreProperties @Inject constructor(
                     if (matchingDraft) {
                         rollbackFailedPropertyUpload(propertyRef, contactRef, uploadedPaths)
                     }
+                } else {
+                    metricsTracker.incrementCounter("network.properties.submission_failure")
                 }
                 throw failure
             }
